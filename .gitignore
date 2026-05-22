@@ -1,0 +1,40 @@
+# === Maven / Java ===
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+*.ear
+/backend/.m2-repo/
+
+# === Node / Frontend ===
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+**/.env
+
+# === IDE ===
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# === Logs ===
+logs/
+*.log
+
+./docs/*.docx
+./docs/*.txt
+
