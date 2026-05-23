@@ -21,7 +21,7 @@
 
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {},
   "timestamp": 1716220000000
@@ -30,16 +30,19 @@
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| code | Integer | 业务状态码，200 表示成功 |
+| code | Integer | 业务状态码，`0` 表示成功，非 0 表示失败 |
 | message | String | 状态描述信息 |
 | data | Object / Array / null | 响应数据，可分页或为空 |
 | timestamp | Long | 响应时间戳（毫秒） |
+
+> [!NOTE]
+> 本文档采用“HTTP 状态码表达协议语义 + `code` 表达业务结果”双轨约定：成功固定 `code=0`，失败返回非 0 业务码（示例中沿用与 HTTP 对齐的数值）。
 
 **分页响应 data 结构：**
 
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {
     "list": [],
@@ -91,7 +94,7 @@
 
 | 错误码 | HTTP 状态 | 说明 |
 |--------|-----------|------|
-| `SUCCESS` | 200 | 操作成功 |
+| `SUCCESS` | 200 | 操作成功（业务码固定为 `0`） |
 | `BAD_REQUEST` | 400 | 通用参数错误 |
 | `VIDEO_FORMAT_UNSUPPORTED` | 415 | 视频格式不支持 |
 | `VIDEO_TOO_LARGE` | 413 | 视频文件过大 |
@@ -123,7 +126,7 @@
 | 视频时长范围 | 5~300 秒 | 过短无法拆解，过长分析成本高 |
 | 最大样例视频数 | 5 条 | 单次拆解最多上传 5 条样例 |
 | 支持图片格式 | jpg, png, webp | 素材上传 |
-| 支持音频格式 | wav, mp3, aac | 素材上传 |
+| 支持文案输入 | text/plain 或表单文本 | 创作素材上传 |
 
 ---
 
@@ -135,6 +138,7 @@
 ├── /videos                             视频拆解（VideoAnalysisController）
 │   ├── POST   /upload                  上传样例视频，创建拆解任务
 │   ├── POST   /upload/batch            批量上传样例视频
+│   ├── DELETE /materials/{materialBizId} 删除拆解素材（逻辑删+物理删）
 │   ├── GET    /tasks/{taskId}          查询拆解任务状态
 │   ├── GET    /tasks/{taskId}/progress SSE 流式推送任务进度
 │   ├── GET    /tasks/{taskId}/result   查询拆解分析结果
@@ -186,7 +190,9 @@
 
 ### 5.3.1 POST /api/v1/videos/upload — 上传样例视频创建拆解任务
 
-**描述：** 上传一条样例视频，创建异步拆解任务。系统立即返回 `taskId`，拆解过程在后台通过消息队列异步处理。
+**描述：** 上传一条样例视频并立即完成 FFprobe 探测。系统返回 `taskId + materialBizId + mediaInfo`，
+并将探测结果写入 `analysis_result_core`（仅核心探测字段，其他分析字段留空/默认）。
+该接口的素材仅落库到 `analysis_video_material`（拆解流视频素材库），不进入创作素材库。
 
 **请求：**
 
@@ -200,6 +206,7 @@ Content-Type: multipart/form-data
 | file | body | File | 是 | 视频文件 |
 | categoryHint | body | String | 否 | 品类提示（帮助 LLM 缩小分析范围） |
 | priority | body | Integer | 否 | 任务优先级 1~10，默认 5 |
+| projectId | body | String | 否 | 拆解项目 ID（`prj_xxx`），传入后自动绑定到项目素材关联表 |
 
 **请求示例（curl）：**
 ```bash
@@ -210,15 +217,27 @@ curl -X POST https://api.example.com/api/v1/videos/upload \
   -F "priority=3"
 ```
 
-**响应（202 Accepted）：**
+**响应（200 OK）：**
 ```json
 {
-  "code": 200,
-  "message": "任务创建成功，正在排队处理",
+  "code": 0,
+  "message": "success",
   "data": {
+    "materialBizId": 739201238812300001,
     "taskId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "status": "PENDING",
-    "estimatedDuration": 60
+    "status": "COMPLETED",
+    "estimatedDuration": 15,
+    "mediaInfo": {
+      "duration": 14.566,
+      "width": 458,
+      "height": 812,
+      "fps": 30.0,
+      "codec": "h264",
+      "bitrate": 1324000,
+      "hasAudio": true,
+      "audioCodec": "aac",
+      "format": "mov,mp4,m4a,3gp,3g2,mj2"
+    }
   },
   "timestamp": 1716220000000
 }
@@ -226,15 +245,18 @@ curl -X POST https://api.example.com/api/v1/videos/upload \
 
 | 响应字段 | 类型 | 说明 |
 |----------|------|------|
+| materialBizId | Long | 素材业务主键（雪花 ID） |
 | taskId | String | 任务唯一标识（UUID v4） |
-| status | String | 初始状态 PENDING |
+| status | String | 当前探测状态（P0 固定 `COMPLETED`） |
 | estimatedDuration | Integer | 预估处理耗时（秒） |
+| mediaInfo | Object | FFprobe 探测结果 |
 
 ---
 
 ### 5.3.2 POST /api/v1/videos/upload/batch — 批量上传样例视频
 
-**描述：** 上传多条样例视频（上限 5 条），用于多样例融合分析。
+**描述：** 上传多条样例视频（上限 5 条）。P0 采用“每视频一任务”建模：每个文件创建独立 `taskId`，后续融合在模板提取阶段进行。
+批量上传文件同样仅落库到 `analysis_video_material`。
 
 **请求：**
 
@@ -248,17 +270,40 @@ Content-Type: multipart/form-data
 | files | body | File[] | 是 | 视频文件列表（最多 5 个） |
 | categoryHint | body | String | 否 | 品类提示 |
 | priority | body | Integer | 否 | 任务优先级 |
+| projectId | body | String | 否 | 拆解项目 ID（`prj_xxx`），传入后每个文件都绑定到该项目 |
 
-**响应（202 Accepted）：**
+**响应（200 OK）：**
 ```json
 {
-  "code": 200,
-  "message": "批量任务创建成功",
+  "code": 0,
+  "message": "success",
   "data": {
-    "taskId": "batch-uuid-1234",
+    "taskIds": [
+      "a1b2c3d4-e5f6-7890-abcd-ef1234567801",
+      "a1b2c3d4-e5f6-7890-abcd-ef1234567802",
+      "a1b2c3d4-e5f6-7890-abcd-ef1234567803"
+    ],
     "fileCount": 3,
-    "status": "PENDING",
-    "estimatedDuration": 120
+    "status": "COMPLETED",
+    "estimatedDuration": 120,
+    "items": [
+      {
+        "materialBizId": 739201238812300001,
+        "taskId": "a1b2c3d4-e5f6-7890-abcd-ef1234567801",
+        "fileName": "a.mp4",
+        "mediaInfo": {
+          "duration": 14.566,
+          "width": 458,
+          "height": 812,
+          "fps": 30.0,
+          "codec": "h264",
+          "bitrate": 1324000,
+          "hasAudio": true,
+          "audioCodec": "aac",
+          "format": "mov,mp4,m4a,3gp,3g2,mj2"
+        }
+      }
+    ]
   },
   "timestamp": 1716220000000
 }
@@ -291,7 +336,7 @@ Content-Type: multipart/form-data
 
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {
     "taskId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
@@ -310,11 +355,39 @@ Content-Type: multipart/form-data
 
 | 响应字段 | 类型 | 说明 |
 |----------|------|------|
-| status | String | PENDING / PROCESSING / ANALYZING / COMPLETED / FAILED |
+| status | String | PENDING / PROCESSING / ANALYZING / COMPLETED / FAILED / CANCELED |
 | progress | Integer | 进度 0~100 |
 | progressStep | String | 当前步骤中文描述 |
 | sourceFileName | String | 原始文件名 |
 | errorMessage | String \| null | 失败时的错误信息 |
+| partialFailedDimensions | String[] \| null | LLM 局部失败维度（如 `["rhythm"]`） |
+
+---
+
+### 5.3.8 DELETE /api/v1/videos/materials/{materialBizId} — 删除拆解素材
+
+**描述：** 全局删除拆解素材。执行顺序为：
+1) `analysis_video_material` 逻辑删除（`status=DELETED`，写 `deleted_at`）；
+2) 清理 `deconstruct_project_material` 关联；
+3) 物理删除磁盘文件。  
+若物理删除失败，接口返回失败并回滚数据库变更。
+
+**路径参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| materialBizId | Long | 素材业务主键 |
+
+**响应（200 OK）：**
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": true,
+  "timestamp": 1716220000000
+}
+```
 
 ---
 
@@ -328,23 +401,32 @@ Content-Type: multipart/form-data
 Content-Type: text/event-stream
 Cache-Control: no-cache
 Connection: keep-alive
+X-Accel-Buffering: no
 ```
 
 ```json
+id: 1
 event: progress
 data: {"taskId":"xxx","status":"PROCESSING","progress":20,"progressStep":"FFmpeg 镜头切分中..."}
 
+id: 2
 event: progress
 data: {"taskId":"xxx","status":"PROCESSING","progress":40,"progressStep":"ASR 语音转写中..."}
 
+id: 3
 event: progress
 data: {"taskId":"xxx","status":"ANALYZING","progress":60,"progressStep":"LLM 脚本结构分析中..."}
 
+id: 4
 event: progress
 data: {"taskId":"xxx","status":"ANALYZING","progress":80,"progressStep":"LLM 节奏结构分析中..."}
 
+id: 5
 event: complete
 data: {"taskId":"xxx","status":"COMPLETED","progress":100,"progressStep":"拆解完成"}
+
+event: heartbeat
+data: {"ts":"2026-05-22T10:01:00.000Z"}
 ```
 
 **错误事件：**
@@ -353,17 +435,28 @@ event: error
 data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用超时","errorMessage":"StructureAnalyzer 请求超时 (30s)"}
 ```
 
+**SSE 协议约定：**
+- 客户端断线重连需带 `Last-Event-ID`
+- 服务端至少每 15s 发送一次 `heartbeat`，防止网关空闲断开
+- 发送 `complete` 或 `error` 后，服务端主动关闭连接
+
 ---
 
 ### 5.3.5 GET /api/v1/videos/tasks/{taskId}/result — 查询拆解分析结果
 
 **描述：** 任务完成（COMPLETED）后，获取完整的分析结果。
 
+**Query 参数：**
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| includeTimeline | boolean | 否 | false | 是否加载时序冷数据（timeline/script/rhythm/packaging） |
+
 **响应（200 OK）：**
 
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {
     "taskId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
@@ -434,7 +527,8 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
         }
       }
     },
-    "category": "marketing",
+    "categoryId": "marketing",
+    "partialFailedDimensions": ["rhythm"],
     "analyzedAt": "2026-05-22T10:02:00.000Z"
   },
   "timestamp": 1716220000000
@@ -445,7 +539,7 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 
 ### 5.3.6 DELETE /api/v1/videos/tasks/{taskId} — 取消/删除拆解任务
 
-**描述：** 取消 PENDING 任务或删除已完成/失败的任务记录及其关联文件。
+**描述：** 仅允许取消 `PENDING` 任务（状态置为 `CANCELED`）；对于 `COMPLETED/FAILED/CANCELED` 任务执行历史删除（删除任务记录及关联文件）。
 
 **响应（204 No Content）：** 无响应体。
 
@@ -469,7 +563,7 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 **响应（202 Accepted）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "任务已重新提交",
   "data": {
     "taskId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
@@ -482,6 +576,40 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 
 ---
 
+### 5.3.8 DTO ↔ DB 字段映射（P0）
+
+| API 字段 | DB 字段/来源 | 说明 |
+|----------|--------------|------|
+| `taskId` | `video_analysis_task.task_id` | 任务主标识 |
+| `status` | `video_analysis_task.status` | 含 `CANCELED` |
+| `progress` | `video_analysis_task.progress` | 0~100 |
+| `progressStep` | `video_analysis_task.progress_step` | 当前步骤 |
+| `sourceFileName` | `video_analysis_task.source_file_path` 派生 | 取路径末尾文件名 |
+| `videoInfo` | `analysis_result_core` 结构化列聚合 | 原始探测信息（组装返回） |
+| `timelineLog` | `analysis_result_timeline_asset.timeline_log_json` | 时序归一日志（按需加载） |
+| `categoryId` | `analysis_result_core.category_id` | 品类标识 |
+| `partialFailedDimensions` | `analysis_result_core.partial_failed_dimensions` | LLM 局部失败维度 |
+| `shots[]` | `shot` 聚合 | 按 `task_id` + `shot_index` 排序 |
+| `transcript[]` | `asr_segment` 聚合 | 按 `task_id` + `segment_index` 排序 |
+| `llmAnalysis.script/rhythm/packaging` | `analysis_result_timeline_asset` 对应 JSON 字段 | 冷数据按需反序列化 |
+
+---
+
+### 5.3.9 拆解任务状态机（P0）
+
+| 当前状态 | 触发动作 | 下一个状态 | 约束 |
+|----------|----------|------------|------|
+| `PENDING` | 消费者开始处理 | `PROCESSING` | 出队即转移 |
+| `PENDING` | 用户取消 | `CANCELED` | 仅未消费任务可取消 |
+| `PROCESSING` | FFmpeg/ASR 完成 | `ANALYZING` | 进入 LLM 阶段 |
+| `PROCESSING` | 处理异常 | `FAILED` | 记录 `error_step` |
+| `ANALYZING` | 全部维度成功 | `COMPLETED` | 正常完成 |
+| `ANALYZING` | 部分维度失败 | `COMPLETED` | 在结果中写 `partialFailedDimensions` |
+| `ANALYZING` | 全维度失败 | `FAILED` | 无可用结构输出 |
+| `FAILED` | 用户重试 | `PENDING` | `retry_count <= 3` |
+
+> `DELETE /videos/tasks/{taskId}` 是资源操作，不是状态迁移。它只负责取消或删除记录，不引入 `DELETED` 状态值。
+
 ## 5.4 模板管理接口（TemplateController）
 
 ### 5.4.1 POST /api/v1/templates — 创建模板（人工）
@@ -492,7 +620,7 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 ```json
 {
   "templateName": "我的营销爆款模板",
-  "category": "marketing",
+  "categoryId": "marketing",
   "meta": {
     "targetDuration": { "min": 25, "max": 35, "unit": "seconds" },
     "aspectRatio": "9:16",
@@ -523,7 +651,7 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 **响应（201 Created）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "模板创建成功",
   "data": {
     "templateId": "tpl-uuid-1234",
@@ -545,31 +673,34 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 **请求体：**
 ```json
 {
-  "taskId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "taskIds": [
+    "a1b2c3d4-e5f6-7890-abcd-ef1234567801",
+    "a1b2c3d4-e5f6-7890-abcd-ef1234567802"
+  ],
   "templateName": "赛博探店反转模板",
-  "isFusion": false
+  "isFusion": true
 }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| taskId | String | 是 | 已完成的拆解任务 ID |
+| taskIds | String[] | 是 | 已完成的拆解任务 ID 列表（1~5 个） |
 | templateName | String | 是 | 模板名称 |
-| isFusion | Boolean | 否 | 是否为多样例融合，默认 false |
+| isFusion | Boolean | 否 | 是否为多样例融合；`taskIds.length > 1` 时应为 `true` |
 
 **响应（201 Created）：**
 
-返回完整的模板对象，包含从 analysis_result + TimelineMatcher + LLM 分析结果中提取的 scriptStructure、rhythmStructure、packagingStructure、categoryExtensions 等全部字段。
+返回完整的模板对象，包含从 analysis_result_core / analysis_result_timeline_asset + TimelineMatcher + LLM 分析结果中提取的 scriptStructure、rhythmStructure、packagingStructure、categoryExtensions 等全部字段。
 
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "模板提取成功",
   "data": {
     "templateId": "tpl-extracted-uuid",
     "templateName": "赛博探店反转模板",
     "version": "1.0.0",
-    "category": "discovered_cyber_store_review",
+    "categoryId": "discovered_cyber_store_review",
     "status": "DRAFT",
     "isFusion": false,
     "categoryExtensions": {
@@ -619,7 +750,7 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 **响应（200 OK）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {
     "list": [
@@ -696,7 +827,7 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "模板已归档",
   "data": {
     "templateId": "tpl-uuid-1234",
@@ -731,7 +862,7 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 **响应（201 Created）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "模板克隆成功",
   "data": {
     "templateId": "tpl-cloned-uuid",
@@ -764,7 +895,7 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 **响应（200 OK）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {
     "list": [
@@ -807,7 +938,7 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 **响应（200 OK）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {
     "categoryId": "marketing",
@@ -960,7 +1091,7 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 **响应：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "品类合并成功",
   "data": {
     "mergedCategoryId": "marketing",
@@ -974,7 +1105,10 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 
 ---
 
-## 5.6 素材管理接口（MaterialController）
+## 5.6 创作素材管理接口（MaterialController）
+
+> [!IMPORTANT]
+> 本章节接口面向创作流，素材落库到 `creative_material`（文案/图片/视频）。与拆解流 `analysis_video_material` 物理隔离。
 
 ### 5.6.1 POST /api/v1/materials/upload — 上传素材
 
@@ -987,14 +1121,18 @@ Content-Type: multipart/form-data
 
 | 参数 | 位置 | 类型 | 必填 | 说明 |
 |------|------|------|------|------|
-| file | body | File | 是 | 素材文件 |
+| materialType | body | String | 是 | 素材类型：VIDEO / IMAGE / TEXT |
+| file | body | File | 否 | 素材文件（VIDEO/IMAGE 必填） |
+| textContent | body | String | 否 | 文案内容（TEXT 必填） |
 | tags | body | String | 否 | 用户标签（逗号分隔） |
 | description | body | String | 否 | 素材描述 |
+
+约束：`VIDEO/IMAGE` 必须上传 `file`；`TEXT` 必须传 `textContent`。
 
 **响应（201 Created）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "素材上传成功",
   "data": {
     "materialId": "mat-uuid-5678",
@@ -1023,7 +1161,7 @@ Content-Type: multipart/form-data
 |------|------|------|------|
 | page | Integer | 否 | 页码 |
 | size | Integer | 否 | 每页条数 |
-| materialType | String | 否 | 类型筛选：VIDEO / IMAGE / AUDIO / TEXT |
+| materialType | String | 否 | 类型筛选：VIDEO / IMAGE / TEXT |
 | status | String | 否 | 状态筛选：ACTIVE / PROCESSING / DELETED |
 | tag | String | 否 | 按标签筛选 |
 | keyword | String | 否 | 按文件名/描述模糊搜索 |
@@ -1051,7 +1189,7 @@ Content-Type: multipart/form-data
 **响应（200 OK）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {
     "materialId": "mat-uuid-5678",
@@ -1105,7 +1243,7 @@ Content-Type: multipart/form-data
 **响应（202 Accepted）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "迁移任务创建成功",
   "data": {
     "migrationId": "mig-uuid-9999",
@@ -1125,7 +1263,7 @@ Content-Type: multipart/form-data
 **响应（200 OK）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {
     "migrationId": "mig-uuid-9999",
@@ -1150,7 +1288,7 @@ Content-Type: multipart/form-data
 **响应（200 OK）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {
     "migrationId": "mig-uuid-9999",
@@ -1215,7 +1353,7 @@ Content-Type: multipart/form-data
 **响应（200 OK）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "缺口补全成功",
   "data": {
     "migrationId": "mig-uuid-9999",
@@ -1238,7 +1376,7 @@ Content-Type: multipart/form-data
 **响应（202 Accepted）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "编排任务已启动",
   "data": {
     "migrationId": "mig-uuid-9999",
@@ -1273,7 +1411,7 @@ Content-Type: multipart/form-data
 **响应（200 OK）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {
     "migrationId": "mig-uuid-9999",
@@ -1353,7 +1491,7 @@ Content-Type: multipart/form-data
 **响应（200 OK）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {
     "status": "UP",
@@ -1381,7 +1519,7 @@ Content-Type: multipart/form-data
 **响应（200 OK）：**
 ```json
 {
-  "code": 200,
+  "code": 0,
   "message": "success",
   "data": {
     "totalTasks": 15230,
@@ -1412,8 +1550,9 @@ Content-Type: multipart/form-data
 
 | 接口路径 | 可能触发的错误码 |
 |----------|-----------------|
-| POST /videos/upload | VIDEO_FORMAT_UNSUPPORTED, VIDEO_TOO_LARGE, VIDEO_DURATION_EXCEEDED, SERVICE_BUSY |
+| POST /videos/upload | VIDEO_FORMAT_UNSUPPORTED, VIDEO_TOO_LARGE, FFMPEG_ERROR, PROJECT_NOT_FOUND |
 | POST /videos/upload/batch | 同上 + BAD_REQUEST（文件数超限） |
+| DELETE /videos/materials/{materialBizId} | MATERIAL_NOT_FOUND, MATERIAL_DELETE_FAILED |
 | GET /videos/tasks/{taskId} | TASK_NOT_FOUND |
 | GET /videos/tasks/{taskId}/result | TASK_NOT_FOUND, TASK_ALREADY_PROCESSED（任务未完成） |
 | DELETE /videos/tasks/{taskId} | TASK_NOT_FOUND, TASK_ALREADY_PROCESSED |
@@ -1438,15 +1577,15 @@ Content-Type: multipart/form-data
 ### 5.10.1 完整用户旅程
 
 ```
-用户                   前端                后端API                   MQ/Worker
+用户                   前端                后端API                 Async Worker
  │                     │                    │                         │
  │  上传样例视频        │                    │                         │
  ├────────────────────►│                    │                         │
  │                     │  POST /videos/upload                        │
  │                     ├───────────────────►│                         │
- │                     │     202 {taskId}   │                         │
+ │                     │     200 {taskId}   │                         │
  │                     │◄───────────────────┤                         │
- │                     │                    │  发送拆解消息            │
+ │                     │                    │  @Async 提交拆解任务     │
  │                     │                    ├────────────────────────►│
  │                     │                    │                   FFmpeg+LLM
  │  轮询/SSE 进度       │                    │                         │
@@ -1498,7 +1637,7 @@ Content-Type: multipart/form-data
  │  执行编排            │                    │                         │
  ├────────────────────►│  POST /migrations/{id}/compose               │
  │                     ├───────────────────►│                         │
- │                     │   202 COMPOSING    │  发送编排消息            │
+ │                     │   202 COMPOSING    │  @Async 提交编排任务      │
  │                     │◄───────────────────├────────────────────────►│
  │                     │                    │                  迁移编排
  │                     │                    │◄────────────────────────┤
@@ -1534,19 +1673,16 @@ Content-Type: multipart/form-data
 
 ---
 
-## 5.12 事件异步通知（Webhook / MQ）
+## 5.12 事件异步通知（Webhook / Async）
 
 对于耗时可能超过 30s 的处理（如视频拆解、结构编排），除 SSE 推送外，还可通过以下方式通知：
 
-### 5.12.1 RabbitMQ 事件
+### 5.12.1 Async 事件模型
 
-| Exchange | Routing Key | 消息体 | 说明 |
-|----------|-------------|--------|------|
-| `video.events` | `task.completed` | `{"taskId":"...","status":"COMPLETED"}` | 拆解完成 |
-| `video.events` | `task.failed` | `{"taskId":"...","status":"FAILED","error":"..."}` | 拆解失败 |
-| `template.events` | `template.extracted` | `{"templateId":"...","category":"..."}` | 模板提取完成（含品类热注册） |
-| `migration.events` | `migration.composed` | `{"migrationId":"...","status":"COMPLETED"}` | 编排完成 |
-| `category.events` | `category.discovered` | `{"categoryId":"...","categoryName":"..."}` | 新品类自动发现 |
+当前 Demo/参赛模式默认移除 RabbitMQ，异步执行由应用内线程池承载：
+- 通过 `@EnableAsync + ThreadPoolTaskExecutor(videoTaskExecutor)` 提交任务
+- 任务状态与进度仍落 `video_analysis_task + Redis`，前端继续通过 SSE/轮询获取
+- 需要对外通知时使用 Webhook（见 5.12.2）
 
 ### 5.12.2 Webhook 回调（可选扩展）
 
@@ -1563,3 +1699,4 @@ POST <webhook_url>
   }
 }
 ```
+

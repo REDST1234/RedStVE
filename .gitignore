@@ -36,5 +36,7 @@ logs/
 *.log
 
 ./docs/*.docx
-./docs/*.txt
+/docs/*.txt
+/storage/
+test.json
 

@@ -4,6 +4,10 @@ server:
 spring:
   profiles:
     active: dev
+  servlet:
+    multipart:
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:2048MB}
+      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:4096MB}
   output:
     ansi:
       enabled: always
@@ -14,9 +18,44 @@ spring:
       chat:
         options:
           model: ${OPENAI_MODEL:gpt-3.5-turbo}
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    locations: classpath:db/migration
+    encoding: UTF-8
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
+    validate-on-migrate: ${FLYWAY_VALIDATE_ON_MIGRATE:true}
+    table: flyway_schema_history
+    clean-disabled: true
 
 springdoc:
   api-docs:
     enabled: true
   swagger-ui:
     path: /swagger-ui.html
+
+media:
+  ffprobe:
+    path: ${FFPROBE_PATH:ffprobe}
+    timeout-seconds: ${FFPROBE_TIMEOUT_SECONDS:20}
+  ffmpeg:
+    path: ${FFMPEG_PATH:ffmpeg}
+    audio-timeout-seconds: ${FFMPEG_AUDIO_TIMEOUT_SECONDS:30}
+  upload:
+    directory: ${MEDIA_UPLOAD_DIR:storage/analysis-video}
+    max-file-size-bytes: ${MEDIA_MAX_FILE_SIZE_BYTES:2147483648}
+    allowed-extensions:
+      - mp4
+      - mov
+
+ark:
+  base-url: ${ARK_BASE_URL:https://ark.cn-beijing.volces.com}
+  api-key: ${ARK_API_KEY:}
+  chat-completions-path: ${ARK_CHAT_COMPLETIONS_PATH:/api/v3/chat/completions}
+  timeout-seconds: ${ARK_TIMEOUT_SECONDS:30}
+  max-retries: ${ARK_MAX_RETRIES:1}
+
+asr:
+  max-audio-bytes: ${ASR_MAX_AUDIO_BYTES:20971520}
+  audio-output-dir: ${ASR_AUDIO_OUTPUT_DIR:storage/analysis-audio}
+  doubao:
+    model: ${ASR_DOUBAO_MODEL:doubao-seed-2-0-lite-260428}

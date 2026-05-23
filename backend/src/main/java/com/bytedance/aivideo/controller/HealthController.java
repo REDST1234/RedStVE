@@ -13,7 +13,7 @@ public class HealthController {
     @Value("${spring.profiles.active:dev}")
     private String activeProfile;
 
-    @GetMapping("/api/health")
+    @GetMapping({"/api/v1/system/health", "/api/health"})
     public Map<String, Object> health() {
         return Map.of(
                 "status", "UP",
