@@ -6,7 +6,11 @@ import com.bytedance.aivideo.common.exception.BizException;
 import com.bytedance.aivideo.video.dto.VideoBatchUploadResponse;
 import com.bytedance.aivideo.video.dto.VideoTaskResultResponse;
 import com.bytedance.aivideo.video.dto.VideoUploadResponse;
+import com.bytedance.aivideo.video.dto.timeline.TimelineMatchResult;
 import com.bytedance.aivideo.video.service.AsrAnalysisService;
+import com.bytedance.aivideo.video.service.KeyFrameAnalysisService;
+import com.bytedance.aivideo.video.service.SceneAnalysisService;
+import com.bytedance.aivideo.video.service.TimelineMatcherService;
 import com.bytedance.aivideo.video.service.VideoAnalysisResultService;
 import com.bytedance.aivideo.video.service.VideoMaterialService;
 import com.bytedance.aivideo.video.service.VideoUploadService;
@@ -30,19 +34,31 @@ public class VideoAnalysisController {
 
     private final VideoUploadService videoUploadService;
     private final AsrAnalysisService asrAnalysisService;
+    private final SceneAnalysisService sceneAnalysisService;
+    private final KeyFrameAnalysisService keyFrameAnalysisService;
+    private final TimelineMatcherService timelineMatcherService;
     private final VideoAnalysisResultService videoAnalysisResultService;
     private final VideoMaterialService videoMaterialService;
+    private final com.bytedance.aivideo.video.service.StructureAnalyzerService structureAnalyzerService;
 
     public VideoAnalysisController(
             VideoUploadService videoUploadService,
             AsrAnalysisService asrAnalysisService,
+            SceneAnalysisService sceneAnalysisService,
+            KeyFrameAnalysisService keyFrameAnalysisService,
+            TimelineMatcherService timelineMatcherService,
             VideoAnalysisResultService videoAnalysisResultService,
-            VideoMaterialService videoMaterialService
+            VideoMaterialService videoMaterialService,
+            com.bytedance.aivideo.video.service.StructureAnalyzerService structureAnalyzerService
     ) {
         this.videoUploadService = videoUploadService;
         this.asrAnalysisService = asrAnalysisService;
+        this.sceneAnalysisService = sceneAnalysisService;
+        this.keyFrameAnalysisService = keyFrameAnalysisService;
+        this.timelineMatcherService = timelineMatcherService;
         this.videoAnalysisResultService = videoAnalysisResultService;
         this.videoMaterialService = videoMaterialService;
+        this.structureAnalyzerService = structureAnalyzerService;
     }
 
     /**
@@ -92,6 +108,73 @@ public class VideoAnalysisController {
     }
 
     /**
+     * Debug 模式手动触发 镜头拆分 异步分析。
+     */
+    @PostMapping("/tasks/{taskId}/debug/scene-trigger")
+    public ApiResponse<Boolean> triggerSceneDebug(@PathVariable("taskId") String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
+        }
+        sceneAnalysisService.runSceneDetectAsync(taskId);
+        return ApiResponse.success(Boolean.TRUE);
+    }
+
+    /**
+     * Debug 模式手动触发 关键帧抽取 异步分析。
+     */
+    @PostMapping("/tasks/{taskId}/debug/keyframe-trigger")
+    public ApiResponse<Boolean> triggerKeyframeDebug(@PathVariable("taskId") String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
+        }
+        keyFrameAnalysisService.runExtractAsync(taskId);
+        return ApiResponse.success(Boolean.TRUE);
+    }
+
+    /**
+     * 正式触发拆解链路：仅在用户点击“开始提取视频”后调用。
+     */
+    @PostMapping("/tasks/{taskId}/start-extraction")
+    public ApiResponse<Boolean> startExtraction(@PathVariable("taskId") String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
+        }
+        return ApiResponse.success(videoUploadService.startExtraction(taskId));
+    }
+
+    /**
+     * Debug 模式手动触发 TimelineMatcher（多路时间轴归一）。
+     */
+    @PostMapping("/tasks/{taskId}/debug/timeline-match")
+    public ApiResponse<TimelineMatchResult> triggerTimelineMatchDebug(
+            @PathVariable("taskId") String taskId,
+            @RequestParam(value = "threshold", defaultValue = "0.15") double threshold) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
+        }
+        TimelineMatchResult result = timelineMatcherService.match(taskId, threshold);
+        try {
+            String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(result);
+            videoAnalysisResultService.saveTimelineDebug(taskId, json);
+        } catch (Exception e) {
+            throw new BizException(ErrorCode.INTERNAL_ERROR, "Failed to save debug timeline");
+        }
+        return ApiResponse.success(result);
+    }
+
+    /**
+     * Debug 模式手动触发 大一统提纯及视频结构分析。
+     */
+    @PostMapping("/tasks/{taskId}/debug/llm-analysis")
+    public ApiResponse<com.bytedance.aivideo.video.service.StructureAnalyzerService.AnalysisOutput> triggerLlmAnalysisDebug(
+            @PathVariable("taskId") String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
+        }
+        return ApiResponse.success(structureAnalyzerService.triggerLlmAnalysis(taskId));
+    }
+
+    /**
      * 查询拆解分析结果（默认不加载冷时序资产）。
      */
     @GetMapping("/tasks/{taskId}/result")
@@ -103,6 +186,17 @@ public class VideoAnalysisController {
             throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
         }
         return ApiResponse.success(videoAnalysisResultService.getTaskResult(taskId, includeTimeline));
+    }
+
+    /**
+     * 读取底层原始的 scene_result.json 镜头切分数据
+     */
+    @GetMapping("/tasks/{taskId}/raw-scene")
+    public ApiResponse<Object> getRawSceneResult(@PathVariable("taskId") String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
+        }
+        return ApiResponse.success(videoAnalysisResultService.getRawSceneResult(taskId));
     }
 
     /**

@@ -6,22 +6,156 @@ package com.bytedance.aivideo.infrastructure.ark;
  */
 public final class ArkPromptTemplates {
 
-    private ArkPromptTemplates() {
-    }
+        private ArkPromptTemplates() {
+        }
 
-    /**
-     * ASR 基础提示词：要求输出统一 JSON 结构，便于直接入库。
-     */
-    public static final String ASR_TRANSCRIBE_JSON =
-            "请识别音频中的内容，并严格输出JSON。"
-                    + "必须包含完整转写 fullText，以及按时间顺序的 segments 数组。"
-                    + "每个 segment 必须包含 start、end、text、speaker、confidence。"
-                    + "speaker 建议值示例：SPEAKER_1、SPEAKER_2；若无法区分说话人请填 UNKNOWN。"
-                    + "输出格式为"
-                    + "{\"fullText\":\"\",\"segments\":[{\"start\":0.0,\"end\":1.0,\"text\":\"\",\"speaker\":\"SPEAKER_1\",\"confidence\":0.99}]}";
+        /**
+         * ASR 基础提示词：要求输出统一 JSON 结构，便于直接入库。
+         */
+        public static final String ASR_TRANSCRIBE_JSON = "请识别这段音频内容，并进行逐句时间轴切分，同时为每个句段输出音频语义标签。"
+                        + "你必须仅输出一个合法 JSON 对象，不要输出解释文本、不要输出 Markdown 代码块。"
+                        + "你必须输出原句文案，如果存在英文，不要翻译。"
+                        + "输出结构必须包含 fullText 和 segments。"
+                        + "segments 必须按时间升序，且每个 segment 必须包含：segmentIndex、start、end、text、speaker、confidence、audioEmotion、volumeIntensity、backgroundEnvironment、vocalVibe、bgmGenre、bgmInstruments。"
+                        + "start/end 单位为秒，end 必须大于 start。"
+                        + "speaker 推荐值 SPEAKER_1/SPEAKER_2，无法区分时填 UNKNOWN。"
+                        + "confidence 取值范围 0 到 1。"
+                        + "audioEmotion 枚举：CALM、CURIOUS、AGITATED、EXCITED、URGENT、NONE。"
+                        + "【音量烈度物理锚定（volumeIntensity）】：严禁仅凭声音清晰度判断！必须基于人类发声物理行为："
+                        + "LOW(窃窃私语/极小声)、"
+                        + "MEDIUM(正常的面对面平稳交谈/常规解说口播)、"
+                        + "HIGH(明显提高音量的喊叫/激烈的争吵/高昂的演讲)、"
+                        + "PEAK(情绪失控的咆哮/震耳欲聋的物理爆破音)。"
+                        + "注：如果只是清晰的常规口播，绝对不允许使用 HIGH！"
+                        + "backgroundEnvironment 枚举："
+                        + "MUSIC(背景音乐为主)、"
+                        + "FX(特殊音效为主，如转场音/点击音/爆点音/笑声等)、"
+                        + "MUSIC_FX(背景音乐与特殊音效同时明显存在)、"
+                        + "NOISE(环境噪声为主)、"
+                        + "SILENT(近静音或仅极弱环境声)。"
+                        + "vocalVibe：不能仅依靠字面意思，必须通过听觉判断说话人的情绪张力，并用一句自然语言精准描述；若无人声填空字符串。"
+                        + "bgmGenre：若存在背景音乐，必须忽略人声干扰，听辨并输出音乐流派；若无音乐填空字符串。"
+                        + "bgmInstruments：若存在背景音乐，听辨并输出最突出的乐器组合；若无音乐填空字符串。"
+                        + "若无人声片段，text 可为空字符串，但语义字段必须填写。"
+                        + "输出示例："
+                        + "{\"fullText\":\"\",\"segments\":[{\"segmentIndex\":0,\"start\":0.0,\"end\":1.0,\"text\":\"\",\"speaker\":\"SPEAKER_1\",\"confidence\":0.99,\"audioEmotion\":\"CURIOUS\",\"volumeIntensity\":\"MEDIUM\",\"backgroundEnvironment\":\"MUSIC\",\"vocalVibe\":\"压抑克制的低语\",\"bgmGenre\":\"悬疑底噪\",\"bgmInstruments\":\"低频合成器与弱打击乐\"}]}";
 
-    /**
-     * ASR 二次重试提示词后缀：仅做格式修正。
-     */
-    public static final String STRICT_JSON_SUFFIX = "仅输出JSON，不要包含解释、代码块标记或其他文本。";
+        /**
+         * ASR 二次重试提示词后缀：仅做格式修正。
+         */
+        public static final String STRICT_JSON_SUFFIX = "仅输出JSON，不要包含解释、代码块标记或其他文本。";
+
+        /**
+         * 视频拆解结构大一统分析提示词。
+         */
+        public static final String STRUCTURE_ANALYZER_UNIFIED = "你现在是短视频结构拆解专家。请阅读系统为你对齐后的【多模态时序剧本】以及可选的【视频关键帧图片】。\n"
+                        + "时序剧本中若出现【IMAGE_001】这类标记，表示对应消息中按顺序提供的关键帧图片；IMAGE 编号与图片输入顺序严格一一对应。\n\n"
+                        + "任务目标：\n"
+                        + "1. 判定视频品类（查表已知或自动发现新品类）。\n"
+                        + "2. 产出一个 JSON，包含该视频的「脚本结构」、「节奏结构」、「包装结构」和「动态特征矩阵」。\n\n"
+                        + "--- 视频多模态时序日志 (Markdown 剧本格式) ---\n"
+                        + "%s\n\n" // 占位符 1：注入由 TimelineMatcher 内存聚合生成的全量胖剧本流
+                        + "【已知品类知识库参考】\n"
+                        + "说明：该参考区中的字段若显示为 `fieldName (fieldType, valueShape)`，你必须严格沿用同名字段的 fieldType 与 valueShape，不得擅自变更。\n"
+                        + "%s\n\n" // 占位符 2：注入来自向量库 ChromaDB / MySQL 的类别特征种子数据
+                        + "【动态特征自进化与覆写契约（核心铁律）】\n"
+                        + "在输出最终的 `categoryExtensions.dynamicExtensionFields` JSON 数组时，你必须严格执行以下增量进化逻辑：\n"
+                        + "1. 刚性继承（Inherit）：若当前判定品类在【已知品类知识库参考】中存在，必须将该品类已定义的核心 fieldName 原样带入数组，严禁遗漏。\n"
+                        + "2. 动态修正（Update）：必须依据当前视频多模态表现重新独立测算上述字段值；若突破历史经验，必须输出修正后的最新 fieldValue。\n"
+                        + "3. 盲区发现（Insert）：若发现知识库尚未定义的高优特征（如新剪辑手法、特殊情绪、特有调色），必须主动新增 fieldName（camelCase 英文命名）并追加到数组。\n"
+                        + "4. 格式封死：所有提取、修正与新增特征，必须且只能使用 JSON 对象格式"
+                        + " `{ \"fieldName\": \"...\", \"fieldType\": \"...\", \"fieldValue\": \"...\", \"description\": \"...\" }`"
+                        + " 放在该数组内，禁止在 JSON 外输出解释。\n"
+                        + "5. fieldType 枚举约束：必须且只能使用 `STRING`、`DOUBLE`、`INTEGER`、`BOOLEAN`、`JSON`。\n"
+                        + "6. fieldName 命名约束：必须使用 camelCase 英文命名，长度 2~64，禁止空格、中文和特殊符号。\n"
+                        + "7. 新增字段上限：除继承字段外，单次最多新增 5 个新 fieldName，超出时仅保留最关键的前 5 个。\n\n"
+                        + "【宏观品类命名与发现铁律】\n"
+                        + "当判定当前视频属于新品类并需要创造新的 category 时，必须遵守宏观行业分类原则：\n"
+                        + "1. 品类颗粒度必须是宏观的（如 `short_drama`、`vlog`、`gameplay`、`tutorial`、`product_review`）。\n"
+                        + "2. 绝对不允许将具体地点/具体事件/具体人物作为品类名。\n"
+                        + "3. 错误示范：`school_canteen_drama`、`car_review`。\n"
+                        + "4. 正确归类：上述两者应分别归入 `short_drama` 和 `product_review`。\n\n"
+                        + "【数据实体边界隔离铁律（极其重要）】\n"
+                        + "你必须严格区分模板微观特征与品类宏观特征：\n"
+                        + "1. 模板微观特征（仅留在模板层）：凡是当前视频特有的具体信息（具体场景地点、具体人物、特定台词），只能写入 `meta.description`、`meta.styles`、`viralFactors`、`shots`。\n"
+                        + "2. 品类宏观特征（仅进入知识库层）：写入 `categoryExtensions.dynamicExtensionFields` 的内容，必须是抽象且可复用的行业规则或统计学特征（如切分阈值、镜头运动偏好、卡点策略、节奏分布）。\n"
+                        + "3. 严禁污染：绝对不允许将具体场景、具体剧情、具体人名写入 `dynamicExtensionFields` 的 `fieldName` 或 `fieldValue`。\n\n"
+                        + "【刚性结构与字段类型契约（通用化限制，严禁自由发挥与虚构）】\n"
+                        + "1. `scriptStructure.segments[].role` 必须且只能从以下全视频通用骨架枚举中选择：\n"
+                        + "   - `hook` | `body` | `climax` | `outro`\n"
+                        + "   任何视频均只允许由这四个通用骨架组合，禁止出现特定品类业务专有 role。\n\n"
+                        + "【平铺直叙与结构坍塌逃生契约】：\n"
+                        + "   - 警告：并非所有视频都存在 climax！对于平淡的参数测评、纯口播、白板教学等缺乏非线性波动的视频，允许且强烈建议采用 `hook` + 多个 `body` + `outro` 的平流层组合。\n"
+                        + "   - 只有当视频在声学（情绪爆发/重低音）或视觉（高频快闪/强对比）上出现真正的绝对峰值时，才允许使用 `climax`。\n"
+                        + "   - 严禁在无明显波动的视频中，利用微弱的相对极值强行捏造 climax！\n\n"
+                        + "2. `rhythmStructure.overallPace` 和 `paceCurve[].pace` 必须且只能从以下节奏等级枚举中选择：\n"
+                        + "   - `slow` | `medium` | `fast` | `very_fast` | `ultra_fast`\n\n"
+                        + "3. `rhythmStructure.beatSyncPoints[].type` 必须且只能从以下卡点类型枚举中选择：\n"
+                        + "   - `visual_hit` | `audio_hit` | `climax_hit`\n\n"
+                        + "4. 品类身份特征仅允许在 `categoryExtensions.dynamicExtensionFields` 内扩展：\n"
+                        + "   - 如需表达品类细分段落语义，只能以 KEY-VALUE 形式扩展，禁止污染通用骨架字段。\n"
+                        + "   - 示例：`{ \"fieldName\": \"segment_1_actual_role\", \"fieldType\": \"STRING\", \"fieldValue\": \"skill_deconstruction\" }`\n\n"
+                        + "5. 数据格式防错要求：\n"
+                        + "   - `weight`、`durationWeight` 必须是 [0.0,1.0] 的 DOUBLE，严禁百分号或字符串。\n"
+                        + "   - `timePercent` 必须是 [0,100] 的 INTEGER，严禁百分号。\n"
+                        + "   - `titleCards`、`transitions` 等若不存在，必须输出空数组 `[]`，禁止缺失键名或赋值 `null`。\n"
+                        + "   - 所有涉及颜色(color)的字段，必须严格输出 16 进制格式（例如 `#FFFFFF`）。\n\n"
+                        + "【多模态双语对齐约束】\n"
+                        + "ASR 文本与关键帧视觉元素可能出现中英文并存，这是同一意图的多模态呈现。"
+                        + "禁止因为语言不一致而误判包装缺陷；应做语义对齐后再抽象模板。\n\n"
+                        + "【视觉固定噪声与平台水印刚性过滤】\n"
+                        + "若关键帧存在平台标识、作者昵称、账号ID、头像、签名或其他个人信息水印，必须视为固定噪声并完全忽略。"
+                        + "严禁在 JSON 任何字段中输出、转述、映射或变体记录这些水印信息。\n\n"
+                        + "输出 JSON 格式要求：\n"
+                        + "必须仅输出一个合法 JSON 对象（不要输出 Markdown 标记），结构必须符合 `video-structure-template/v2` 协议：\n"
+                        + "{\n"
+                        + "  \"$schema\": \"video-structure-template/v2\",\n"
+                        + "  \"templateId\": \"自动生成一个UUID\",\n"
+                        + "  \"templateName\": \"为该视频总结一个高概括性的模板名称\",\n"
+                        + "  \"version\": \"1.0.0\",\n"
+                        + "  \"category\": \"如果是已知品类填对应ID；如果是新品类，必须使用宏观行业分类的 snake_case ID（例如 short_drama/product_review）\",\n"
+                        + "  \"meta\": {\n"
+                        + "    \"targetDuration\": { \"min\": 25, \"max\": 35, \"unit\": \"seconds\" },\n"
+                        + "    \"aspectRatio\": \"9:16\",\n"
+                        + "    \"resolution\": { \"width\": 1080, \"height\": 1920 },\n"
+                        + "    \"styles\": [\"LLM 自动归纳的风格描述1\", \"风格描述2\"],\n"
+                        + "    \"description\": \"模板来源与特征概述\"\n"
+                        + "  },\n"
+                        + "  \"scriptStructure\": {\n"
+                        + "    \"totalSegments\": 4,\n"
+                        + "    \"segments\": [\n"
+                        + "      { \"segmentIndex\": 0, \"role\": \"hook\", \"label\": \"名称\", \"description\": \"段落功能描述\", \"durationRange\": { \"min\": 2, \"max\": 4 }, \"durationWeight\": 0.12, \"scriptHint\": \"文案提示\", \"requiredElements\": [], \"shotCount\": { \"min\": 1, \"max\": 2 }, \"subSegments\": [] }\n"
+                        + "    ]\n"
+                        + "  },\n"
+                        + "  \"rhythmStructure\": {\n"
+                        + "    \"overallPace\": \"medium\",\n"
+                        + "    \"avgShotDuration\": 2.8,\n"
+                        + "    \"paceCurve\": [ { \"timePercent\": 0, \"pace\": \"fast\", \"note\": \"说明\" } ],\n"
+                        + "    \"climaxPositions\": [ { \"startPercent\": 65, \"endPercent\": 80 } ],\n"
+                        + "    \"transitionStyles\": [\"hard_cut_dominant\"],\n"
+                        + "    \"beatSyncPoints\": [ { \"timePercent\": 0, \"type\": \"visual_hit\" } ]\n"
+                        + "  },\n"
+                        + "  \"packagingStructure\": {\n"
+                        + "    \"subtitleStyles\": [ { \"position\": \"bottom_center\", \"fontSize\": \"medium\", \"color\": \"#FFFFFF\", \"background\": \"semi_transparent_black\", \"animation\": \"fade_in\" } ],\n"
+                        + "    \"titleCards\": [],\n"
+                        + "    \"transitions\": [],\n"
+                        + "    \"coverStyles\": [ { \"layout\": \"text_left_image_right\", \"textElements\": [\"主标题\"], \"colorTone\": \"#FF8C00\" } ]\n"
+                        + "  },\n"
+                        + "  \"shots\": [\n"
+                        + "    { \"shotIndex\": 0, \"belongsToSegment\": 0, \"shotType\": \"face_closeup\", \"description\": \"镜头内容描述\", \"durationRange\": { \"min\": 2, \"max\": 3 }, \"cameraMovement\": \"static\", \"requiredContent\": [] }\n"
+                        + "  ],\n"
+                        + "  \"categoryExtensions\": {\n"
+                        + "    \"discoveredCategoryId\": \"同上的categoryID\",\n"
+                        + "    \"discoveredCategoryName\": \"品类中文名\",\n"
+                        + "    \"dynamicExtensionFields\": [\n"
+                        + "       { \"fieldName\": \"scene_threshold\", \"fieldType\": \"DOUBLE\", \"fieldValue\": 0.30, \"description\": \"该品类适配的平均镜头切分阈值参考\" }\n"
+                        + "    ],\n"
+                        + "    \"discoveredPromptOverrides\": { \"scriptAnalysis\": \"...\" }\n"
+                        + "  },\n"
+                        + "  \"viralFactors\": [\n"
+                        + "    { \"factorName\": \"情绪共鸣\", \"weight\": 0.8, \"description\": \"分析该视频能爆火的原因\" }\n"
+                        + "  ]\n"
+                        + "}\n"
+                        + "特别注意：你必须严格遵循上述 JSON 协议与枚举约束。"
+                        + "如果是新发现品类，必须在 `dynamicExtensionFields` 中补充品类特征，且必须包含 `scene_threshold`（DOUBLE，通常0.15代表极高频，0.4代表缓慢长镜头）。";
 }

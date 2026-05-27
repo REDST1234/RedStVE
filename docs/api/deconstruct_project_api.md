@@ -195,3 +195,69 @@
 - `projectId` (String, Optional): 拆解项目 ID（`prj_xxx`）。
 
 当传入 `projectId` 时，批量上传的每个文件都会建立一条项目素材关联记录。
+
+---
+
+## 7. 全局模板库（新增）
+
+### 7.1 从任务发布模板
+**POST** `/api/v1/templates/publish-from-task`
+
+```json
+{
+  "taskId": "6fdd0ff1-7746-4ee7-be94-a90c2233ee07",
+  "templateJson": "{...完整模板JSON...}"
+}
+```
+
+### 7.2 查询模板详情
+**GET** `/api/v1/templates/{templateId}?version=1`
+
+### 7.3 查询模板列表
+**GET** `/api/v1/templates`
+
+---
+
+## 8. 项目模板快照（新增，解耦核心）
+
+### 8.1 创建模板快照
+**POST** `/api/v1/templates/{templateId}/snapshots`
+
+```json
+{
+  "projectId": "prj_1234567890",
+  "templateVersion": 1
+}
+```
+
+### 8.2 显式绑定模板到项目（生成新快照）
+**POST** `/api/v1/projects/{projectId}/bind-template`
+
+```json
+{
+  "templateId": "tpl_abc",
+  "templateVersion": 2
+}
+```
+
+### 8.3 查询项目快照列表
+**GET** `/api/v1/projects/{projectId}/template-snapshots`
+
+> 语义：项目编排始终读取快照，不直接读取模板最新版本。
+
+---
+
+## 9. 编剧编排（新增）
+
+### 9.1 执行编剧运行
+**POST** `/api/v1/projects/{projectId}/scriptwriter-run`
+
+```json
+{
+  "snapshotId": "snap_xxx",
+  "materialBizIds": ["2058440463638786049", "2058459542344880129"]
+}
+```
+
+### 9.2 查询编剧运行结果
+**GET** `/api/v1/projects/{projectId}/scriptwriter-result?runId=run_xxx`

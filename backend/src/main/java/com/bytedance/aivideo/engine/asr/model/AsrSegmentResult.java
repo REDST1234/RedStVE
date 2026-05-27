@@ -19,5 +19,16 @@ public class AsrSegmentResult {
     private Double confidence;
 
     private String speakerLabel;
-}
 
+    private String audioEmotion;
+
+    private String volumeIntensity;
+
+    private String backgroundEnvironment;
+
+    private String vocalVibe;
+
+    private String bgmGenre;
+
+    private String bgmInstruments;
+}

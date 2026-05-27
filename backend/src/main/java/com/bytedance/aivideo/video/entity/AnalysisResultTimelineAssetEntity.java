@@ -15,15 +15,11 @@ public class AnalysisResultTimelineAssetEntity extends BaseEntity {
 
     private String taskId;
 
-    private String shotSummaryJson;
+    private String fatTimelineJson;
 
-    private String timelineLogJson;
+    private String refinedTimelineJson;
 
-    private String scriptStructureJson;
-
-    private String rhythmStructureJson;
-
-    private String packagingStructureJson;
+    private String videoStructureTemplateJson;
 
     private String llmTokenUsageJson;
 

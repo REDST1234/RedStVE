@@ -21,6 +21,24 @@ spring:
           max-active: 16
           max-idle: 8
           min-idle: 4
+  ai:
+    vectorstore:
+      chroma:
+        client:
+          host: ${CHROMA_HOST:http://localhost}
+          port: ${CHROMA_PORT:8000}
+          key-token: ${CHROMA_KEY_TOKEN:}
+          username: ${CHROMA_USERNAME:}
+          password: ${CHROMA_PASSWORD:}
+        tenant-name: ${CHROMA_TENANT_NAME:default_tenant}
+        database-name: ${CHROMA_DATABASE_NAME:default_database}
+        collection-name: ${CHROMA_COLLECTION_NAME:ai_video}
+        initialize-schema: ${CHROMA_INITIALIZE_SCHEMA:false}
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      embedding:
+        options:
+          model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
 
 mybatis-plus:
   configuration:

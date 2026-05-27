@@ -21,6 +21,11 @@ public class ArkProperties {
     private String apiKey;
 
     /**
+     * 方舟推理端点或模型 ID (Endpoint ID)。
+     */
+    private String model;
+
+    /**
      * Chat Completions 协议路径。
      */
     private String chatCompletionsPath = "/api/v3/chat/completions";
@@ -49,6 +54,14 @@ public class ArkProperties {
 
     public void setApiKey(String apiKey) {
         this.apiKey = apiKey;
+    }
+
+    public String getModel() {
+        return model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
     }
 
     public String getChatCompletionsPath() {

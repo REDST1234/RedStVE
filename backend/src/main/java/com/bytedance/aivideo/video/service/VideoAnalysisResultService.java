@@ -1,6 +1,7 @@
 package com.bytedance.aivideo.video.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.bytedance.aivideo.common.error.ErrorCode;
 import com.bytedance.aivideo.common.exception.BizException;
 import com.bytedance.aivideo.engine.asr.model.AsrSegmentResult;
@@ -16,13 +17,24 @@ import com.bytedance.aivideo.video.mapper.AnalysisResultCoreMapper;
 import com.bytedance.aivideo.video.mapper.AnalysisResultTextAssetMapper;
 import com.bytedance.aivideo.video.mapper.AnalysisResultTimelineAssetMapper;
 import com.bytedance.aivideo.video.mapper.AsrSegmentMapper;
+import com.bytedance.aivideo.video.mapper.VideoAnalysisTaskStageMapper;
+import com.bytedance.aivideo.video.entity.VideoAnalysisTaskStageEntity;
+import com.bytedance.aivideo.video.dto.TaskStageDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import com.bytedance.aivideo.config.MediaUploadProperties;
+
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -34,6 +46,7 @@ import java.util.Set;
 /**
  * 拆解结果三层表读写服务。
  */
+@Slf4j
 @Service
 public class VideoAnalysisResultService {
 
@@ -41,7 +54,9 @@ public class VideoAnalysisResultService {
     private final AnalysisResultTextAssetMapper textAssetMapper;
     private final AnalysisResultTimelineAssetMapper timelineAssetMapper;
     private final AsrSegmentMapper asrSegmentMapper;
+    private final VideoAnalysisTaskStageMapper taskStageMapper;
     private final ObjectMapper objectMapper;
+    private final MediaUploadProperties mediaUploadProperties;
     private static final String TASK_STATUS_PROCESSING = "PROCESSING";
     private static final String TASK_STATUS_COMPLETED = "COMPLETED";
     private static final String TASK_STATUS_FAILED = "FAILED";
@@ -51,13 +66,17 @@ public class VideoAnalysisResultService {
             AnalysisResultTextAssetMapper textAssetMapper,
             AnalysisResultTimelineAssetMapper timelineAssetMapper,
             AsrSegmentMapper asrSegmentMapper,
-            ObjectMapper objectMapper
+            VideoAnalysisTaskStageMapper taskStageMapper,
+            ObjectMapper objectMapper,
+            MediaUploadProperties mediaUploadProperties
     ) {
         this.coreMapper = coreMapper;
         this.textAssetMapper = textAssetMapper;
         this.timelineAssetMapper = timelineAssetMapper;
         this.asrSegmentMapper = asrSegmentMapper;
+        this.taskStageMapper = taskStageMapper;
         this.objectMapper = objectMapper;
+        this.mediaUploadProperties = mediaUploadProperties;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -74,28 +93,85 @@ public class VideoAnalysisResultService {
         upsertTimelineAsset(command);
     }
 
+    @Transactional(rollbackFor = Exception.class)
+    public void saveTimelineDebug(String taskId, String fatTimelineJson) {
+        AnalysisResultCoreEntity core = coreMapper.selectOne(
+                new LambdaQueryWrapper<AnalysisResultCoreEntity>()
+                        .eq(AnalysisResultCoreEntity::getTaskId, taskId)
+                        .isNull(AnalysisResultCoreEntity::getDeletedAt)
+        );
+        if (core == null || core.getBizId() == null) {
+            throw new BizException(ErrorCode.TASK_NOT_FOUND, "任务结果不存在: " + taskId);
+        }
+        
+        AnalysisResultWriteCommand command = new AnalysisResultWriteCommand();
+        command.setTaskId(taskId);
+        command.setBizId(core.getBizId());
+        command.setFatTimelineJson(fatTimelineJson);
+        
+        upsertTimelineAsset(command);
+    }
+
+    /**
+     * 仅保存 LLM 分析链路产生的 timeline 相关结果，避免覆盖 core/text 现有数据。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void saveLlmTimelineResult(
+            String taskId,
+            String fatTimelineJson,
+            String refinedTimelineJson,
+            String videoStructureTemplateJson
+    ) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
+        }
+        AnalysisResultCoreEntity core = coreMapper.selectOne(
+                new LambdaQueryWrapper<AnalysisResultCoreEntity>()
+                        .eq(AnalysisResultCoreEntity::getTaskId, taskId)
+                        .isNull(AnalysisResultCoreEntity::getDeletedAt)
+        );
+        if (core == null || core.getBizId() == null) {
+            throw new BizException(ErrorCode.TASK_NOT_FOUND, "任务结果不存在: " + taskId);
+        }
+
+        AnalysisResultWriteCommand command = new AnalysisResultWriteCommand();
+        command.setTaskId(taskId.trim());
+        command.setBizId(core.getBizId());
+        command.setFatTimelineJson(fatTimelineJson);
+        command.setRefinedTimelineJson(refinedTimelineJson);
+        command.setVideoStructureTemplateJson(videoStructureTemplateJson);
+        upsertTimelineAsset(command);
+    }
+
     public VideoTaskResultResponse getTaskResult(String taskId, boolean includeTimeline) {
         AnalysisResultCoreEntity core = coreMapper.selectOne(
-                new LambdaQueryWrapper<AnalysisResultCoreEntity>().eq(AnalysisResultCoreEntity::getTaskId, taskId)
+                new LambdaQueryWrapper<AnalysisResultCoreEntity>()
+                        .eq(AnalysisResultCoreEntity::getTaskId, taskId)
+                        .isNull(AnalysisResultCoreEntity::getDeletedAt)
         );
         if (core == null) {
             throw new BizException(ErrorCode.TASK_NOT_FOUND, "任务结果不存在: " + taskId);
         }
 
         AnalysisResultTextAssetEntity textAsset = textAssetMapper.selectOne(
-                new LambdaQueryWrapper<AnalysisResultTextAssetEntity>().eq(AnalysisResultTextAssetEntity::getTaskId, taskId)
+                new LambdaQueryWrapper<AnalysisResultTextAssetEntity>()
+                        .eq(AnalysisResultTextAssetEntity::getTaskId, taskId)
+                        .isNull(AnalysisResultTextAssetEntity::getDeletedAt)
         );
 
         AnalysisResultTimelineAssetEntity timelineAsset = null;
         if (includeTimeline) {
             timelineAsset = timelineAssetMapper.selectOne(
-                    new LambdaQueryWrapper<AnalysisResultTimelineAssetEntity>().eq(AnalysisResultTimelineAssetEntity::getTaskId, taskId)
+                    new LambdaQueryWrapper<AnalysisResultTimelineAssetEntity>()
+                            .eq(AnalysisResultTimelineAssetEntity::getTaskId, taskId)
+                            .isNull(AnalysisResultTimelineAssetEntity::getDeletedAt)
             );
         }
 
         List<AsrSegmentEntity> asrSegments = asrSegmentMapper.selectList(
                 new LambdaQueryWrapper<AsrSegmentEntity>()
                         .eq(AsrSegmentEntity::getTaskId, taskId)
+                        .isNull(AsrSegmentEntity::getDeletedAt)
                         .orderByAsc(AsrSegmentEntity::getSegmentIndex)
         );
 
@@ -107,17 +183,34 @@ public class VideoAnalysisResultService {
         response.setPartialFailedDimensions(parseJsonArray(core.getPartialFailedDimensions()));
         response.setTranscript(buildTranscript(asrSegments));
 
-        if (includeTimeline && timelineAsset != null) {
-            response.setTimelineLog(parseJsonObject(timelineAsset.getTimelineLogJson()));
+        List<VideoAnalysisTaskStageEntity> stageEntities = taskStageMapper.selectList(
+                new LambdaQueryWrapper<VideoAnalysisTaskStageEntity>()
+                        .eq(VideoAnalysisTaskStageEntity::getTaskId, taskId)
+                        .isNull(VideoAnalysisTaskStageEntity::getDeletedAt)
+        );
+        List<TaskStageDto> stageDtos = new ArrayList<>();
+        if (stageEntities != null) {
+            for (VideoAnalysisTaskStageEntity stage : stageEntities) {
+                TaskStageDto dto = new TaskStageDto();
+                dto.setStageType(stage.getStageType());
+                dto.setStageStatus(stage.getStageStatus());
+                dto.setStageProgress(stage.getStageProgress());
+                dto.setStartedAt(stage.getStartedAt());
+                dto.setEndedAt(stage.getEndedAt());
+                dto.setErrorMessage(stage.getErrorMessage());
+                stageDtos.add(dto);
+            }
+        }
+        response.setStages(stageDtos);
 
-            VideoTaskResultResponse.LlmAnalysis llmAnalysis = new VideoTaskResultResponse.LlmAnalysis();
-            llmAnalysis.setScript(parseJsonObject(timelineAsset.getScriptStructureJson()));
-            llmAnalysis.setRhythm(parseJsonObject(timelineAsset.getRhythmStructureJson()));
-            llmAnalysis.setPackaging(parseJsonObject(timelineAsset.getPackagingStructureJson()));
-            response.setLlmAnalysis(llmAnalysis);
+        if (includeTimeline && timelineAsset != null) {
+            response.setFatTimeline(parseJsonObject(timelineAsset.getFatTimelineJson()));
+            response.setRefinedTimeline(parseJsonObject(timelineAsset.getRefinedTimelineJson()));
+            response.setVideoStructureTemplate(parseJsonObject(timelineAsset.getVideoStructureTemplateJson()));
         } else {
-            response.setTimelineLog(null);
-            response.setLlmAnalysis(null);
+            response.setFatTimeline(null);
+            response.setRefinedTimeline(null);
+            response.setVideoStructureTemplate(null);
         }
 
         if (textAsset != null && (response.getTranscript() == null || response.getTranscript().isEmpty())
@@ -128,6 +221,26 @@ public class VideoAnalysisResultService {
         }
 
         return response;
+    }
+
+    /**
+     * 获取原始的 scene_result.json 内容。
+     */
+    public Object getRawSceneResult(String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
+        }
+        Path rootPath = Paths.get(mediaUploadProperties.getDirectory()).toAbsolutePath();
+        Path resultPath = rootPath.resolve(taskId).resolve("scene_result.json").normalize();
+        if (!Files.exists(resultPath)) {
+            throw new BizException(ErrorCode.TASK_NOT_FOUND, "scene_result.json 文件不存在: " + taskId);
+        }
+        try {
+            String json = Files.readString(resultPath);
+            return objectMapper.readValue(json, Object.class);
+        } catch (Exception ex) {
+            throw new BizException(ErrorCode.INTERNAL_ERROR, "读取 scene_result.json 失败: " + ex.getMessage());
+        }
     }
 
     /**
@@ -185,19 +298,35 @@ public class VideoAnalysisResultService {
             throw new BizException(ErrorCode.TASK_NOT_FOUND, "任务结果不存在: " + taskId);
         }
 
-        asrSegmentMapper.delete(new LambdaQueryWrapper<AsrSegmentEntity>().eq(AsrSegmentEntity::getTaskId, taskId));
-        int segmentIndex = 0;
+        LocalDateTime deletedAt = LocalDateTime.now();
+        asrSegmentMapper.update(
+                null,
+                new LambdaUpdateWrapper<AsrSegmentEntity>()
+                        .eq(AsrSegmentEntity::getTaskId, taskId)
+                        .isNull(AsrSegmentEntity::getDeletedAt)
+                        .set(AsrSegmentEntity::getDeletedAt, deletedAt)
+        );
+        int fallbackIndex = 0;
+        Set<Integer> usedSegmentIndexes = new HashSet<>();
         for (AsrSegmentResult segment : transcriptionResult.getSegments()) {
             AsrSegmentEntity entity = new AsrSegmentEntity();
             entity.setTaskId(taskId);
-            entity.setSegmentIndex(segment.getSegmentIndex() == null ? segmentIndex : segment.getSegmentIndex());
-            entity.setText(segment.getText());
+            entity.setSegmentIndex(resolveSegmentIndex(segment.getSegmentIndex(), fallbackIndex, usedSegmentIndexes));
+            // DB 约束 text 非空，语义片段（如纯 FX/SILENT）无语音文本时落空串而非 null。
+            entity.setText(segment.getText() == null ? "" : segment.getText());
             entity.setStartTime(BigDecimal.valueOf(segment.getStartSec()));
             entity.setEndTime(BigDecimal.valueOf(segment.getEndSec()));
             entity.setSpeakerLabel(segment.getSpeakerLabel());
             entity.setConfidence(segment.getConfidence() == null ? null : BigDecimal.valueOf(segment.getConfidence()));
+            entity.setAudioEmotion(segment.getAudioEmotion());
+            entity.setVolumeIntensity(segment.getVolumeIntensity());
+            entity.setBackgroundEnvironment(segment.getBackgroundEnvironment());
+            entity.setVocalVibe(segment.getVocalVibe());
+            entity.setBgmGenre(segment.getBgmGenre());
+            entity.setBgmInstruments(segment.getBgmInstruments());
+            entity.setDeletedAt(null);
             asrSegmentMapper.insert(entity);
-            segmentIndex++;
+            fallbackIndex++;
         }
 
         core.setAsrSegmentCount(transcriptionResult.getSegments().size());
@@ -316,29 +445,47 @@ public class VideoAnalysisResultService {
     }
 
     private void upsertTimelineAsset(AnalysisResultWriteCommand command) {
-        AnalysisResultTimelineAssetEntity entity = timelineAssetMapper.selectOne(
-                new LambdaQueryWrapper<AnalysisResultTimelineAssetEntity>().eq(AnalysisResultTimelineAssetEntity::getTaskId, command.getTaskId())
-        );
-        if (entity == null) {
-            entity = new AnalysisResultTimelineAssetEntity();
-            entity.setBizId(command.getBizId());
-            entity.setTaskId(command.getTaskId());
-            fillTimelineFields(entity, command);
-            timelineAssetMapper.insert(entity);
-            return;
+        AnalysisResultTimelineAssetEntity existingEntity = findActiveTimelineAsset(command.getTaskId());
+
+        if (existingEntity == null) {
+            AnalysisResultTimelineAssetEntity newEntity = new AnalysisResultTimelineAssetEntity();
+            newEntity.setBizId(command.getBizId());
+            newEntity.setTaskId(command.getTaskId());
+            fillTimelineFields(newEntity, command);
+            try {
+                timelineAssetMapper.insert(newEntity);
+                return;
+            } catch (DuplicateKeyException duplicateKeyException) {
+                // 并发写入场景：另一个事务已插入成功，回查后切换为 update，保证同 taskId 幂等。
+                log.warn("timeline asset concurrent insert detected, fallback to update: taskId={}", command.getTaskId());
+                existingEntity = findActiveTimelineAsset(command.getTaskId());
+                if (existingEntity == null) {
+                    throw duplicateKeyException;
+                }
+            }
         }
-        fillTimelineFields(entity, command);
-        timelineAssetMapper.updateById(entity);
+
+        fillTimelineFields(existingEntity, command);
+        existingEntity.setUpdatedAt(LocalDateTime.now());
+        timelineAssetMapper.updateById(existingEntity);
     }
 
     private void fillTimelineFields(AnalysisResultTimelineAssetEntity entity, AnalysisResultWriteCommand command) {
-        entity.setShotSummaryJson(command.getShotSummaryJson());
-        entity.setTimelineLogJson(command.getTimelineLogJson());
-        entity.setScriptStructureJson(command.getScriptStructureJson());
-        entity.setRhythmStructureJson(command.getRhythmStructureJson());
-        entity.setPackagingStructureJson(command.getPackagingStructureJson());
-        entity.setLlmTokenUsageJson(command.getLlmTokenUsageJson());
-        entity.setProvenanceJson(command.getProvenanceJson());
+        if (command.getLlmTokenUsageJson() != null) {
+            entity.setLlmTokenUsageJson(command.getLlmTokenUsageJson());
+        }
+        if (command.getProvenanceJson() != null) {
+            entity.setProvenanceJson(command.getProvenanceJson());
+        }
+        if (command.getFatTimelineJson() != null) {
+            entity.setFatTimelineJson(command.getFatTimelineJson());
+        }
+        if (command.getRefinedTimelineJson() != null) {
+            entity.setRefinedTimelineJson(command.getRefinedTimelineJson());
+        }
+        if (command.getVideoStructureTemplateJson() != null) {
+            entity.setVideoStructureTemplateJson(command.getVideoStructureTemplateJson());
+        }
     }
 
     private Map<String, Object> buildVideoInfo(AnalysisResultCoreEntity core) {
@@ -363,6 +510,12 @@ public class VideoAnalysisResultService {
             item.setText(segment.getText());
             item.setSpeaker(segment.getSpeakerLabel());
             item.setConfidence(segment.getConfidence() == null ? null : segment.getConfidence().doubleValue());
+            item.setAudioEmotion(segment.getAudioEmotion());
+            item.setVolumeIntensity(segment.getVolumeIntensity());
+            item.setBackgroundEnvironment(segment.getBackgroundEnvironment());
+            item.setVocalVibe(segment.getVocalVibe());
+            item.setBgmGenre(segment.getBgmGenre());
+            item.setBgmInstruments(segment.getBgmInstruments());
             transcript.add(item);
         }
         return transcript;
@@ -412,5 +565,22 @@ public class VideoAnalysisResultService {
         List<String> failed = new ArrayList<>(parseJsonArray(core.getPartialFailedDimensions()));
         failed.removeIf(item -> item.equalsIgnoreCase(dimension));
         core.setPartialFailedDimensions(failed.isEmpty() ? null : toJsonSafely(failed));
+    }
+
+    private int resolveSegmentIndex(Integer preferredIndex, int fallbackIndex, Set<Integer> usedIndexes) {
+        int index = preferredIndex == null ? fallbackIndex : preferredIndex;
+        while (usedIndexes.contains(index)) {
+            index++;
+        }
+        usedIndexes.add(index);
+        return index;
+    }
+
+    private AnalysisResultTimelineAssetEntity findActiveTimelineAsset(String taskId) {
+        return timelineAssetMapper.selectOne(
+                new LambdaQueryWrapper<AnalysisResultTimelineAssetEntity>()
+                        .eq(AnalysisResultTimelineAssetEntity::getTaskId, taskId)
+                        .isNull(AnalysisResultTimelineAssetEntity::getDeletedAt)
+        );
     }
 }

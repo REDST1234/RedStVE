@@ -134,7 +134,6 @@ CREATE TABLE IF NOT EXISTS key_frame (
 
     CONSTRAINT uk_key_frame_biz_id UNIQUE (biz_id),
     CONSTRAINT uk_task_frame UNIQUE (task_id, frame_index),
-    CONSTRAINT chk_frame_index CHECK (frame_index >= 1 AND frame_index <= 5),
     CONSTRAINT chk_extraction_reason CHECK (extraction_reason IN ('HOOK_FIRST','HOOK_MID','TOP_SCORE'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='关键帧抽取结果';
 

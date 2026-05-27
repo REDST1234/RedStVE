@@ -89,6 +89,10 @@ public class DeconstructProjectService {
         return toResponse(getByProjectId(projectId), true);
     }
 
+    public void ensureProjectExists(String projectId) {
+        getByProjectId(projectId);
+    }
+
     public DeconstructProjectListResponse listProjects(int page, int size, String keyword) {
         int pageNo = Math.max(1, page);
         int pageSize = Math.max(1, Math.min(100, size));

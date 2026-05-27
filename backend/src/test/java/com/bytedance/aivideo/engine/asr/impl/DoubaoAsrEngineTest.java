@@ -25,7 +25,7 @@ class DoubaoAsrEngineTest {
         arkProperties.setMaxRetries(0);
         ObjectMapper objectMapper = new ObjectMapper();
 
-        String outputJsonBlock1 = "{\"fullText\":\"你好 世界\",\"segments\":[{\"start\":0.0,\"end\":1.2,\"text\":\"你好\",\"speaker\":\"SPEAKER_1\",\"confidence\":0.99},{\"start\":1.2,\"end\":2.0,\"text\":\"世界\",\"speaker\":\"SPEAKER_2\",\"confidence\":0.98}]}";
+        String outputJsonBlock1 = "{\"fullText\":\"你好 世界\",\"segments\":[{\"start\":0.0,\"end\":1.2,\"text\":\"你好\",\"speaker\":\"SPEAKER_1\",\"confidence\":0.99,\"audioEmotion\":\"CURIOUS\",\"volumeIntensity\":\"MEDIUM\",\"backgroundEnvironment\":\"MUSIC\"},{\"start\":1.2,\"end\":2.0,\"text\":\"世界\",\"speaker\":\"SPEAKER_2\",\"confidence\":0.98,\"audioEmotion\":\"EXCITED\",\"volumeIntensity\":\"PEAK\",\"backgroundEnvironment\":\"MUSIC_FX\"}]}";
         JsonNode mockResponse = objectMapper.readTree(
                 "{\"choices\":[{\"message\":{\"content\":" + objectMapper.writeValueAsString(outputJsonBlock1) + "}}]}"
         );
@@ -49,8 +49,14 @@ class DoubaoAsrEngineTest {
             Assertions.assertEquals(0.0, result.getSegments().get(0).getStartSec());
             Assertions.assertEquals(1.2, result.getSegments().get(0).getEndSec());
             Assertions.assertEquals("SPEAKER_1", result.getSegments().get(0).getSpeakerLabel());
+            Assertions.assertEquals("CURIOUS", result.getSegments().get(0).getAudioEmotion());
+            Assertions.assertEquals("MEDIUM", result.getSegments().get(0).getVolumeIntensity());
+            Assertions.assertEquals("MUSIC", result.getSegments().get(0).getBackgroundEnvironment());
             Assertions.assertEquals("世界", result.getSegments().get(1).getText());
             Assertions.assertEquals("SPEAKER_2", result.getSegments().get(1).getSpeakerLabel());
+            Assertions.assertEquals("EXCITED", result.getSegments().get(1).getAudioEmotion());
+            Assertions.assertEquals("PEAK", result.getSegments().get(1).getVolumeIntensity());
+            Assertions.assertEquals("MUSIC_FX", result.getSegments().get(1).getBackgroundEnvironment());
         } finally {
             Files.deleteIfExists(tempAudio);
         }

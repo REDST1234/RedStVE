@@ -12,12 +12,25 @@ spring:
     ansi:
       enabled: always
   ai:
-    openai:
-      api-key: ${OPENAI_API_KEY:your-api-key}
-      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
-      chat:
+    model:
+      embedding: ${SPRING_AI_MODEL_EMBEDDING:ollama}
+    vectorstore:
+      chroma:
+        client:
+          host: ${CHROMA_HOST:http://localhost}
+          port: ${CHROMA_PORT:8000}
+          key-token: ${CHROMA_KEY_TOKEN:}
+          username: ${CHROMA_USERNAME:}
+          password: ${CHROMA_PASSWORD:}
+        tenant-name: ${CHROMA_TENANT_NAME:default_tenant}
+        database-name: ${CHROMA_DATABASE_NAME:default_database}
+        collection-name: ${CHROMA_COLLECTION_NAME:ai_video}
+        initialize-schema: ${CHROMA_INITIALIZE_SCHEMA:true}
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      embedding:
         options:
-          model: ${OPENAI_MODEL:gpt-3.5-turbo}
+          model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
   flyway:
     enabled: ${FLYWAY_ENABLED:true}
     locations: classpath:db/migration
@@ -39,7 +52,7 @@ media:
     timeout-seconds: ${FFPROBE_TIMEOUT_SECONDS:20}
   ffmpeg:
     path: ${FFMPEG_PATH:ffmpeg}
-    audio-timeout-seconds: ${FFMPEG_AUDIO_TIMEOUT_SECONDS:30}
+    audio-timeout-seconds: ${FFMPEG_AUDIO_TIMEOUT_SECONDS:120}
   upload:
     directory: ${MEDIA_UPLOAD_DIR:storage/analysis-video}
     max-file-size-bytes: ${MEDIA_MAX_FILE_SIZE_BYTES:2147483648}
@@ -50,8 +63,9 @@ media:
 ark:
   base-url: ${ARK_BASE_URL:https://ark.cn-beijing.volces.com}
   api-key: ${ARK_API_KEY:}
+  model: ${ARK_MODEL_ENDPOINT:}
   chat-completions-path: ${ARK_CHAT_COMPLETIONS_PATH:/api/v3/chat/completions}
-  timeout-seconds: ${ARK_TIMEOUT_SECONDS:30}
+  timeout-seconds: ${ARK_TIMEOUT_SECONDS:200}
   max-retries: ${ARK_MAX_RETRIES:1}
 
 asr:
@@ -59,3 +73,7 @@ asr:
   audio-output-dir: ${ASR_AUDIO_OUTPUT_DIR:storage/analysis-audio}
   doubao:
     model: ${ASR_DOUBAO_MODEL:doubao-seed-2-0-lite-260428}
+
+timeline:
+  min-segment-duration-sec: ${TIMELINE_MIN_SEGMENT_DURATION_SEC:0.60}
+  float-epsilon: ${TIMELINE_FLOAT_EPSILON:0.000001}

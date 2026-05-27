@@ -181,6 +181,7 @@
 │
 └── /system                             系统接口
     ├── GET    /health                  健康检查
+    ├── GET    /vector/health           向量基础设施健康检查
     └── GET    /stats                   系统统计
 ```
 
@@ -489,8 +490,26 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
       }
     ],
     "transcript": [
-      { "text": "你有没有发现", "start": 0.5, "end": 1.8 },
-      { "text": "这款产品用了之后", "start": 2.0, "end": 3.5 }
+      {
+        "text": "你有没有发现",
+        "startTime": 0.5,
+        "endTime": 1.8,
+        "speaker": "SPEAKER_1",
+        "confidence": 0.97,
+        "audioEmotion": "CURIOUS",
+        "volumeIntensity": "MEDIUM",
+        "backgroundEnvironment": "MUSIC"
+      },
+      {
+        "text": "这款产品用了之后",
+        "startTime": 2.0,
+        "endTime": 3.5,
+        "speaker": "SPEAKER_1",
+        "confidence": 0.95,
+        "audioEmotion": "EXCITED",
+        "volumeIntensity": "PEAK",
+        "backgroundEnvironment": "MUSIC_FX"
+      }
     ],
     "timelineLog": [
       {
@@ -534,6 +553,15 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
   "timestamp": 1716220000000
 }
 ```
+
+---
+
+`transcript[].backgroundEnvironment` 枚举说明：
+- `MUSIC`：背景音乐为主
+- `FX`：特殊音效为主（如转场音、点击音、爆点音、笑声等）
+- `MUSIC_FX`：背景音乐与特殊音效并存
+- `NOISE`：环境噪声为主
+- `SILENT`：近静音或仅极弱环境声
 
 ---
 
@@ -590,7 +618,9 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 | `categoryId` | `analysis_result_core.category_id` | 品类标识 |
 | `partialFailedDimensions` | `analysis_result_core.partial_failed_dimensions` | LLM 局部失败维度 |
 | `shots[]` | `shot` 聚合 | 按 `task_id` + `shot_index` 排序 |
-| `transcript[]` | `asr_segment` 聚合 | 按 `task_id` + `segment_index` 排序 |
+| `transcript[]` | `asr_segment` 聚合 | 按 `task_id` + `segment_index` 排序，包含 `speaker/confidence/audioEmotion/volumeIntensity/backgroundEnvironment/vocalVibe/bgmGenre/bgmInstruments` |
+| `timelineSegments[].audioAndText[]` | `asr_segment` + TimelineMatcher | 句级语义，包含旧 3 字段 + `vocalVibe/bgmGenre/bgmInstruments` |
+| `timelineSegments[].audioSemanticSummary` | TimelineMatcher 聚合 | 段级摘要：`vocalVibeSummary/bgmGenreSummary/bgmInstrumentsSummary` |
 | `llmAnalysis.script/rhythm/packaging` | `analysis_result_timeline_asset` 对应 JSON 字段 | 冷数据按需反序列化 |
 
 ---
@@ -1539,6 +1569,39 @@ Content-Type: multipart/form-data
         "avgTaskDuration": 52.3
       }
     }
+  },
+  "timestamp": 1716220000000
+}
+```
+
+---
+
+### 5.8.3 GET /api/v1/system/vector/health — 向量基础设施健康检查
+
+**描述：** 检查 `Chroma + Ollama Embedding` 的连通状态，并回显当前生效配置（tenant/database/collection/model）。
+
+**响应（200 OK）：**
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "status": "UP",
+    "timestamp": "2026-05-24T01:30:00",
+    "chroma": {
+      "status": "UP",
+      "endpoint": "http://localhost:8000",
+      "errorMessage": null
+    },
+    "ollama": {
+      "status": "UP",
+      "endpoint": "http://localhost:11434",
+      "errorMessage": null
+    },
+    "tenantName": "default_tenant",
+    "databaseName": "default_database",
+    "collectionName": "ai_video",
+    "embeddingModel": "nomic-embed-text"
   },
   "timestamp": 1716220000000
 }

@@ -3,6 +3,7 @@ import { ToastProvider } from './contexts/ToastContext';
 import MainLayout from './layouts/MainLayout';
 import DeconstructProjectList from './pages/deconstruct/ProjectList';
 import DeconstructProjectDetail from './pages/deconstruct/ProjectDetail';
+import VisualDashboard from './pages/deconstruct/VisualDashboard';
 import CreateProjectList from './pages/create/ProjectList';
 import CreateProjectDetail from './pages/create/ProjectDetail';
 import './index.css';
@@ -17,6 +18,7 @@ export default function App() {
             {/* 拆解流模块 */}
             <Route path="deconstruct" element={<DeconstructProjectList />} />
             <Route path="deconstruct/detail/:id" element={<DeconstructProjectDetail />} />
+            <Route path="deconstruct/detail/:id/visualize" element={<VisualDashboard />} />
             
             <Route path="create" element={<CreateProjectList />} />
             <Route path="create/detail/:id" element={<CreateProjectDetail />} />

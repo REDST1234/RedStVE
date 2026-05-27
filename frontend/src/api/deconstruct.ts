@@ -23,7 +23,7 @@ export const deconstructApi = {
 
   // 创建项目
   createProject: (payload: { title: string; description: string; tags: string[]; coverUrl: string }) => {
-    return request<ApiResponse<Project>>('/api/v1/deconstruct/projects', {
+    return request<ApiResponse<Project>>('/v1/deconstruct/projects', {
       method: 'POST',
       body: JSON.stringify(payload),
       headers: { 'Content-Type': 'application/json' }
@@ -32,7 +32,7 @@ export const deconstructApi = {
 
   // 更新项目
   updateProject: (id: string, payload: { title: string; description: string; tags: string[]; coverUrl: string }) => {
-    return request<ApiResponse<Project>>(`/api/v1/deconstruct/projects/${id}`, {
+    return request<ApiResponse<Project>>(`/v1/deconstruct/projects/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
       headers: { 'Content-Type': 'application/json' }
@@ -41,7 +41,7 @@ export const deconstructApi = {
 
   // 删除项目
   deleteProject: (id: string) => {
-    return request<ApiResponse<boolean>>(`/api/v1/deconstruct/projects/${id}`, { 
+    return request<ApiResponse<boolean>>(`/v1/deconstruct/projects/${id}`, { 
       method: 'DELETE' 
     });
   }

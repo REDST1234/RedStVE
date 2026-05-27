@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -38,6 +39,13 @@ import java.util.Set;
 public class DoubaoAsrEngine implements AsrEngine {
 
     private static final String AUDIO_FORMAT_MP3 = "mp3";
+    private static final int MAX_VOCAL_VIBE_LEN = 255;
+    private static final int MAX_BGM_GENRE_LEN = 100;
+    private static final int MAX_BGM_INSTRUMENTS_LEN = 255;
+    private static final Set<String> MUSIC_ENVIRONMENTS = Set.of("MUSIC", "MUSIC_FX");
+    private static final Set<String> INVALID_PLACEHOLDERS = new HashSet<>(Arrays.asList(
+            "N/A", "NA", "NONE", "UNKNOWN", "无", "暂无", "-"
+    ));
 
     private final ArkResponsesClient arkResponsesClient;
     private final ArkPayloadFactory arkPayloadFactory;
@@ -280,6 +288,31 @@ public class DoubaoAsrEngine implements AsrEngine {
                 segmentNode.path("speaker_label").asText(null),
                 segmentNode.path("speaker_id").asText(null)
         ));
+        segment.setAudioEmotion(firstNonBlank(
+                segmentNode.path("audioEmotion").asText(null),
+                segmentNode.path("audio_emotion").asText(null)
+        ));
+        segment.setVolumeIntensity(firstNonBlank(
+                segmentNode.path("volumeIntensity").asText(null),
+                segmentNode.path("volume_intensity").asText(null)
+        ));
+        segment.setBackgroundEnvironment(firstNonBlank(
+                segmentNode.path("backgroundEnvironment").asText(null),
+                segmentNode.path("background_environment").asText(null)
+        ));
+        segment.setVocalVibe(firstNonBlank(
+                segmentNode.path("vocalVibe").asText(null),
+                segmentNode.path("vocal_vibe").asText(null)
+        ));
+        segment.setBgmGenre(firstNonBlank(
+                segmentNode.path("bgmGenre").asText(null),
+                segmentNode.path("bgm_genre").asText(null)
+        ));
+        segment.setBgmInstruments(firstNonBlank(
+                segmentNode.path("bgmInstruments").asText(null),
+                segmentNode.path("bgm_instruments").asText(null)
+        ));
+        normalizeSegmentSemantics(segment);
         return segment;
     }
 
@@ -352,8 +385,12 @@ public class DoubaoAsrEngine implements AsrEngine {
         }
         for (int i = 0; i < result.getSegments().size(); i++) {
             AsrSegmentResult segment = result.getSegments().get(i);
-            if (segment.getText() == null || segment.getText().isBlank()) {
-                throw new BizException(ErrorCode.ASR_RESPONSE_INVALID, "ASR 片段文本为空: index=" + i);
+            normalizeSegmentSemantics(segment);
+            boolean hasText = segment.getText() != null && !segment.getText().isBlank();
+            boolean hasBackgroundEnvironment = segment.getBackgroundEnvironment() != null
+                    && !segment.getBackgroundEnvironment().isBlank();
+            if (!hasText && !hasBackgroundEnvironment) {
+                throw new BizException(ErrorCode.ASR_RESPONSE_INVALID, "ASR 片段文本与背景环境同时为空: index=" + i);
             }
             if (segment.getStartSec() == null || segment.getEndSec() == null) {
                 throw new BizException(ErrorCode.ASR_RESPONSE_INVALID, "ASR 片段时间戳缺失: index=" + i);
@@ -363,6 +400,11 @@ public class DoubaoAsrEngine implements AsrEngine {
             }
             if (segment.getSegmentIndex() == null) {
                 segment.setSegmentIndex(i);
+            }
+            if (segment.getVocalVibe().length() > MAX_VOCAL_VIBE_LEN
+                    || segment.getBgmGenre().length() > MAX_BGM_GENRE_LEN
+                    || segment.getBgmInstruments().length() > MAX_BGM_INSTRUMENTS_LEN) {
+                throw new BizException(ErrorCode.ASR_RESPONSE_INVALID, "ASR 语义字段超长: index=" + i);
             }
         }
         if (result.getFullText() == null || result.getFullText().isBlank()) {
@@ -404,5 +446,48 @@ public class DoubaoAsrEngine implements AsrEngine {
             }
         }
         return null;
+    }
+
+    private void normalizeSegmentSemantics(AsrSegmentResult segment) {
+        segment.setText(normalizeTranscriptText(segment.getText()));
+        segment.setVocalVibe(normalizeSemanticText(segment.getVocalVibe(), MAX_VOCAL_VIBE_LEN));
+        segment.setBgmGenre(normalizeSemanticText(segment.getBgmGenre(), MAX_BGM_GENRE_LEN));
+        segment.setBgmInstruments(normalizeSemanticText(segment.getBgmInstruments(), MAX_BGM_INSTRUMENTS_LEN));
+
+        String backgroundEnvironment = normalizeSemanticText(segment.getBackgroundEnvironment(), 20);
+        segment.setBackgroundEnvironment(backgroundEnvironment);
+
+        if (!MUSIC_ENVIRONMENTS.contains(backgroundEnvironment == null ? "" : backgroundEnvironment.toUpperCase(Locale.ROOT))) {
+            segment.setBgmGenre("");
+            segment.setBgmInstruments("");
+        }
+        if (segment.getText() == null || segment.getText().isBlank()) {
+            segment.setVocalVibe("");
+        }
+    }
+
+    private String normalizeSemanticText(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim().replaceAll("\\s+", " ");
+        if (normalized.isEmpty()) {
+            return "";
+        }
+        if (INVALID_PLACEHOLDERS.contains(normalized.toUpperCase(Locale.ROOT))) {
+            return "";
+        }
+        if (maxLength != Integer.MAX_VALUE && normalized.length() > maxLength) {
+            return normalized.substring(0, maxLength);
+        }
+        return normalized;
+    }
+
+    private String normalizeTranscriptText(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim().replaceAll("\\s+", " ");
+        return normalized.isEmpty() ? "" : normalized;
     }
 }

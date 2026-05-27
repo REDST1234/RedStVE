@@ -21,6 +21,21 @@ spring:
           max-active: 8
           max-idle: 8
           min-idle: 0
+  ai:
+    vectorstore:
+      chroma:
+        client:
+          host: ${CHROMA_HOST:http://localhost}
+          port: ${CHROMA_PORT:8000}
+        tenant-name: ${CHROMA_TENANT_NAME:default_tenant}
+        database-name: ${CHROMA_DATABASE_NAME:default_database}
+        collection-name: ${CHROMA_COLLECTION_NAME:ai_video}
+        initialize-schema: ${CHROMA_INITIALIZE_SCHEMA:true}
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      embedding:
+        options:
+          model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
 asr:
   doubao:
     model: ${ASR_DOUBAO_MODEL:doubao-seed-2-0-lite-260428}

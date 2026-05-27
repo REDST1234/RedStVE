@@ -55,15 +55,9 @@ public class AnalysisResultWriteCommand {
 
     private String keywordsText;
 
-    private String shotSummaryJson;
-
-    private String timelineLogJson;
-
-    private String scriptStructureJson;
-
-    private String rhythmStructureJson;
-
-    private String packagingStructureJson;
+    private String fatTimelineJson;
+    private String refinedTimelineJson;
+    private String videoStructureTemplateJson;
 
     private String llmTokenUsageJson;
 

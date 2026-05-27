@@ -16,6 +16,10 @@ import java.time.LocalDateTime;
 public class VideoTaskStageService {
 
     public static final String STAGE_TYPE_ASR = "ASR";
+    public static final String STAGE_TYPE_SCENE = "SCENE";
+    public static final String STAGE_TYPE_KEYFRAME = "KEYFRAME";
+    public static final String STAGE_TYPE_TIMELINE = "TIMELINE";
+    public static final String STAGE_TYPE_LLM = "LLM";
 
     public static final String STAGE_STATUS_PENDING = "PENDING";
     public static final String STAGE_STATUS_RUNNING = "RUNNING";
@@ -84,6 +88,15 @@ public class VideoTaskStageService {
         taskStageMapper.updateById(stage);
     }
 
+    public boolean isStageRunningOrSuccess(String taskId, String stageType) {
+        VideoAnalysisTaskStageEntity stage = findByTaskAndType(taskId, stageType);
+        if (stage == null) {
+            return false;
+        }
+        return STAGE_STATUS_RUNNING.equals(stage.getStageStatus())
+                || STAGE_STATUS_SUCCESS.equals(stage.getStageStatus());
+    }
+
     private VideoAnalysisTaskStageEntity getOrCreate(String taskId, String stageType) {
         VideoAnalysisTaskStageEntity stage = findByTaskAndType(taskId, stageType);
         if (stage != null) {
@@ -107,4 +120,3 @@ public class VideoTaskStageService {
         );
     }
 }
-

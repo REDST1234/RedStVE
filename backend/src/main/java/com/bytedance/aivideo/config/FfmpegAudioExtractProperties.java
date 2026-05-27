@@ -18,7 +18,7 @@ public class FfmpegAudioExtractProperties {
     /**
      * 音轨提取超时时间（秒）。
      */
-    private int audioTimeoutSeconds = 30;
+    private int audioTimeoutSeconds = 120;
 
     public String getPath() {
         return path;
@@ -36,4 +36,3 @@ public class FfmpegAudioExtractProperties {
         this.audioTimeoutSeconds = audioTimeoutSeconds;
     }
 }
-

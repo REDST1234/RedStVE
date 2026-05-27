@@ -40,6 +40,28 @@ export const videoApi = {
     });
   },
 
+  // 显式触发拆解链路（ASR + Scene + KeyFrame后续）
+  startExtraction: (taskId: string) => {
+    return request<ApiResponse<boolean>>(`/v1/videos/tasks/${taskId}/start-extraction`, {
+      method: 'POST'
+    });
+  },
+
+  // 触发 Timeline 组装
+  triggerTimelineMatch: (taskId: string, threshold?: number) => {
+    const query = typeof threshold === 'number' ? `?threshold=${threshold}` : '';
+    return request<ApiResponse<any>>(`/v1/videos/tasks/${taskId}/debug/timeline-match${query}`, {
+      method: 'POST'
+    });
+  },
+
+  // 触发 LLM 结构分析
+  triggerLlmAnalysis: (taskId: string) => {
+    return request<ApiResponse<any>>(`/v1/videos/tasks/${taskId}/debug/llm-analysis`, {
+      method: 'POST'
+    });
+  },
+
   // 删除素材
   deleteMaterial: (materialBizId: string) => {
     return request<ApiResponse<boolean>>(`/v1/videos/materials/${materialBizId}`, { 
@@ -50,6 +72,13 @@ export const videoApi = {
   // 查询拆解分析结果
   getTaskResult: (taskId: string, includeTimeline = false) => {
     return request<ApiResponse<VideoTaskResultData>>(`/v1/videos/tasks/${taskId}/result?includeTimeline=${includeTimeline}`, {
+      method: 'GET'
+    });
+  },
+
+  // 读取底层原始的 scene_result.json 镜头切分数据
+  getRawSceneResult: (taskId: string) => {
+    return request<ApiResponse<any>>(`/v1/videos/tasks/${taskId}/raw-scene`, {
       method: 'GET'
     });
   }

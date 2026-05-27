@@ -87,6 +87,15 @@ export interface UploadedFileView {
   mediaInfo: MediaInfo;
 }
 
+export interface TaskStage {
+  stageType: string;
+  stageStatus: string;
+  stageProgress: number;
+  startedAt?: string;
+  endedAt?: string;
+  errorMessage?: string;
+}
+
 export interface VideoTaskResultData {
   taskId: string;
   status: string;
@@ -96,4 +105,8 @@ export interface VideoTaskResultData {
   categoryId?: string;
   partialFailedDimensions?: string[];
   llmAnalysis?: any;
+  fatTimeline?: any;
+  refinedTimeline?: any;
+  videoStructureTemplate?: any;
+  stages?: TaskStage[];
 }

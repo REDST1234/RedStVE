@@ -35,21 +35,28 @@ public class ArkPayloadFactory {
         return List.of(message);
     }
 
-    /**
-     * 预留：后续 OCR 可直接复用 image + prompt 协议构造。
-     */
-    public List<ArkInputMessage> buildImageInput(String imageUrl, String promptText) {
-        ArkInputContent imageContent = new ArkInputContent();
-        imageContent.setType("input_image");
-        imageContent.setImageUrl(imageUrl);
+    public List<ArkInputMessage> buildMultimodalInput(List<String> base64Images, String promptText) {
+        List<ArkInputContent> contents = new java.util.ArrayList<>();
+        
+        if (base64Images != null) {
+            for (String base64 : base64Images) {
+                ArkInputContent imageContent = new ArkInputContent();
+                imageContent.setType("image_url");
+                ArkInputContent.ArkImageUrl imageUrl = new ArkInputContent.ArkImageUrl();
+                imageUrl.setUrl("data:image/jpeg;base64," + base64);
+                imageContent.setImageUrl(imageUrl);
+                contents.add(imageContent);
+            }
+        }
 
         ArkInputContent textContent = new ArkInputContent();
         textContent.setType("text");
         textContent.setText(promptText);
+        contents.add(textContent);
 
         ArkInputMessage message = new ArkInputMessage();
         message.setRole("user");
-        message.setContent(List.of(imageContent, textContent));
+        message.setContent(contents);
         return List.of(message);
     }
 }

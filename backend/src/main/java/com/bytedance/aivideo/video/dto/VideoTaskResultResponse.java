@@ -19,13 +19,17 @@ public class VideoTaskResultResponse {
 
     private List<TranscriptItem> transcript;
 
-    private Object timelineLog;
+    private Object fatTimeline;
+
+    private Object refinedTimeline;
+
+    private Object videoStructureTemplate;
 
     private String categoryId;
 
     private List<String> partialFailedDimensions;
 
-    private LlmAnalysis llmAnalysis;
+    private List<TaskStageDto> stages;
 
     @Data
     public static class TranscriptItem {
@@ -34,12 +38,12 @@ public class VideoTaskResultResponse {
         private String text;
         private String speaker;
         private Double confidence;
+        private String audioEmotion;
+        private String volumeIntensity;
+        private String backgroundEnvironment;
+        private String vocalVibe;
+        private String bgmGenre;
+        private String bgmInstruments;
     }
 
-    @Data
-    public static class LlmAnalysis {
-        private Object script;
-        private Object rhythm;
-        private Object packaging;
-    }
 }

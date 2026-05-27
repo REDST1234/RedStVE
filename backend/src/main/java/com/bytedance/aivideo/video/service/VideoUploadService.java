@@ -25,7 +25,6 @@ import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -42,7 +41,9 @@ import java.util.UUID;
 @Slf4j
 public class VideoUploadService {
 
+    private static final String TASK_STATUS_PENDING = "PENDING";
     private static final String TASK_STATUS_PROCESSING = "PROCESSING";
+    private static final String TASK_STATUS_COMPLETED = "COMPLETED";
     private static final String MATERIAL_STATUS_ACTIVE = "ACTIVE";
 
     private final MediaUploadProperties mediaUploadProperties;
@@ -52,6 +53,7 @@ public class VideoUploadService {
     private final DeconstructProjectMaterialService deconstructProjectMaterialService;
     private final VideoAnalysisResultService videoAnalysisResultService;
     private final AsrAnalysisService asrAnalysisService;
+    private final SceneAnalysisService sceneAnalysisService;
     private final VideoTaskStageService videoTaskStageService;
 
     public VideoUploadService(
@@ -62,6 +64,7 @@ public class VideoUploadService {
             DeconstructProjectMaterialService deconstructProjectMaterialService,
             VideoAnalysisResultService videoAnalysisResultService,
             AsrAnalysisService asrAnalysisService,
+            SceneAnalysisService sceneAnalysisService,
             VideoTaskStageService videoTaskStageService
     ) {
         this.mediaUploadProperties = mediaUploadProperties;
@@ -71,6 +74,7 @@ public class VideoUploadService {
         this.deconstructProjectMaterialService = deconstructProjectMaterialService;
         this.videoAnalysisResultService = videoAnalysisResultService;
         this.asrAnalysisService = asrAnalysisService;
+        this.sceneAnalysisService = sceneAnalysisService;
         this.videoTaskStageService = videoTaskStageService;
     }
 
@@ -94,7 +98,7 @@ public class VideoUploadService {
         VideoUploadResponse response = new VideoUploadResponse();
         response.setMaterialBizId(String.valueOf(uploadResult.materialBizId()));
         response.setTaskId(uploadResult.taskId());
-        response.setStatus(TASK_STATUS_PROCESSING);
+        response.setStatus(TASK_STATUS_PENDING);
         response.setEstimatedDuration(uploadResult.estimatedDuration());
         response.setMediaInfo(uploadResult.mediaInfo());
         response.setOriginalFileName(uploadResult.originalFileName());
@@ -139,7 +143,7 @@ public class VideoUploadService {
         }
 
         response.setFileCount(uploadResults.size());
-        response.setStatus(TASK_STATUS_PROCESSING);
+        response.setStatus(TASK_STATUS_PENDING);
         response.setEstimatedDuration(estimatedDuration);
         log.info("video upload finished: mode=batch, fileCount={}, taskCount={}, estimatedDurationSec={}",
                 response.getFileCount(), response.getTaskIds().size(), response.getEstimatedDuration());
@@ -174,15 +178,13 @@ public class VideoUploadService {
         long materialBizId = persistMaterial(storedPath, file.getSize(), extension, mediaInfo, originalFilename);
         String taskId = persistTask(materialBizId, storedPath, file.getSize(), priority, categoryHint);
         videoTaskStageService.initStageIfAbsent(taskId, VideoTaskStageService.STAGE_TYPE_ASR);
+        videoTaskStageService.initStageIfAbsent(taskId, VideoTaskStageService.STAGE_TYPE_SCENE);
+        videoTaskStageService.initStageIfAbsent(taskId, VideoTaskStageService.STAGE_TYPE_KEYFRAME);
         videoAnalysisResultService.upsertProbeCore(materialBizId, taskId, mediaInfo);
         if (normalizedProjectId != null) {
             deconstructProjectMaterialService.bindUploadedMaterial(normalizedProjectId, materialBizId, taskId);
         }
-        // 保持原有时机：仅在 ASR 线程中提取音轨。
-        // Debug 模式不自动触发 ASR，由前端显式调用 debug 接口触发。
-        if (!debugMode) {
-            asrAnalysisService.runAsrAsync(taskId);
-        }
+        // 上传阶段只做 probe，拆解异步链路由“开始提取”接口显式触发。
 
         int estimatedDuration = mediaInfo.getDuration() == null ? 0 : (int) Math.ceil(mediaInfo.getDuration());
         log.info("video upload file completed: taskId={}, materialBizId={}, storedPath={}, projectId={}",
@@ -241,8 +243,8 @@ public class VideoUploadService {
         VideoAnalysisTaskEntity taskEntity = new VideoAnalysisTaskEntity();
         taskEntity.setTaskId(UUID.randomUUID().toString());
         taskEntity.setSourceVideoBizId(materialBizId);
-        taskEntity.setStatus(TASK_STATUS_PROCESSING);
-        // 仅完成了上传+probe，异步分析尚未结束。
+        // 上传后进入待提取状态，仅完成 probe。
+        taskEntity.setStatus(TASK_STATUS_PENDING);
         taskEntity.setProgress(10);
 
         // progress_step 已不再用于并行阶段状态表达，避免被并发覆盖。
@@ -259,6 +261,46 @@ public class VideoUploadService {
         taskEntity.setCompletedAt(null);
         videoAnalysisTaskMapper.insert(taskEntity);
         return taskEntity.getTaskId();
+    }
+
+    /**
+     * 显式触发拆解链路（ASR + Scene，Scene 内部再触发 KeyFrame）。
+     * 仅在前端点击“开始提取视频”后调用。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean startExtraction(String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
+        }
+        VideoAnalysisTaskEntity task = videoAnalysisTaskMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<VideoAnalysisTaskEntity>()
+                        .eq(VideoAnalysisTaskEntity::getTaskId, taskId)
+                        .isNull(VideoAnalysisTaskEntity::getDeletedAt)
+        );
+        if (task == null) {
+            throw new BizException(ErrorCode.TASK_NOT_FOUND, "任务不存在: " + taskId);
+        }
+        if (TASK_STATUS_COMPLETED.equals(task.getStatus())) {
+            return true;
+        }
+        task.setStatus(TASK_STATUS_PROCESSING);
+        task.setProgress(Math.max(task.getProgress() == null ? 0 : task.getProgress(), 20));
+        task.setCompletedAt(null);
+        task.setErrorMessage(null);
+        task.setErrorStep(null);
+        videoAnalysisTaskMapper.updateById(task);
+
+        videoTaskStageService.initStageIfAbsent(taskId, VideoTaskStageService.STAGE_TYPE_ASR);
+        videoTaskStageService.initStageIfAbsent(taskId, VideoTaskStageService.STAGE_TYPE_SCENE);
+        videoTaskStageService.initStageIfAbsent(taskId, VideoTaskStageService.STAGE_TYPE_KEYFRAME);
+
+        if (!videoTaskStageService.isStageRunningOrSuccess(taskId, VideoTaskStageService.STAGE_TYPE_ASR)) {
+            asrAnalysisService.runAsrAsync(taskId);
+        }
+        if (!videoTaskStageService.isStageRunningOrSuccess(taskId, VideoTaskStageService.STAGE_TYPE_SCENE)) {
+            sceneAnalysisService.runSceneDetectAsync(taskId);
+        }
+        return true;
     }
 
     private int normalizePriority(Integer priority) {

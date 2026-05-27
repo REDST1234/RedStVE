@@ -28,4 +28,16 @@ public class AsrSegmentEntity extends BaseEntity {
     private String speakerLabel;
 
     private BigDecimal confidence;
+
+    private String audioEmotion;
+
+    private String volumeIntensity;
+
+    private String backgroundEnvironment;
+
+    private String vocalVibe;
+
+    private String bgmGenre;
+
+    private String bgmInstruments;
 }

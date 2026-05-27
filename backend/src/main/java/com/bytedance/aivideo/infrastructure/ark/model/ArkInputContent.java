@@ -22,5 +22,11 @@ public class ArkInputContent {
     private String text;
 
     @JsonProperty("image_url")
-    private String imageUrl;
+    private ArkImageUrl imageUrl;
+
+    @Data
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class ArkImageUrl {
+        private String url;
+    }
 }

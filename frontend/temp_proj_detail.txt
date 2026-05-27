@@ -1,0 +1,719 @@
+﻿import { useState, useRef, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useToast } from '../../contexts/ToastContext';
+import { deconstructApi } from '../../api/deconstruct';
+import { videoApi } from '../../api/video';
+import { formatBytes, extractFileName, formatDuration } from '../../utils/format';
+import { Project, UploadedFileView, VideoTaskResultData } from '../../types';
+
+export default function ProjectDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+
+  
+  
+  // States that were in App.tsx
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [deconstructStep, setDeconstructStep] = useState<'info' | 'upload' | 'processing' | 'result'>('info');
+  const [extractProgress, setExtractProgress] = useState(0);
+  const [extractStageIndex, setExtractStageIndex] = useState(0);
+  const [isDebugMode, setIsDebugMode] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFileView[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [triggeringDebugAsr, setTriggeringDebugAsr] = useState(false);
+  const [debugAsrTriggeredTaskIds, setDebugAsrTriggeredTaskIds] = useState<string[]>([]);
+  const [deletingMaterialIds, setDeletingMaterialIds] = useState<string[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [liveTaskResult, setLiveTaskResult] = useState<VideoTaskResultData | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const latestMediaInfo = uploadedFiles[0]?.mediaInfo || null;
+
+  const [projectTitle, setProjectTitle] = useState('');
+  const [projectDesc, setProjectDesc] = useState('');
+  const [projectTags, setProjectTags] = useState<string[]>(['娣峰壀']);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const PROCESSING_STEPS = [
+    { label: '鍒濆鍖?FFmpeg 濯掍綋鎺㈡祴鍣?..', progress: 10 },
+    { label: '杩愯 ASR 璇煶杞啓涓?SceneDetector 闀滃ご鍒囧垎...', progress: 40 },
+    { label: '鎶藉彇 Hook 鍏抽敭甯т笌妫€娴嬬墿鐞嗗紓鍔?..', progress: 60 },
+    { label: 'TimelineMatcher 澶氭ā鎬佹椂闂磋酱褰掍竴鍖?..', progress: 80 },
+    { label: '璋冪敤 LLM 娣卞害鍒嗘瀽鑴氭湰銆佽妭濂忎笌鍖呰缁撴瀯...', progress: 95 },
+    { label: '瑙ｆ瀽涓庣壒寰佸簱姣斿瀹屾垚', progress: 100 }
+  ];
+
+  // API Load Logic
+  useEffect(() => {
+    if (!id || id === 'new') return;
+    let cancelled = false;
+
+    const loadData = async () => {
+      try {
+        const resp = await deconstructApi.getProject(id);
+        if (resp.code !== '0' && resp.code !== '200') throw new Error(resp.message || '鑾峰彇璇︽儏澶辫触');
+        if (cancelled) return;
+        
+        const data = resp.data;
+        const proj: Project = {
+          id: data.id,
+          title: data.title,
+          description: data.description || '',
+          tags: data.tags || [],
+          cover: data.coverUrl || '',
+          status: data.status === 'COMPLETED' ? 'completed' : data.status === 'PENDING' ? 'pending' : 'working',
+          date: data.createdAt ? data.createdAt.split('T')[0] : ''
+        };
+        setEditingProject(proj);
+        setProjectTitle(proj.title);
+        setProjectDesc(proj.description);
+        if (proj.tags && proj.tags.length > 0) {
+          setProjectTags(proj.tags);
+        }
+        
+        if (data.materials && data.materials.length > 0) {
+          const files = data.materials.map(m => ({
+            materialBizId: m.materialBizId || '',
+            name: m.originalFileName || extractFileName(m.filePath),
+            size: '--',
+            taskId: m.taskId || '',
+            mediaInfo: { duration: m.duration, width: m.width, height: m.height, format: m.format }
+          }));
+          setUploadedFiles(files);
+        }
+      } catch (err) {
+        console.warn('鑾峰彇璇︽儏澶辫触', err);
+      }
+    };
+    void loadData();
+    return () => { cancelled = true; };
+  }, [id]);
+
+  // Async extract simulation
+  useEffect(() => {
+    if (deconstructStep === 'processing' && !isDebugMode) {
+      if (extractStageIndex < PROCESSING_STEPS.length - 1) {
+        const timer = setTimeout(() => {
+          setExtractStageIndex(prev => prev + 1);
+          setExtractProgress(PROCESSING_STEPS[extractStageIndex + 1].progress);
+        }, 1500);
+        return () => clearTimeout(timer);
+      } else {
+        const timer = setTimeout(() => setDeconstructStep('result'), 1000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [deconstructStep, extractStageIndex, isDebugMode]);
+  // Polling logic for real data
+  useEffect(() => {
+    if (deconstructStep === 'processing' && uploadedFiles.length > 0) {
+      const taskId = uploadedFiles[0].taskId;
+      if (!taskId) return;
+
+      const fetchResult = async () => {
+        try {
+          const resp = await videoApi.getTaskResult(taskId, true);
+          if (resp.code === '0' || resp.code === '200') {
+            setLiveTaskResult(resp.data);
+            if (resp.data.status === 'COMPLETED' || resp.data.status === 'FAILED') {
+              // Debug 妯″紡涓嬩笉鑷姩杩涘叆缁撴灉椤碉紝淇濇寔鈥滄墽琛屼笅涓€姝モ€濆彲鎺с€?              if (!isDebugMode && resp.data.status === 'COMPLETED') {
+                setDeconstructStep('result');
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to poll task result', error);
+        }
+      };
+
+      fetchResult(); // Initial fetch
+      const intervalId = setInterval(fetchResult, 2000);
+
+      return () => clearInterval(intervalId);
+    }
+  }, [deconstructStep, uploadedFiles, isDebugMode]);
+  const toggleTag = (tag: string) => {
+    setProjectTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  };
+
+  const handleSaveProject = async () => {
+    if (!projectTitle.trim()) {
+      showToast('璇疯緭鍏ラ」鐩爣棰橈紝涓嶈兘涓虹┖', 'error');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const payload = {
+        title: projectTitle,
+        description: projectDesc,
+        tags: projectTags,
+        coverUrl: editingProject?.cover || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80'
+      };
+      
+      try {
+        const resp = editingProject 
+          ? await deconstructApi.updateProject(editingProject.id, payload)
+          : await deconstructApi.createProject(payload);
+          
+        if (resp.code !== '0' && resp.code !== '200') {
+           throw new Error(resp.message || '淇濆瓨澶辫触');
+        }
+        showToast('鉁?椤圭洰淇濆瓨鎴愬姛', 'success');
+      } catch (err) {
+        console.warn('API 鏈氨缁紝璧?Mock 淇濆瓨閫昏緫', err);
+        showToast('鉁?椤圭洰淇濆瓨鎴愬姛 (Mock)', 'success');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!editingProject) return;
+    setIsDeleting(true);
+    try {
+      try {
+        const resp = await deconstructApi.deleteProject(editingProject.id);
+        if (resp.code !== '0' && resp.code !== '200') {
+           throw new Error(resp.message || '鍒犻櫎澶辫触');
+        }
+      } catch (err) {
+        console.warn('API 鏈氨缁紝璧?Mock 鍒犻櫎閫昏緫', err);
+      }
+      setShowDeleteConfirm(false);
+      navigateToList();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const navigateToList = () => navigate('/deconstruct');
+
+  const handleStartExtraction = () => {
+    setDeconstructStep('processing');
+    setExtractStageIndex(0);
+    setExtractProgress(PROCESSING_STEPS[0].progress);
+    // 閲嶆柊寮€濮嬫椂閲嶇疆璋冭瘯鎬侊紝閬垮厤娌跨敤涓婁竴杞换鍔¤Е鍙戣褰曘€?    setDebugAsrTriggeredTaskIds([]);
+    setLiveTaskResult(null);
+  };
+
+  const handleNextDebugStep = () => {
+    void runNextDebugStep();
+  };
+
+  const runNextDebugStep = async () => {
+    if (extractStageIndex < PROCESSING_STEPS.length - 1) {
+      const nextStageIndex = extractStageIndex + 1;
+      const nextProgress = PROCESSING_STEPS[nextStageIndex].progress;
+
+      // 40% 瀵瑰簲 ASR 闃舵锛欴ebug 妯″紡涓嬬敱鍓嶇鏄惧紡瑙﹀彂鍚庣鎺ュ彛銆?      if (nextProgress === 40 && uploadedFiles.length > 0) {
+        const unTriggeredTaskIds = uploadedFiles
+          .map((file) => file.taskId)
+          .filter((taskId) => !!taskId && !debugAsrTriggeredTaskIds.includes(taskId));
+
+        if (unTriggeredTaskIds.length > 0) {
+          setTriggeringDebugAsr(true);
+          try {
+            const triggerResponses = await Promise.all(unTriggeredTaskIds.map((taskId) => videoApi.triggerAsrDebug(taskId)));
+            const failedResponse = triggerResponses.find((resp) => resp.code !== '0' && resp.code !== '200');
+            if (failedResponse) {
+              throw new Error(failedResponse.message || '瑙﹀彂 ASR Debug 鍒嗘瀽澶辫触');
+            }
+            setDebugAsrTriggeredTaskIds((prev) => [...prev, ...unTriggeredTaskIds]);
+            showToast(`宸茶Е鍙?${unTriggeredTaskIds.length} 涓换鍔＄殑 ASR Debug 鍒嗘瀽`, 'success');
+          } catch (error) {
+            const message = error instanceof Error ? error.message : '瑙﹀彂 ASR Debug 鍒嗘瀽澶辫触';
+            showToast(message, 'error');
+            return;
+          } finally {
+            setTriggeringDebugAsr(false);
+          }
+        }
+      }
+
+      setExtractStageIndex(nextStageIndex);
+      setExtractProgress(nextProgress);
+      return;
+    }
+    setDeconstructStep('result');
+  };
+
+  const handleSaveAndReturn = () => navigateToList();
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      void uploadSelectedFiles(Array.from(files));
+    }
+  };
+
+  const handleDropUpload = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (uploading) return;
+    const files = e.dataTransfer.files;
+    const videoFiles = Array.from(files).filter(f => f.type.startsWith('video/') || f.name.endsWith('.mp4') || f.name.endsWith('.mov'));
+    if (videoFiles.length === 0) {
+      showToast('璇蜂笂浼犳湁鏁堢殑瑙嗛鏂囦欢', 'error');
+      return;
+    }
+    await uploadSelectedFiles(videoFiles);
+  };
+
+  const openFilePicker = () => {
+    if (!uploading) fileInputRef.current?.click();
+  };
+
+  const uploadSelectedFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    setUploadError(null);
+    setUploading(true);
+    try {
+      if (files.length === 1) {
+        const resp = await videoApi.uploadSingle(files[0], editingProject?.id, isDebugMode);
+        if (resp.code !== '0') throw new Error(resp.message || '涓婁紶澶辫触');
+        
+        const item: UploadedFileView = {
+          materialBizId: resp.data.materialBizId,
+          name: files[0].name,
+          size: formatBytes(files[0].size),
+          taskId: resp.data.taskId,
+          mediaInfo: resp.data.mediaInfo
+        };
+        setUploadedFiles(prev => [...prev, item]);
+        return;
+      }
+
+      const resp = await videoApi.uploadBatch(files, editingProject?.id, isDebugMode);
+      if (resp.code !== '0') throw new Error(resp.message || '鎵归噺涓婁紶澶辫触');
+      
+      const taskIds = resp.data.taskIds || [];
+      const mediaInfos = resp.data.mediaInfos || [];
+      const responseItems = resp.data.items || [];
+        const items = files.map((file, index) => ({
+        materialBizId: responseItems[index]?.materialBizId || '',
+        name: file.name,
+        size: formatBytes(file.size),
+        taskId: responseItems[index]?.taskId || taskIds[index] || '',
+        mediaInfo: responseItems[index]?.mediaInfo || mediaInfos[index] || {}
+      }));
+      setUploadedFiles(prev => [...prev, ...items]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '涓婁紶澶辫触锛岃閲嶈瘯';
+      setUploadError(message);
+      showToast(message, 'error');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteUploadedFile = async (materialBizId: string) => {
+    if (!materialBizId.trim()) {
+      showToast('绱犳潗ID鏃犳晥锛屾棤娉曞垹闄?, 'error');
+      return;
+    }
+    if (deletingMaterialIds.includes(materialBizId)) return;
+    
+    setDeletingMaterialIds((prev) => [...prev, materialBizId]);
+    setUploadError(null);
+    try {
+      const resp = await videoApi.deleteMaterial(materialBizId);
+      if (resp.code !== '0' && resp.code !== '200') throw new Error(resp.message || '鍒犻櫎绱犳潗澶辫触');
+
+      setUploadedFiles((prev) => {
+        const next = prev.filter((item) => item.materialBizId !== materialBizId);
+        return next;
+      });
+      showToast('绱犳潗宸插垹闄?, 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '鍒犻櫎绱犳潗澶辫触';
+      setUploadError(message);
+      showToast(message, 'error');
+    } finally {
+      setDeletingMaterialIds((prev) => prev.filter((id) => id !== materialBizId));
+    }
+  };
+
+  return (
+    <>
+      <div className="detail-page fade-in" style={{borderColor: '#e0e7ff', display: 'flex', flexDirection: 'row', gap: '20px', padding: '24px', height: 'calc(100vh - 80px)' }}>
+              
+              {/* === 宸︿晶涓诲伐浣滄祦 === */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'auto', paddingRight: '12px' }}>
+                <div className="detail-header" style={{ padding: '0 0 20px 0' }}>
+                  <button className="back-btn" onClick={() => {
+                    if (deconstructStep !== 'info') {
+                      setDeconstructStep('info');
+                    } else {
+                      navigateToList();
+                    }
+                  }} title="杩斿洖椤圭洰鐪嬫澘">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+                    </svg>
+                  </button>
+                  <h2 className="detail-title">{editingProject ? '缂栬緫鎷嗚В璇︽儏' : '鏂板缓缁撴瀯鎷嗚В椤圭洰'}</h2>
+                  
+                  {deconstructStep === 'info' && (
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      {editingProject && (
+                        <>
+                          <button className="btn-outline" style={{ borderColor: '#6366f1', color: '#6366f1' }} onClick={() => navigate(`/deconstruct/detail/${id}/visualize`)}>
+                            馃搳 妯＄増鍏ㄦ櫙瑙嗗浘
+                          </button>
+                          <button className="btn-outline" style={{ borderColor: '#ef4444', color: '#ef4444' }} onClick={() => setShowDeleteConfirm(true)} disabled={isDeleting}>
+                            {isDeleting ? '鍒犻櫎涓?..' : '馃棏锔?鍒犻櫎椤圭洰'}
+                          </button>
+                        </>
+                      )}
+                      <button className="btn-outline" onClick={handleSaveProject} disabled={isSaving}>
+                        {isSaving ? '淇濆瓨涓?..' : '馃捑 淇濆瓨椤圭洰'}
+                      </button>
+                      <button className="btn-jump-flat" style={{background: '#6366f1', color: 'white', borderColor: '#4f46e5'}} onClick={() => setDeconstructStep('upload')} title="杩涘叆鎻愬彇宸ヤ綔娴?>
+                        <span>馃殌 寮€濮嬫媶瑙ｅ伐浣滄祦</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="detail-body" style={{ padding: 0 }}>
+                  {deconstructStep === 'info' && (
+                    <>
+                      <div className="detail-left">
+                        <div className="cover-preview">
+                          {editingProject?.cover ? (
+                            <img src={editingProject.cover} alt="cover" />
+                          ) : (
+                            <div className="cover-placeholder">
+                              <svg width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                              <span>鏆傛棤灏侀潰</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="params-box">
+                          <div className="params-title">璇︾粏鍙傛暟 (Details)</div>
+                          <div className="param-row"><span className="param-label">鏃堕暱</span><span className="param-val">{formatDuration(latestMediaInfo?.duration)}</span></div>
+                          <div className="param-row"><span className="param-label">鍒嗚鲸鐜?/span><span className="param-val">{latestMediaInfo?.width && latestMediaInfo?.height ? `${latestMediaInfo.width} x ${latestMediaInfo.height}` : '---- x ----'}</span></div>
+                          <div className="param-row"><span className="param-label">FPS</span><span className="param-val">{latestMediaInfo?.fps ? latestMediaInfo.fps.toFixed(3) : '--'}</span></div>
+                          <div className="param-row"><span className="param-label">闀滃ご鏁?/span><span className="param-val">0</span></div>
+                        </div>
+                      </div>
+
+                      <div className="detail-mid" style={{flexDirection: 'row', gap: '32px'}}>
+                        <div className="input-group" style={{flex: 1}}>
+                          <div className="input-group">
+                            <label className="input-label">椤圭洰鏍囬 (Title)</label>
+                            <input type="text" className="input-field" placeholder="杈撳叆鐖嗘瑙嗛瑙ｆ瀽椤圭洰鏍囬..." value={projectTitle} onChange={e => setProjectTitle(e.target.value)} />
+                          </div>
+                          
+                          <div className="input-group" style={{marginTop: '24px'}}>
+                            <label className="input-label">椤圭洰鎻忚堪 (Description)</label>
+                            <textarea className="input-field" placeholder="璁板綍鎻愬彇涓庣粨鏋勬媶瑙ｇ殑鏍稿績鐩爣..." value={projectDesc} onChange={e => setProjectDesc(e.target.value)}></textarea>
+                          </div>
+
+                          <div className="input-group" style={{marginTop: '24px'}}>
+                            <label className="input-label">灏侀潰鍦板潃 (Cover URL)</label>
+                            <input
+                              type="text"
+                              className="input-field"
+                              placeholder="鏀寔 http(s)://銆?local/path銆?/relative/path銆丏:\\images\\cover.jpg"
+                              value={editingProject?.cover || ''}
+                              onChange={e => setEditingProject(prev => prev ? {...prev, cover: e.target.value} : null)}
+                            />
+                          </div>
+
+                          <div className="input-group" style={{marginTop: '24px'}}>
+                            <label className="input-label">鍝佺被鏍囩 (Tags)</label>
+                            <div className="tags-container">
+                              {['娣峰壀', '钀ラ攢', '褰辫', '浠庨浂', '鐢靛晢', 'Vlog'].map(tag => (
+                                <div key={tag} onClick={() => toggleTag(tag)} className={`tag-btn ${projectTags.includes(tag) ? 'selected' : ''}`} style={{ cursor: 'pointer' }}>
+                                  {tag}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 馃摐 澶氳矾褰掍竴鏃ュ織 (Timeline Log) */}
+                        <div className="timeline-log-panel">
+                          <div className="log-header">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                            鏍蜂緥澶氳矾褰掍竴鏃ュ織 (Timeline Log)
+                          </div>
+                          <div className="log-body">
+                            <div className="log-row">
+                              <span className="log-time">[0.0s - 3.2s]</span>
+                              <div className="log-badge asr">馃數 ASR鍙拌瘝</div>
+                              <span className="log-text">鈥滃ぇ涓€鏃╁叓椤朵笉浣忥紵閭ｆ槸...鈥?/span>
+                            </div>
+                            <div className="log-row">
+                              <span className="log-time">[1.2s]</span>
+                              <div className="log-badge physics">馃煚 鐗╃悊寮傚姩</div>
+                              <span className="log-text highlight">妫€娴嬪埌鍍忕礌绐佸彉 + 杞満闊虫晥娉㈠嘲</span>
+                            </div>
+                            <div className="log-row">
+                              <span className="log-time">[3.2s - 12.0s]</span>
+                              <div className="log-badge asr">馃數 ASR鍙拌瘝</div>
+                              <span className="log-text">鈥滅函姝ｆ墜浣滃挅鍟★紝10绉掔灛闂磋浣犳竻閱掑洖鍒板穮宄扮姸鎬侊紒鈥?/span>
+                            </div>
+                            <div className="log-row">
+                              <span className="log-time">[8.5s]</span>
+                              <div className="log-badge physics">馃煚 鐗╃悊寮傚姩</div>
+                              <span className="log-text">浜虹墿楠ㄩ澶у箙搴﹀彉鍖?(鎸ユ墜鍔ㄤ綔)</span>
+                            </div>
+                            <div className="log-row">
+                              <span className="log-time">[12.0s - 15.0s]</span>
+                              <div className="log-badge asr">馃數 ASR鍙拌瘝</div>
+                              <span className="log-text">鈥滅偣鍑讳笅鏂归摼鎺ワ紝浜彈涓撳睘浜庝綘鐨勬竻鏅?..鈥?/span>
+                            </div>
+                            <div className="log-row">
+                              <span className="log-time">[13.5s]</span>
+                              <div className="log-badge physics">馃煚 鐗╃悊寮傚姩</div>
+                              <span className="log-text highlight">璐墿杞﹀脊妗?UI 璇嗗埆鎻愬彇</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {deconstructStep === 'upload' && (
+                    <div className="extract-view upload-view fade-in">
+                      <div className="extract-header">
+                        <h3>姝ラ 1锛氫笂浼犺棰戠礌鏉?/h3>
+                        <p>璇蜂笂浼犻渶瑕佽繘琛岀粨鏋勬媶瑙ｅ拰淇℃伅鎻愬彇鐨勫師濮嬭棰戞枃浠讹紝鏀寔鎵归噺涓婁紶杩涜鎵规浠诲姟鍒嗘瀽銆?/p>
+                      </div>
+                      
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".mp4,.mov,video/mp4,video/quicktime"
+                        multiple
+                        style={{ display: 'none' }}
+                        onChange={handleFileInputChange}
+                      />
+
+                      <div
+                        className="upload-dropzone large"
+                        onClick={openFilePicker}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={handleDropUpload}
+                      >
+                        <div className="upload-icon">
+                          <svg width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        </div>
+                        <div className="upload-text">鐐瑰嚮鎴栨嫋鎷借棰戞枃浠跺埌姝ゅ尯鍩?/div>
+                        <div className="upload-subtext">鏀寔 MP4, MOV 鏍煎紡锛屽崟鏂囦欢涓婇檺 2GB</div>
+                        {uploading && <div className="upload-subtext" style={{marginTop: '8px'}}>涓婁紶骞舵帰娴嬩腑...</div>}
+                      </div>
+
+                      {uploadError && (
+                        <div style={{ marginTop: '12px', color: '#dc2626', fontSize: '0.9rem' }}>
+                          {uploadError}
+                        </div>
+                      )}
+
+                      {uploadedFiles.length > 0 && (
+                        <div className="uploaded-list">
+                          <h4>宸插噯澶囧ソ杩涜鎻愬彇鐨勬枃浠?/h4>
+                          {uploadedFiles.map((f, i) => (
+                            <div className="uploaded-item has-tooltip" key={`${f.materialBizId}-${f.taskId}-${i}`} style={{ position: 'relative' }}>
+                              <svg width="24" height="24" fill="none" stroke="#6366f1" strokeWidth="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                              <span className="file-name">{f.name}</span>
+                              <span className="file-size">{f.size}</span>
+                              <button
+                                type="button"
+                                className="btn-outline"
+                                disabled={uploading || !f.materialBizId || deletingMaterialIds.includes(f.materialBizId)}
+                                onClick={() => void handleDeleteUploadedFile(f.materialBizId)}
+                                style={{ marginLeft: '12px', padding: '4px 10px', fontSize: '0.8rem' }}
+                              >
+                                {deletingMaterialIds.includes(f.materialBizId) ? '鍒犻櫎涓?..' : '鍒犻櫎绱犳潗'}
+                              </button>
+
+                              {f.mediaInfo && (
+                                <div className="ffprobe-tooltip">
+                                  <div style={{ fontWeight: 600, marginBottom: '8px', color: '#334155' }}>FFprobe 鍩虹淇℃伅</div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.9rem', color: '#475569' }}>
+                                    <div>鏃堕暱: {f.mediaInfo.duration ? formatDuration(f.mediaInfo.duration) : '--'}</div>
+                                    <div>鍒嗚鲸鐜? {f.mediaInfo.width && f.mediaInfo.height ? `${f.mediaInfo.width}x${f.mediaInfo.height}` : '--'}</div>
+                                    <div>FPS: {f.mediaInfo.fps ? f.mediaInfo.fps.toFixed(3) : '--'}</div>
+                                    <div>缂栫爜: {f.mediaInfo.codec || '--'}</div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="extract-footer">
+                        <label className="debug-toggle">
+                          <input type="checkbox" checked={isDebugMode} onChange={(e) => setIsDebugMode(e.target.checked)} />
+                          <span>寮€鍚皟璇曟ā寮?(浣跨敤鍘熷 JSON 灞曞嚭)</span>
+                        </label>
+                        <button className="btn-primary" disabled={uploadedFiles.length === 0 || uploading} onClick={handleStartExtraction}>寮€濮嬫彁鍙栬棰?/button>
+                      </div>
+                    </div>
+                  )}
+
+                  {deconstructStep === 'processing' && (
+                    <div className="extract-view processing-view fade-in" style={{ flex: 1, minHeight: '500px' }}>
+                      <div className="processing-dashboard">
+                        <div className="progress-circle">
+                          <svg viewBox="0 0 36 36" className="circular-chart">
+                            <path className="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            <path className="circle" strokeDasharray={`${extractProgress}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                          </svg>
+                          <div className="percentage">{extractProgress}%</div>
+                        </div>
+                        
+                        <div className="processing-terminal">
+                          <div className="terminal-header">
+                            <span className="dot red"></span><span className="dot yellow"></span><span className="dot green"></span>
+                            <span className="title">AI 鎻愬彇鏈嶅姟缁堢</span>
+                          </div>
+                          <div className="terminal-body">
+                            {PROCESSING_STEPS.slice(0, extractStageIndex + 1).map((step, idx) => (
+                              <div key={idx} className={`terminal-line ${idx === extractStageIndex ? 'active' : 'done'}`}>
+                                <span className="prompt">$ </span>
+                                <span className="command">{step.label}</span>
+                                {idx < extractStageIndex && <span className="status"> [OK]</span>}
+                              </div>
+                            ))}
+                            <div className="cursor"></div>
+                          </div>
+                        </div>
+
+                        {isDebugMode && (
+                          <div className="debug-actions" style={{ display: 'flex', gap: '12px' }}>
+                            <button
+                              className="btn-outline"
+                              onClick={handleNextDebugStep}
+                              disabled={triggeringDebugAsr}
+                            >
+                              {triggeringDebugAsr ? '瑙﹀彂ASR涓?..' : '鎵ц涓嬩竴姝?(Debug)'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {deconstructStep === 'result' && (
+                    <div className="extract-view result-view fade-in">
+                      <div className="result-header">
+                        <h3>鉁?鎻愬彇鍒嗘瀽瀹屾垚</h3>
+                        <p>澶氱淮瑙ｆ瀯妯″瀷宸叉垚鍔熷垎绂昏棰戠殑鍩虹淇℃伅銆侀暅澶淬€佹枃鏈笌涓夌淮缁撴瀯銆?/p>
+                      </div>
+
+                      {!isDebugMode ? (
+                        <div className="result-dashboard">
+                          {/* Left Pane: Media & Timeline */}
+                          <div className="result-left">
+                            <div className="result-card media-info">
+                              <h4>鍩虹鍏冧俊鎭?(Media Prober)</h4>
+                              <div className="info-grid">
+                                <div className="info-item"><span>鏃堕暱</span><strong>30.5s</strong></div>
+                                <div className="info-item"><span>鍒嗚鲸鐜?/span><strong>1080x1920</strong></div>
+                                <div className="info-item"><span>甯х巼</span><strong>30 FPS</strong></div>
+                                <div className="info-item"><span>闀滃ご鏁?/span><strong>8 涓垏鐗?/strong></div>
+                              </div>
+                            </div>
+                            
+                            <div className="result-card timeline-mini">
+                              <h4>澶氭ā鎬佹椂搴忔爲 (Timeline)</h4>
+                              <div className="log-body mini">
+                                <div className="log-row"><span className="log-time">[0.0s]</span><span className="log-text">ASR: 澶т竴鏃╁叓椤朵笉浣忥紵</span></div>
+                                <div className="log-row"><span className="log-time">[1.2s]</span><span className="log-text highlight">鐗╃悊寮傚姩: 鍍忕礌绐佸彉</span></div>
+                                <div className="log-row"><span className="log-time">[3.2s]</span><span className="log-text">ASR: 绾鎵嬩綔鍜栧暋鐬棿...</span></div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Right Pane: LLM Structures */}
+                          <div className="result-right">
+                            <div className="result-card llm-structure">
+                              <h4>LLM 涓夌淮缁撴瀯鍒嗘瀽鎶ュ憡</h4>
+                              
+                              <div className="structure-section script">
+                                <h5>馃摐 鑴氭湰缁撴瀯 (Script)</h5>
+                                <div className="struct-item"><strong>Hook (0-3s):</strong> 鎶涘嚭鐥涚偣闂锛堥珮鐕冭妭濂忥級</div>
+                                <div className="struct-item"><strong>涓灞曞紑 (3-15s):</strong> 鐥涚偣鏀惧ぇ + 鍗栫偣鍙嶈浆</div>
+                                <div className="struct-item"><strong>缁撳熬 CTA (15s-):</strong> 寮曞鐐瑰嚮璐墿杞?/div>
+                              </div>
+                              
+                              <div className="structure-section rhythm">
+                                <h5>鈴憋笍 鑺傚缁撴瀯 (Rhythm)</h5>
+                                <div className="struct-item"><strong>鍒囨崲棰戠巼:</strong> 蹇妭濂?(2.5娆?绉?</div>
+                                <div className="struct-item"><strong>楂樻疆鍖洪棿:</strong> 8.5s - 12.0s</div>
+                              </div>
+                              
+                              <div className="structure-section packaging">
+                                <h5>馃帹 鍖呰缁撴瀯 (Packaging)</h5>
+                                <div className="struct-item"><strong>瀛楀箷椋庢牸:</strong> 灞呬腑澶у瓧锛屽甫寮硅烦鍏ュ満</div>
+                                <div className="struct-item"><strong>杞満鍋忓ソ:</strong> 缂╂斁杞満 (Zoom-in) 涓轰富</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="result-debug-message" style={{ padding: '48px 24px', background: '#f8fafc', borderRadius: '12px', color: '#64748b', textAlign: 'center', border: '1px dashed #cbd5e1' }}>
+                          <svg width="48" height="48" fill="none" stroke="#94a3b8" strokeWidth="1.5" viewBox="0 0 24 24" style={{ marginBottom: '16px' }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 500, color: '#334155', marginBottom: '8px' }}>璋冭瘯妯″紡宸插紑鍚?/div>
+                          <div>鎻愬彇鍒嗘瀽缁撴灉宸插湪鍙充晶 JSON 瑙嗗浘涓睍鍑猴紝鍙緵鍓嶇閫昏緫缁戝畾鍙傝€冦€?/div>
+                        </div>
+                      )}
+                      
+                      <div className="extract-footer">
+                        <button className="btn-outline" onClick={() => setDeconstructStep('info')}>杩斿洖璇︽儏椤?/button>
+                        <button className="btn-primary" onClick={handleSaveAndReturn}>淇濆瓨缁撴瀯鍖栨ā鏉?/button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* === 鍙充晶甯搁┗鐨?JSON 澶х洏 (Debug 妯″紡涓嬩笓灞? === */}
+              {isDebugMode && deconstructStep !== 'info' && (
+                <div className="debug-json-panel fade-in" style={{ width: '420px', background: '#0f172a', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', color: '#e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid #334155', paddingBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <svg width="20" height="20" fill="none" stroke="#38bdf8" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                      <h3 style={{ fontSize: '1.05rem', margin: 0, color: '#f8fafc' }}>Extraction JSON (Live)</h3>
+                    </div>
+                    <span style={{ fontSize: '0.8rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: '12px' }}>
+                      {deconstructStep === 'result' ? 'Finished' : 'Syncing'}
+                    </span>
+                  </div>
+                  
+                  <div style={{ flex: 1, overflow: 'auto', fontSize: '0.85rem', fontFamily: 'Consolas, monospace', color: '#38bdf8', lineHeight: '1.6' }}>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                      {JSON.stringify(liveTaskResult || { status: 'idle', message: 'Waiting for start...' }, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+      {showDeleteConfirm && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>鈿狅笍 纭鍒犻櫎椤圭洰</h3>
+            <p>鍒犻櫎鍚庣浉鍏崇殑鎵€鏈夊垎鏋愭暟鎹€佹椂闂磋酱鍒囩墖灏嗚姘镐箙娓呴櫎銆傛鎿嶄綔涓嶅彲鎾ら攢銆?/p>
+            <div className="modal-actions">
+              <button className="btn-outline" onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>鍙栨秷</button>
+              <button className="btn-primary" style={{background: '#ef4444', borderColor: '#ef4444'}} onClick={handleDeleteProject} disabled={isDeleting}>
+                {isDeleting ? '鍒犻櫎涓?..' : '纭鍒犻櫎'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
