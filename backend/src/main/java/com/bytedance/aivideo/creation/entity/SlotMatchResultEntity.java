@@ -1,0 +1,42 @@
+package com.bytedance.aivideo.creation.entity;
+
+import com.baomidou.mybatisplus.annotation.*;
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+@TableName("slot_match_result")
+public class SlotMatchResultEntity {
+    
+    @TableId(type = IdType.AUTO)
+    private Long id;
+    
+    private String matchId;
+    
+    private String projectId;
+    
+    private Integer segmentIndex;
+    
+    private String segmentRole; // hook/body/climax/outro
+    
+    private String matchedAssetId;
+    
+    private Double matchScore;
+    
+    private String matchStatus; // MATCHED/PARTIAL/MISSING
+    
+    private String versionId;
+    
+    private String adaptationPlanJson;
+    
+    private String adaptedFilePath;
+    
+    @TableField(fill = FieldFill.INSERT)
+    private LocalDateTime createdAt;
+    
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updatedAt;
+    
+    @TableLogic
+    private LocalDateTime deletedAt;
+}

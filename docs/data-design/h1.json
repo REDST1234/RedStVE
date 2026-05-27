@@ -1,0 +1,66 @@
+{
+    "assetId": "raw_video_001",
+    "assetType": "VIDEO", // 枚举: VIDEO, IMAGE, AUDIO
+    "sourcePath": "/data/assets/user_889/raw_001.mp4",
+    // ==========================================
+    // [Layer 1: 全局物理属性层] - 纯 Java/CV/FFmpeg 计算，绝对防幻觉
+    // ==========================================
+    "physicalAttributes": {
+        "totalDurationSeconds": 15.0,
+        "resolution": "1920x1080",
+        "hasAudio": true,
+        "lighting": {
+            "meanLuminance": 0.18, // Y通道灰度均值 (0.0 - 1.0)，由 OpenCV/FFmpeg 内存直出
+            "contrastRatio": 3.2,
+            "isOverExposed": false,
+            "isUnderExposed": true // 触发 Java 中台 Auto-Safe 提亮底线的依据
+        }
+    },
+    // ==========================================
+    // [Layer 2: 全局语义标签层] - LLM 零样本感知，用于宏观风格对账
+    // ==========================================
+    "semanticTags": {
+        "mainEntities": [
+            "马克杯",
+            "咖啡液体",
+            "原木桌"
+        ],
+        "lightVibe": "low_key_dark", // LLM 结合画面给出的感性光影评价
+        "overallStyle": "日常静物"
+    },
+    // ==========================================
+    // [Layer 3: 微观时空高光层] - 系统的皇冠明珠！彻底解决时间和空间裁切问题
+    // ==========================================
+    "highlights": [
+        {
+            "segmentId": "h_01",
+            "usabilityScore": 0.1, // LLM 评分极低，废片标识
+            "timeAnchor": { // 由 CV 场景切换算子 (PySceneDetect) 精准切割
+                "startTime": 0.0,
+                "endTime": 4.5
+            },
+            "actionState": "camera_adjusting"
+        },
+        {
+            "segmentId": "h_02",
+            "usabilityScore": 0.95, // LLM 高分推荐，Java 优先切取目标
+            "timeAnchor": {
+                "startTime": 4.5,
+                "endTime": 10.0 // 物理时间轴，解决剪辑切偏问题
+            },
+            "actionState": "pouring_coffee",
+            "cameraMovement": "static",
+            // 🚨 空间锚点 (Spatial Anchor) - 解决局部放大/裁剪的坐标幻觉
+            "spatialAnchor": {
+                "subject": "coffee_cup",
+                "gridCoordinates": "B3-D6", // LLM 视觉网格提示词吐出的相对语义坐标
+                "boundingBox": { // Java 中台逆向换算出的绝对像素坐标，直接喂给 FFmpeg
+                    "x": 192,
+                    "y": 216,
+                    "w": 384,
+                    "h": 324
+                }
+            }
+        }
+    ]
+}
