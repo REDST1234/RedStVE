@@ -59,4 +59,15 @@ public class ArkPayloadFactory {
         message.setContent(contents);
         return List.of(message);
     }
+
+    public List<ArkInputMessage> buildTextInput(String promptText) {
+        ArkInputContent textContent = new ArkInputContent();
+        textContent.setType("text");
+        textContent.setText(promptText);
+
+        ArkInputMessage message = new ArkInputMessage();
+        message.setRole("user");
+        message.setContent(List.of(textContent));
+        return List.of(message);
+    }
 }

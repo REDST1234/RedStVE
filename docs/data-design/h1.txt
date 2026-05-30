@@ -4,7 +4,6 @@
     "sourcePath": "/data/assets/user_889/raw_001.mp4",
     // ==========================================
     // [Layer 1: 全局物理属性层] - 纯 Java/CV/FFmpeg 计算，绝对防幻觉
-    // ==========================================
     "physicalAttributes": {
         "totalDurationSeconds": 15.0,
         "resolution": "1920x1080",

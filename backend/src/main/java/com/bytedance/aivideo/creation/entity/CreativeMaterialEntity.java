@@ -11,6 +11,7 @@ public class CreativeMaterialEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
     
+    @TableField(fill = FieldFill.INSERT)
     private Long bizId; // 雪花算法业务主键
     
     private String projectId; // 关联的创作项目ID

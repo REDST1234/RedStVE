@@ -1,6 +1,6 @@
 package com.bytedance.aivideo.engine.ffmpeg.local;
 
-import com.bytedance.aivideo.config.FfmpegAudioExtractProperties;
+import com.bytedance.aivideo.config.FfmpegCommandProperties;
 import com.bytedance.aivideo.engine.ffmpeg.api.MediaProbeEngine;
 import com.bytedance.aivideo.engine.ffmpeg.model.MediaProbeResult;
 import com.bytedance.aivideo.engine.ffmpeg.model.SceneDetectResult;
@@ -22,7 +22,7 @@ import static org.mockito.Mockito.when;
 class LocalFfmpegSceneDetectorEngineTest {
 
     @Mock
-    private FfmpegAudioExtractProperties ffmpegProperties;
+    private FfmpegCommandProperties ffmpegProperties;
 
     @Mock
     private MediaProbeEngine mediaProbeEngine;

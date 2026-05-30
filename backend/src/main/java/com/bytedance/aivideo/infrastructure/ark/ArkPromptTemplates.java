@@ -95,7 +95,10 @@ public final class ArkPromptTemplates {
                         + "4. 品类身份特征仅允许在 `categoryExtensions.dynamicExtensionFields` 内扩展：\n"
                         + "   - 如需表达品类细分段落语义，只能以 KEY-VALUE 形式扩展，禁止污染通用骨架字段。\n"
                         + "   - 示例：`{ \"fieldName\": \"segment_1_actual_role\", \"fieldType\": \"STRING\", \"fieldValue\": \"skill_deconstruction\" }`\n\n"
-                        + "5. 数据格式防错要求：\n"
+                        + "5. 数据格式与硬性匹配约束（极重要）：\n"
+                        + "   - `meta.acousticEnvironment` 必须且只能从枚举 `asmr`|`quiet`|`noisy`|`speech_focused`|`music_driven` 中选择，此字段用于后续音频匹配的物理环境 Veto 校验。\n"
+                        + "   - `shots[].shotType` 必须明确指出物理视角，推荐枚举：`face_closeup`|`first_person`|`top_down`|`full_body`|`mid_shot`|`wide_shot` 等，用于空间逻辑校验。\n"
+                        + "   - `shots[].shotTypeTag` 必须且只能从 `CLOSE_UP`|`MID_SHOT`|`WIDE_SHOT` 中选择；`shots[].cameraMovementTag` 必须且只能从 `STATIC`|`ZOOM_IN`|`ZOOM_OUT`|`PAN` 中选择。若无法判断可填 `UNKNOWN`。\n"
                         + "   - `weight`、`durationWeight` 必须是 [0.0,1.0] 的 DOUBLE，严禁百分号或字符串。\n"
                         + "   - `timePercent` 必须是 [0,100] 的 INTEGER，严禁百分号。\n"
                         + "   - `titleCards`、`transitions` 等若不存在，必须输出空数组 `[]`，禁止缺失键名或赋值 `null`。\n"
@@ -118,6 +121,7 @@ public final class ArkPromptTemplates {
                         + "    \"targetDuration\": { \"min\": 25, \"max\": 35, \"unit\": \"seconds\" },\n"
                         + "    \"aspectRatio\": \"9:16\",\n"
                         + "    \"resolution\": { \"width\": 1080, \"height\": 1920 },\n"
+                        + "    \"acousticEnvironment\": \"asmr\",\n"
                         + "    \"styles\": [\"LLM 自动归纳的风格描述1\", \"风格描述2\"],\n"
                         + "    \"description\": \"模板来源与特征概述\"\n"
                         + "  },\n"
@@ -142,7 +146,7 @@ public final class ArkPromptTemplates {
                         + "    \"coverStyles\": [ { \"layout\": \"text_left_image_right\", \"textElements\": [\"主标题\"], \"colorTone\": \"#FF8C00\" } ]\n"
                         + "  },\n"
                         + "  \"shots\": [\n"
-                        + "    { \"shotIndex\": 0, \"belongsToSegment\": 0, \"shotType\": \"face_closeup\", \"description\": \"镜头内容描述\", \"durationRange\": { \"min\": 2, \"max\": 3 }, \"cameraMovement\": \"static\", \"requiredContent\": [] }\n"
+                        + "    { \"shotIndex\": 0, \"belongsToSegment\": 0, \"shotType\": \"face_closeup\", \"shotTypeTag\": \"CLOSE_UP\", \"description\": \"镜头内容描述\", \"durationRange\": { \"min\": 2, \"max\": 3 }, \"cameraMovement\": \"static\", \"cameraMovementTag\": \"STATIC\", \"requiredContent\": [] }\n"
                         + "  ],\n"
                         + "  \"categoryExtensions\": {\n"
                         + "    \"discoveredCategoryId\": \"同上的categoryID\",\n"
@@ -158,4 +162,112 @@ public final class ArkPromptTemplates {
                         + "}\n"
                         + "特别注意：你必须严格遵循上述 JSON 协议与枚举约束。"
                         + "如果是新发现品类，必须在 `dynamicExtensionFields` 中补充品类特征，且必须包含 `scene_threshold`（DOUBLE，通常0.15代表极高频，0.4代表缓慢长镜头）。";
+
+        /**
+         * 创作素材轻量级原生听觉解析 (PRE-ASR)
+         */
+        public static final String CREATION_PRE_ASR_PROMPT = "请听这段音频，提取出人声台词与明显的环境音。"
+                        + "你必须输出一个格式化 JSON，不要有任何多余解释。"
+                        + "JSON 包含 fullText(全文本) 和 segments 数组。"
+                        + "segments 数组中每个元素包含 start(秒), end(秒), text(内容)。"
+                        + "如果是无台词但有明显环境音的情况，请用括号标出，例如 (纸张摩擦声) 或 (水流声)。过滤掉微弱的底噪。";
+
+        /**
+         * 创作素材分析（VIDEO）：多宫格 + ASR 视听联合打标 (Early Fusion)。
+         * 占位符：physicalAttributesJson, asrText
+         */
+        public static final String CREATION_PROFILE_VIDEO_JSON = "你是创作素材分析引擎。当前素材类型为 VIDEO。"
+                        + "你将收到按时间顺序排列的多张宫格图，每张图内帧上带时间戳。"
+                        + "请结合视觉内容与我提供的 asrText（包含声音流水账），进行视听 Early Fusion 分析，输出用于创作链路的结构化 JSON。"
+                        + "仅输出一个合法 JSON，不要输出解释文本或 Markdown。"
+                        + "输入 physicalAttributes=%s。"
+                        + "输入 asrText=%s。"
+                        + "输出必须包含 semanticTags 和 highlights。"
+                        + "semanticTags 建议包含：mainEntities,lightVibe,overallStyle,acousticEnvironment,audioVibe,audioDescription,suitableRoles,emotionTone。"
+                        + "【重要】你必须在 semanticTags 中严格输出 acousticEnvironment（枚举: asmr/quiet/noisy/speech_focused/music_driven）和 audioDescription（自然语言总结全局音画配合度）。"
+                        + "highlights 必须是数组，每个元素建议包含：segmentId,usabilityScore,timeAnchor,shotType,shotTypeTag,actionState,cameraMovement,cameraMovementTag,spokenText,audioContext,spatialAnchor。"
+                        + "【重要】你必须在每个 highlight 中同时输出："
+                        + "1) 解释字段 shotType/cameraMovement（自然语言，可用于展示）"
+                        + "2) 逻辑字段 shotTypeTag/cameraMovementTag（刚性枚举，用于评分）"
+                        + "shotTypeTag 枚举只能是 CLOSE_UP|MID_SHOT|WIDE_SHOT；"
+                        + "cameraMovementTag 枚举只能是 STATIC|ZOOM_IN|ZOOM_OUT|PAN。"
+                        + "若无法判断，tag 必须填 UNKNOWN。"
+                        + "timeAnchor 的 startTime/endTime 单位秒，endTime 必须大于 startTime。"
+                        + "suitableRoles 只能使用 hook/body/climax/outro。"
+                        + "若无法稳定定位 spatialAnchor 可省略该字段，禁止虚构。"
+                        + "输出示例："
+                        + "{\"semanticTags\":{\"mainEntities\":[\"人物\",\"产品\"],\"lightVibe\":\"balanced\",\"overallStyle\":\"口播展示\",\"acousticEnvironment\":\"quiet\",\"audioVibe\":\"clear_speech\",\"audioDescription\":\"整体环境安静，有轻微背景摩擦声\",\"suitableRoles\":[\"body\",\"outro\"],\"emotionTone\":\"calm\"},"
+                        + "\"highlights\":[{\"segmentId\":\"h_01\",\"usabilityScore\":0.88,\"timeAnchor\":{\"startTime\":2.0,\"endTime\":6.5},\"shotType\":\"中景产品展示\",\"shotTypeTag\":\"MID_SHOT\",\"actionState\":\"product_showcase\",\"cameraMovement\":\"由远及近缓慢推镜\",\"cameraMovementTag\":\"ZOOM_IN\",\"spokenText\":\"这款产品非常实用\",\"audioContext\":\"伴随清脆的按键声，人声清晰\","
+                        + "\"spatialAnchor\":{\"subject\":\"product\",\"boundingBox\":{\"x\":220,\"y\":300,\"w\":460,\"h\":520}}}]}";
+
+        /**
+         * 创作素材分析（IMAGE）：静态图空间锚点打标。
+         * 占位符：physicalAttributesJson
+         */
+        public static final String CREATION_PROFILE_IMAGE_JSON = "你是创作素材分析引擎。当前素材类型为 IMAGE。"
+                        + "请基于输入图片输出结构化 JSON，仅输出一个合法 JSON，不要解释。"
+                        + "输入 physicalAttributes=%s。"
+                        + "输出必须包含 semanticTags 和 highlights。"
+                        + "semanticTags 建议包含：mainEntities,lightVibe,overallStyle,suitableRoles,emotionTone。"
+                        + "highlights 应为静态高光数组，可包含 segmentId,usabilityScore,shotType,shotTypeTag,actionState,cameraMovement,cameraMovementTag,spatialAnchor。"
+                        + "请尽量稳定输出主体的 spatialAnchor.boundingBox，后续 LOCAL_BLUR 与 KEN_BURNS_MOTION 会直接复用该主体框。"
+                        + "【重要】你必须在每个 highlight 中同时输出 shotType/cameraMovement（自然语言）和 shotTypeTag/cameraMovementTag（刚性枚举）。"
+                        + "shotTypeTag 枚举只能是 CLOSE_UP|MID_SHOT|WIDE_SHOT；cameraMovementTag 枚举只能是 STATIC|ZOOM_IN|ZOOM_OUT|PAN；无法判断填 UNKNOWN。"
+                        + "IMAGE 不允许输出 timeAnchor。"
+                        + "suitableRoles 只能使用 hook/body/climax/outro。"
+                        + "输出示例："
+                        + "{\"semanticTags\":{\"mainEntities\":[\"饮品\",\"品牌logo\"],\"lightVibe\":\"bright\",\"overallStyle\":\"清新电商图\",\"suitableRoles\":[\"hook\",\"outro\"],\"emotionTone\":\"pleasant\"},"
+                        + "\"highlights\":[{\"segmentId\":\"h_01\",\"usabilityScore\":0.93,\"shotType\":\"产品近景特写\",\"shotTypeTag\":\"CLOSE_UP\",\"actionState\":\"static_display\",\"cameraMovement\":\"静态陈列\",\"cameraMovementTag\":\"STATIC\",\"spatialAnchor\":{\"subject\":\"drink\",\"boundingBox\":{\"x\":180,\"y\":240,\"w\":720,\"h\":980}}}]}";
+
+        /**
+         * 创作素材分析（TEXT）：文本语义与包装打标。
+         * 占位符：physicalAttributesJson, textContent
+         */
+        public static final String CREATION_PROFILE_TEXT_JSON = "你是创作素材分析引擎。当前素材类型为 TEXT。"
+                        + "请根据输入文本输出结构化 JSON，仅输出一个合法 JSON，不要解释。"
+                        + "输入 physicalAttributes=%s。"
+                        + "输入 textContent=%s。"
+                        + "输出必须包含 semanticTags 和 highlights。"
+                        + "semanticTags 必须重点给出：textCategory,mainKeywords,suitableRoles,overallStyle,emotionTone。"
+                        + "highlights 应使用 textContent 和 textType（title_overlay 或 normal_subtitle）描述文本高光。"
+                        + "TEXT 不允许输出 timeAnchor 或 spatialAnchor。"
+                        + "suitableRoles 只能使用 hook/body/climax/outro。"
+                        + "输出示例："
+                        + "{\"semanticTags\":{\"textCategory\":\"hook_question\",\"mainKeywords\":[\"免费\",\"技巧\"],\"suitableRoles\":[\"hook\"],\"overallStyle\":\"强吸引文案\",\"emotionTone\":\"urgent\"},"
+                        + "\"highlights\":[{\"segmentId\":\"t_01\",\"usabilityScore\":1.0,\"textContent\":\"99%%的人都忽略了这个免费技巧\",\"textType\":\"title_overlay\"}]}";
+
+        /**
+         * 创作槽位匹配：模板快照 + 素材画像 -> 缺口识别与适配方案。
+         * 占位符：projectId, versionId, templateSnapshotJson, materialProfilesJson
+         */
+        public static final String CREATION_SLOT_MATCH_JSON = "你是视频创作链路的槽位匹配与素材缺口识别引擎。"
+                        + "你的任务是把模板的每个 scriptStructure.segments[] 槽位，与用户素材画像进行匹配，并输出可执行的 adaptationPlan。"
+                        + "你必须仅输出一个合法 JSON 对象，不要输出 Markdown 或解释文本。"
+                        + "projectId=%s。versionId=%s。"
+                        + "模板快照 templateSnapshotJson=%s。"
+                        + "素材画像 materialProfilesJson=%s。"
+                        + "【硬性规则】"
+                        + "1. matchDecisions 必须覆盖模板中每一个 segment，且 segmentIndex 必须与模板一致。"
+                        + "2. matchStatus 只能是 MATCHED、PARTIAL、MISSING、VETOED。"
+                        + "3. matchedAssetId 必须来自 materialProfilesJson 中的 materialBizId；MISSING/VETOED 时填空字符串。"
+                        + "4. matchedHighlightId 应来自素材 highlights[].segmentId；若无法定位填空字符串。"
+                        + "5. strategyType 只能使用 TRIM_AND_CUT、SMART_CROP、LIGHTING_ADJUST、LOCAL_BLUR、LOOP_SEQUENCE、KEN_BURNS_MOTION、AUDIO_DUCKING。"
+                        + "6. MISSING/VETOED 的 adaptationPlan.strategyChain 必须为空数组，并必须填写 vetoReason。"
+                        + "7. VIDEO 素材优先使用 TRIM_AND_CUT；需要画幅适配时可追加 SMART_CROP；若 physicalAttributes.lighting 表明亮度或对比度存在明显问题，可追加 LIGHTING_ADJUST。"
+                        + "8. IMAGE 素材若用于视频段，优先使用 KEN_BURNS_MOTION；若需突出主体、弱化背景且存在稳定 spatialAnchor.boundingBox，可在 KEN_BURNS_MOTION 之前追加 LOCAL_BLUR；需要补时长时可追加 LOOP_SEQUENCE。"
+                        + "9. TEXT 素材不可直接生成 FFmpeg 视频策略，除非只是作为匹配理由；无法独立覆盖画面槽位时应 MISSING 或 PARTIAL。"
+                        + "10. 所有时间参数单位为秒；boundingBox 必须来自素材 spatialAnchor，禁止虚构。"
+                        + "11. LIGHTING_ADJUST 仅允许用于 VIDEO，参数为 brightnessPercent/contrastPercent（相对百分比，建议 brightnessPercent 绝对值不超过 25，contrastPercent 绝对值不超过 35）。"
+                        + "12. LOCAL_BLUR 仅允许用于 IMAGE，参数为 boundingBox/blurStrength/featherPercent，blurStrength 建议在 8~30，默认语义是背景模糊、主体保持清晰。"
+                        + "输出结构必须符合示例："
+                        + "{\"$schema\":\"slot-match-result/v1\",\"projectId\":\"crp_xxx\",\"versionId\":\"ver_xxx\","
+                        + "\"matchDecisions\":[{\"segmentIndex\":0,\"segmentRole\":\"hook\",\"matchedAssetId\":\"2050000000000000000\","
+                        + "\"matchedHighlightId\":\"h_01\",\"matchScore\":0.86,\"matchStatus\":\"MATCHED\",\"vetoReason\":\"\","
+                        + "\"matchReason\":\"素材高光覆盖开头产品静物展示\",\"adaptationPlan\":{\"strategyChain\":["
+                        + "{\"strategyType\":\"TRIM_AND_CUT\",\"params\":{\"startTime\":0.0,\"endTime\":4.0,\"speed\":1.0}},"
+                        + "{\"strategyType\":\"SMART_CROP\",\"params\":{\"targetWidth\":1080,\"targetHeight\":1920,"
+                        + "\"boundingBox\":{\"x\":0,\"y\":0,\"w\":720,\"h\":1280}},"
+                        + "{\"strategyType\":\"LIGHTING_ADJUST\",\"params\":{\"brightnessPercent\":12,\"contrastPercent\":18,"
+                        + "\"reason\":\"画面偏灰且主体曝光不足，需要轻度提亮并增强层次\"}}]}}],"
+                        + "\"overallCoverage\":0.75,\"gapSummary\":\"outro 缺少可用素材\"}";
 }

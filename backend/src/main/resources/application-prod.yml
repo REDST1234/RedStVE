@@ -54,3 +54,7 @@ mybatis-plus:
 logging:
   level:
     com.bytedance.aivideo: info
+
+creation:
+  template-vector:
+    collection-name: ${CREATION_TEMPLATE_COLLECTION:creation_template}

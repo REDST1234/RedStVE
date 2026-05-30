@@ -65,3 +65,7 @@ logging:
   pattern:
     console: "%clr(%d{HH:mm:ss.SSS}){faint} %clr(%5p) %clr(---){faint}
       %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} : %clr(%m)\n"
+
+creation:
+  template-vector:
+    collection-name: ${CREATION_TEMPLATE_COLLECTION:creation_template}

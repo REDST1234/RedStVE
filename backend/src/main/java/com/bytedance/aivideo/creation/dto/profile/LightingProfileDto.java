@@ -8,5 +8,5 @@ public class LightingProfileDto {
     private Double contrastRatio;
     private Boolean isOverExposed;
     private Boolean isUnderExposed;
-    private String diagnosisStrategy; // stage_1_ffmpeg_fast, stage_2_llm_diagnosed
+    private String diagnosisStrategy; // stage_1_ffmpeg_fast, stage_1_ffmpeg_fast_fallback, stage_2_llm_diagnosed
 }

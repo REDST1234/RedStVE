@@ -3,6 +3,7 @@ package com.bytedance.aivideo.engine.ffmpeg.local;
 import com.bytedance.aivideo.common.error.ErrorCode;
 import com.bytedance.aivideo.common.exception.BizException;
 import com.bytedance.aivideo.config.FfmpegAudioExtractProperties;
+import com.bytedance.aivideo.config.FfmpegCommandProperties;
 import com.bytedance.aivideo.engine.ffmpeg.api.AudioExtractEngine;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -27,9 +28,14 @@ public class LocalFfmpegAudioExtractEngine implements AudioExtractEngine {
 
     private static final int MAX_OUTPUT_CAPTURE_CHARS = 12000;
 
+    private final FfmpegCommandProperties ffmpegCommandProperties;
     private final FfmpegAudioExtractProperties ffmpegAudioExtractProperties;
 
-    public LocalFfmpegAudioExtractEngine(FfmpegAudioExtractProperties ffmpegAudioExtractProperties) {
+    public LocalFfmpegAudioExtractEngine(
+            FfmpegCommandProperties ffmpegCommandProperties,
+            FfmpegAudioExtractProperties ffmpegAudioExtractProperties
+    ) {
+        this.ffmpegCommandProperties = ffmpegCommandProperties;
         this.ffmpegAudioExtractProperties = ffmpegAudioExtractProperties;
     }
 
@@ -52,7 +58,7 @@ public class LocalFfmpegAudioExtractEngine implements AudioExtractEngine {
 
         Path outputPath = outputDir.resolve(outputName).normalize().toAbsolutePath();
         List<String> command = new ArrayList<>();
-        command.add(ffmpegAudioExtractProperties.getPath());
+        command.add(ffmpegCommandProperties.getPath());
         command.add("-hide_banner");
         command.add("-loglevel");
         command.add("error");

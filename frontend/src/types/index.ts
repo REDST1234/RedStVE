@@ -110,3 +110,137 @@ export interface VideoTaskResultData {
   videoStructureTemplate?: any;
   stages?: TaskStage[];
 }
+
+export interface CreationProjectData {
+  projectId: string;
+  title: string;
+  description?: string;
+  status: string;
+  templateId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreationProjectListData {
+  total: number;
+  page: number;
+  size: number;
+  list: CreationProjectData[];
+}
+
+export interface CreationAssetData {
+  materialBizId: string;
+  materialType: 'VIDEO' | 'IMAGE' | 'TEXT';
+  originalFileName?: string;
+  status: string;
+  filePath?: string;
+  fileSize?: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+  format?: string;
+  textContent?: string;
+  profileJson?: string;
+  gridPages?: CreationGridPageData[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreationGridPageData {
+  pageIndex: number;
+  status: string;
+  filePath?: string;
+  cacheKey?: string;
+  llmIncluded?: boolean;
+}
+
+export interface CreationMatchTriggerData {
+  projectId: string;
+  versionId: string;
+  status: string;
+  matchedSegmentCount: number;
+  missingSegmentCount: number;
+}
+
+export interface CreationMatchResultItem {
+  segmentIndex: number;
+  segmentRole: string;
+  matchedAssetId?: string;
+  matchedHighlightId?: string;
+  matchScore?: number;
+  matchStatus: string;
+  matchReason?: string;
+  vetoReason?: string;
+  adaptationPlanJson?: string;
+  adaptedFilePath?: string;
+}
+
+export interface CreationMatchResultData {
+  projectId: string;
+  versionId: string;
+  status: string;
+  overallCoverage: number;
+  items: CreationMatchResultItem[];
+}
+
+export interface CreationAdaptTriggerData {
+  projectId: string;
+  versionId: string;
+  status: string;
+  adaptedCount: number;
+  failedCount: number;
+}
+
+export interface CreationTimelineSegmentData {
+  segmentIndex: number;
+  segmentRole: string;
+  matchedAssetId?: string;
+  matchStatus: string;
+  sourcePath?: string;
+  adaptedPath?: string;
+  durationSeconds?: number;
+}
+
+export interface CreationTimelineData {
+  projectId: string;
+  versionId: string;
+  status: string;
+  segments: CreationTimelineSegmentData[];
+}
+
+export interface CreationConfirmAssetsData {
+  projectId: string;
+  totalAssets: number;
+  triggeredCount: number;
+  status: string;
+}
+
+export interface TemplateSummaryData {
+  templateId: string;
+  templateVersion: number;
+  templateName: string;
+  categoryId?: string;
+  status: string;
+  sourceTaskId?: string;
+  snapshotHash?: string;
+  templateJson?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TemplateRecommendItemData {
+  rank: number;
+  templateId: string;
+  templateVersion: number;
+  templateName: string;
+  categoryId: string;
+  segmentCount: number;
+  finalScore: number;
+  semanticScore: number;
+  structureScore: number;
+}
+
+export interface TemplateRecommendData {
+  projectId: string;
+  recommendations: TemplateRecommendItemData[];
+}

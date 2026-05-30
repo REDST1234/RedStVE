@@ -23,6 +23,7 @@ public class ChromaBootstrapConfiguration {
     public ChromaApi chromaApi(
             ChromaApiProperties apiProperties,
             ChromaVectorStoreProperties vectorStoreProperties,
+            TemplateVectorProperties templateVectorProperties,
             ObjectProvider<RestClient.Builder> restClientBuilderProvider,
             ObjectMapper objectMapper
     ) {
@@ -47,6 +48,16 @@ public class ChromaBootstrapConfiguration {
                 vectorStoreProperties.getCollectionName(),
                 initializeSchema
         );
+
+        // 额外 ensure creation_template collection
+        ensureSchema(
+                chromaApi,
+                vectorStoreProperties.getTenantName(),
+                vectorStoreProperties.getDatabaseName(),
+                templateVectorProperties.getCollectionName(),
+                true // 强制创建，避免报 Collection does not exist
+        );
+
         return chromaApi;
     }
 

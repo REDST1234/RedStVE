@@ -52,6 +52,8 @@ media:
     timeout-seconds: ${FFPROBE_TIMEOUT_SECONDS:20}
   ffmpeg:
     path: ${FFMPEG_PATH:ffmpeg}
+    operation-timeout-seconds: ${FFMPEG_OPERATION_TIMEOUT_SECONDS:120}
+    grid-max-pages: ${FFMPEG_GRID_MAX_PAGES:12}
     audio-timeout-seconds: ${FFMPEG_AUDIO_TIMEOUT_SECONDS:120}
   upload:
     directory: ${MEDIA_UPLOAD_DIR:storage/analysis-video}

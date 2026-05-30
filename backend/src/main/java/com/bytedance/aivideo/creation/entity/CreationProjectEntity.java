@@ -18,6 +18,8 @@ public class CreationProjectEntity {
     private String description;
     
     private String templateId;
+
+    private String templateSnapshotId;
     
     private String templateSnapshotJson;
     

@@ -1,0 +1,671 @@
+package com.bytedance.aivideo.creation.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.bytedance.aivideo.common.error.ErrorCode;
+import com.bytedance.aivideo.common.exception.BizException;
+import com.bytedance.aivideo.config.FfmpegCommandProperties;
+import com.bytedance.aivideo.creation.entity.CreationFfmpegCommandLogEntity;
+import com.bytedance.aivideo.creation.entity.CreationProjectEntity;
+import com.bytedance.aivideo.creation.entity.CreativeMaterialEntity;
+import com.bytedance.aivideo.creation.entity.SlotMatchResultEntity;
+import com.bytedance.aivideo.creation.mapper.CreationFfmpegCommandLogMapper;
+import com.bytedance.aivideo.creation.mapper.SlotMatchResultMapper;
+import com.bytedance.aivideo.creation.service.AdaptationOrchestratorService;
+import com.bytedance.aivideo.creation.service.CreationProjectService;
+import com.bytedance.aivideo.creation.service.CreativeMaterialService;
+import com.bytedance.aivideo.engine.strategy.StrategyExecutor;
+import com.bytedance.aivideo.engine.strategy.StrategyExecutionFragment;
+import com.bytedance.aivideo.engine.strategy.StrategyOutputKind;
+import com.bytedance.aivideo.engine.strategy.StrategyRouter;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 素材适配编排服务：按 LLM adaptationPlan 组装并执行 FFmpeg 命令。
+ */
+@Slf4j
+@Service
+public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestratorService {
+
+    private static final String PROJECT_STATUS_ADAPTING = "ADAPTING";
+    private static final String PROJECT_STATUS_COMPOSED = "COMPOSED";
+    private static final String PROJECT_STATUS_FAILED = "FAILED";
+    private static final String MATCH_STATUS_MATCHED = "MATCHED";
+    private static final String MATCH_STATUS_PARTIAL = "PARTIAL";
+    private static final String MATCH_STATUS_VETOED = "VETOED";
+    private static final String MATCH_STATUS_MISSING = "MISSING";
+    private static final String MATERIAL_TYPE_VIDEO = "VIDEO";
+    private static final String MATERIAL_TYPE_IMAGE = "IMAGE";
+
+    private final CreationProjectService creationProjectService;
+    private final CreativeMaterialService creativeMaterialService;
+    private final SlotMatchResultMapper slotMatchResultMapper;
+    private final CreationFfmpegCommandLogMapper commandLogMapper;
+    private final StrategyRouter strategyRouter;
+    private final FfmpegCommandProperties ffmpegCommandProperties;
+    private final ObjectMapper objectMapper;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+
+    public AdaptationOrchestratorServiceImpl(
+            CreationProjectService creationProjectService,
+            CreativeMaterialService creativeMaterialService,
+            SlotMatchResultMapper slotMatchResultMapper,
+            CreationFfmpegCommandLogMapper commandLogMapper,
+            StrategyRouter strategyRouter,
+            FfmpegCommandProperties ffmpegCommandProperties,
+            ObjectMapper objectMapper,
+            org.springframework.context.ApplicationEventPublisher eventPublisher
+    ) {
+        this.creationProjectService = creationProjectService;
+        this.creativeMaterialService = creativeMaterialService;
+        this.slotMatchResultMapper = slotMatchResultMapper;
+        this.commandLogMapper = commandLogMapper;
+        this.strategyRouter = strategyRouter;
+        this.ffmpegCommandProperties = ffmpegCommandProperties;
+        this.objectMapper = objectMapper;
+        this.eventPublisher = eventPublisher;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String orchestrateAdaptation(String projectId, String versionId) {
+        String resolvedVersionId = resolveVersionId(projectId, versionId);
+        CreationProjectEntity project = creationProjectService.requireActiveProject(projectId);
+        project.setStatus(PROJECT_STATUS_ADAPTING);
+        creationProjectService.updateById(project);
+
+        eventPublisher.publishEvent(new com.bytedance.aivideo.creation.event.AdaptationTriggeredEvent(this, projectId, resolvedVersionId));
+        return resolvedVersionId;
+    }
+
+    @Async("videoTaskExecutor")
+    @EventListener
+    public void handleAdaptationTriggered(com.bytedance.aivideo.creation.event.AdaptationTriggeredEvent event) {
+        String projectId = event.getProjectId();
+        String resolvedVersionId = event.getVersionId();
+        long startedAt = System.currentTimeMillis();
+
+        CreationProjectEntity project = creationProjectService.requireActiveProject(projectId);
+        List<SlotMatchResultEntity> matches = listMatchResults(projectId, resolvedVersionId);
+        if (matches.isEmpty()) {
+            log.warn("未找到可适配的匹配结果: {}", resolvedVersionId);
+            project.setStatus(PROJECT_STATUS_FAILED);
+            creationProjectService.updateById(project);
+            return;
+        }
+
+        int failedCount = 0;
+        for (SlotMatchResultEntity item : matches) {
+            long rowStartedAt = System.currentTimeMillis();
+            try {
+                if (isSkippedMatch(item)) {
+                    writeVetoLog(projectId, resolvedVersionId, item);
+                    failedCount++;
+                    continue;
+                }
+                if (item.getAdaptedFilePath() != null && !item.getAdaptedFilePath().isBlank()) {
+                    continue;
+                }
+                CreativeMaterialEntity material = findMaterial(projectId, item.getMatchedAssetId());
+                if (material == null || material.getFilePath() == null || material.getFilePath().isBlank()) {
+                    writeFailureLog(projectId, resolvedVersionId, item, null, "MATERIAL_UNAVAILABLE", "素材不存在或文件路径为空");
+                    failedCount++;
+                    continue;
+                }
+                String outputPath = applyStrategyChain(projectId, resolvedVersionId, item, material);
+                item.setAdaptedFilePath(outputPath);
+                slotMatchResultMapper.updateById(item);
+                log.info("adapt row finished: projectId={}, versionId={}, segmentIndex={}, outputPath={}, elapsedMs={}",
+                        projectId, resolvedVersionId, item.getSegmentIndex(), outputPath, System.currentTimeMillis() - rowStartedAt);
+            } catch (Exception ex) {
+                failedCount++;
+                log.warn("adapt row failed: projectId={}, versionId={}, segmentIndex={}, reason={}",
+                        projectId, resolvedVersionId, item.getSegmentIndex(), ex.getMessage());
+            }
+        }
+
+        project.setStatus(failedCount >= matches.size() ? PROJECT_STATUS_FAILED : PROJECT_STATUS_COMPOSED);
+        creationProjectService.updateById(project);
+        log.info("adaptation finished: projectId={}, versionId={}, total={}, failed={}, elapsedMs={}",
+                projectId, resolvedVersionId, matches.size(), failedCount, System.currentTimeMillis() - startedAt);
+    }
+
+    private String applyStrategyChain(
+            String projectId,
+            String versionId,
+            SlotMatchResultEntity row,
+            CreativeMaterialEntity material
+    ) throws IOException {
+        JsonNode strategyChain = parseStrategyChain(row.getAdaptationPlanJson());
+        Path sourcePath = Paths.get(material.getFilePath()).toAbsolutePath();
+        Path outputDir = Paths.get("storage", "creation-adapt", projectId, versionId).toAbsolutePath();
+        Files.createDirectories(outputDir);
+
+        if (!strategyChain.isArray() || strategyChain.isEmpty()) {
+            Path copied = outputDir.resolve("seg_" + row.getSegmentIndex() + "_" + row.getSegmentRole() + "_source." + extensionFromPathOrFormat(sourcePath, material.getFormat()));
+            Files.copy(sourcePath, copied, StandardCopyOption.REPLACE_EXISTING);
+            return copied.toString();
+        }
+
+        Path currentInput = sourcePath;
+        Path finalOutput = currentInput;
+        int stepIndex = 0;
+        boolean currentHasAudio = detectHasAudio(material);
+        for (int index = 0; index < strategyChain.size(); index++) {
+            JsonNode strategy = strategyChain.get(index);
+            StrategyBuildResult buildResult = buildStrategyFragment(strategy, material, currentHasAudio);
+            if (buildResult == null) {
+                continue;
+            }
+
+            StrategyExecutionFragment fragment = buildResult.fragment();
+            ensureUsableFragment(projectId, versionId, row, material, buildResult.strategyType(), fragment);
+
+            List<StrategyBuildResult> aggregatedResults = new ArrayList<>();
+            if (isVideoFilterChainEligible(fragment, currentInput)) {
+                aggregatedResults.add(buildResult);
+                int cursor = index + 1;
+                while (cursor < strategyChain.size()) {
+                    StrategyBuildResult next = buildStrategyFragment(strategyChain.get(cursor), material, currentHasAudio);
+                    if (next == null || !isVideoFilterChainEligible(next.fragment(), currentInput)) {
+                        break;
+                    }
+                    ensureUsableFragment(projectId, versionId, row, material, next.strategyType(), next.fragment());
+                    aggregatedResults.add(next);
+                    cursor++;
+                }
+                index = cursor - 1;
+            } else {
+                aggregatedResults.add(buildResult);
+            }
+
+            stepIndex++;
+            String stepName = aggregatedResults.stream()
+                    .map(StrategyBuildResult::strategyType)
+                    .map(value -> value.toLowerCase(Locale.ROOT))
+                    .reduce((a, b) -> a + "_then_" + b)
+                    .orElse("step");
+            StrategyExecutionFragment lastFragment = aggregatedResults.getLast().fragment();
+            Path stepOutput = buildStepOutput(outputDir, row.getSegmentIndex(), stepIndex, stepName, lastFragment, currentInput, material);
+            List<String> command = aggregatedResults.size() == 1 && !isVideoFilterChainEligible(fragment, currentInput)
+                    ? buildStandaloneCommand(currentInput, stepOutput, aggregatedResults.getFirst().fragment(), currentHasAudio)
+                    : buildAggregatedVideoCommand(currentInput, stepOutput, aggregatedResults, currentHasAudio);
+            CreationFfmpegCommandLogEntity logRow = insertRunningLog(projectId, versionId, row, material, stepName.toUpperCase(Locale.ROOT), command);
+            CommandExecutionResult result = executeCommand(command);
+            finishCommandLog(logRow, result);
+            if (result.exitCode() != 0) {
+                throw new BizException(ErrorCode.FFMPEG_ERROR, "FFmpeg执行失败: " + result.stderrTail());
+            }
+            finalOutput = stepOutput;
+            currentInput = stepOutput;
+            currentHasAudio = detectOutputHasAudio(currentHasAudio, lastFragment);
+        }
+        return finalOutput.toString();
+    }
+
+    private StrategyBuildResult buildStrategyFragment(JsonNode strategy, CreativeMaterialEntity material, boolean hasAudio) {
+        String strategyType = strategy.path("strategyType").asText("").trim().toUpperCase(Locale.ROOT);
+        if (strategyType.isBlank()) {
+            return null;
+        }
+        StrategyExecutor executor = strategyRouter.getExecutor(strategyType);
+        String inputContext = buildStrategyInputContext(strategy.path("params"), material);
+        StrategyExecutionFragment fragment = executor.buildExecutionFragment(inputContext, hasAudio);
+        return new StrategyBuildResult(strategyType, fragment);
+    }
+
+    private String buildStrategyInputContext(JsonNode paramsNode, CreativeMaterialEntity material) {
+        ObjectNode contextNode = paramsNode != null && paramsNode.isObject()
+                ? paramsNode.deepCopy()
+                : objectMapper.createObjectNode();
+        contextNode.put("materialType", material.getMaterialType());
+        if (material.getWidth() != null) {
+            contextNode.put("sourceWidth", material.getWidth());
+        }
+        if (material.getHeight() != null) {
+            contextNode.put("sourceHeight", material.getHeight());
+        }
+        if (material.getFormat() != null) {
+            contextNode.put("sourceFormat", material.getFormat());
+        }
+        return contextNode.toString();
+    }
+
+    private void ensureUsableFragment(
+            String projectId,
+            String versionId,
+            SlotMatchResultEntity row,
+            CreativeMaterialEntity material,
+            String strategyType,
+            StrategyExecutionFragment fragment
+    ) {
+        boolean usable = fragment.hasExplicitFilterComplex()
+                || fragment.hasSimpleFilters()
+                || !fragment.getPreInputArgs().isEmpty()
+                || !fragment.getExtraArgs().isEmpty()
+                || fragment.isLoopImageInput();
+        if (usable) {
+            return;
+        }
+        writeFailureLog(projectId, versionId, row, material, strategyType, "策略未生成任何可执行 FFmpeg 片段");
+        throw new BizException(ErrorCode.INVALID_REQUEST, "策略未生成任何可执行 FFmpeg 片段: " + strategyType);
+    }
+
+    private boolean isVideoFilterChainEligible(StrategyExecutionFragment fragment, Path currentInput) {
+        return fragment.getOutputKind() == StrategyOutputKind.VIDEO_OUTPUT
+                && !fragment.isLoopImageInput()
+                && !fragment.hasExplicitFilterComplex()
+                && fragment.getMapArgs().isEmpty()
+                && fragment.getFilterComplex() == null
+                && !isImagePath(currentInput);
+    }
+
+    private List<String> buildAggregatedVideoCommand(
+            Path input,
+            Path output,
+            List<StrategyBuildResult> fragments,
+            boolean hasAudio
+    ) {
+        List<String> command = new ArrayList<>();
+        command.add(ffmpegCommandProperties.getPath());
+        command.add("-hide_banner");
+        command.add("-y");
+        List<String> preInputArgs = new ArrayList<>();
+        List<String> videoFilters = new ArrayList<>();
+        List<String> audioFilters = new ArrayList<>();
+        for (StrategyBuildResult item : fragments) {
+            preInputArgs.addAll(item.fragment().getPreInputArgs());
+            videoFilters.addAll(item.fragment().getVideoFilters());
+            if (hasAudio) {
+                audioFilters.addAll(item.fragment().getAudioFilters());
+            }
+        }
+        command.addAll(preInputArgs);
+        command.add("-i");
+        command.add(input.toString());
+        if (!audioFilters.isEmpty()) {
+            command.add("-filter_complex");
+            command.add(buildVideoAudioFilterComplex(videoFilters, audioFilters));
+            command.add("-map");
+            command.add("[outv]");
+            command.add("-map");
+            command.add("[outa]");
+        } else if (!videoFilters.isEmpty()) {
+            command.add("-vf");
+            command.add(String.join(",", videoFilters));
+            if (!hasAudio) {
+                command.add("-an");
+            }
+        } else if (!hasAudio) {
+            command.add("-an");
+        }
+        command.add(output.toString());
+        return command;
+    }
+
+    private List<String> buildStandaloneCommand(
+            Path input,
+            Path output,
+            StrategyExecutionFragment fragment,
+            boolean hasAudio
+    ) {
+        List<String> command = new ArrayList<>();
+        command.add(ffmpegCommandProperties.getPath());
+        command.add("-hide_banner");
+        command.add("-y");
+        if (fragment.isLoopImageInput() && isImagePath(input)) {
+            command.add("-loop");
+            command.add("1");
+        }
+        command.addAll(fragment.getPreInputArgs());
+        command.add("-i");
+        command.add(input.toString());
+        if (fragment.hasExplicitFilterComplex()) {
+            command.add("-filter_complex");
+            command.add(fragment.getFilterComplex());
+            command.addAll(fragment.getMapArgs());
+        } else if (!fragment.getAudioFilters().isEmpty() && hasAudio) {
+            command.add("-filter_complex");
+            command.add(buildVideoAudioFilterComplex(fragment.getVideoFilters(), fragment.getAudioFilters()));
+            command.add("-map");
+            command.add("[outv]");
+            command.add("-map");
+            command.add("[outa]");
+        } else if (!fragment.getVideoFilters().isEmpty()) {
+            command.add("-vf");
+            command.add(String.join(",", fragment.getVideoFilters()));
+            if (!hasAudio || !fragment.isPreserveAudio()) {
+                command.add("-an");
+            }
+        } else if (!hasAudio || !fragment.isPreserveAudio()) {
+            command.add("-an");
+        }
+        command.addAll(fragment.getExtraArgs());
+        command.add(output.toString());
+        return command;
+    }
+
+    private String buildVideoAudioFilterComplex(List<String> videoFilters, List<String> audioFilters) {
+        String videoChain = videoFilters.isEmpty() ? "null" : String.join(",", videoFilters);
+        String audioChain = audioFilters.isEmpty() ? "anull" : String.join(",", audioFilters);
+        return String.format("[0:v]%s[outv];[0:a]%s[outa]", videoChain, audioChain);
+    }
+
+    private Path buildStepOutput(
+            Path outputDir,
+            int segmentIndex,
+            int stepIndex,
+            String stepName,
+            StrategyExecutionFragment fragment,
+            Path currentInput,
+            CreativeMaterialEntity material
+    ) {
+        String extension;
+        if (fragment.getOutputKind() == StrategyOutputKind.IMAGE_OUTPUT) {
+            extension = normalizeImageExtension(fragment.getPreferredExtension(), currentInput, material.getFormat());
+        } else {
+            extension = "mp4";
+        }
+        return outputDir.resolve(String.format(
+                "seg_%03d_step_%02d_%s.%s",
+                segmentIndex,
+                stepIndex,
+                stepName,
+                extension
+        ));
+    }
+
+    private CommandExecutionResult executeCommand(List<String> command) {
+        long startedAt = System.currentTimeMillis();
+        Path stdoutFile = null;
+        Path stderrFile = null;
+        try {
+            stdoutFile = Files.createTempFile("creation-ffmpeg-stdout-", ".log");
+            stderrFile = Files.createTempFile("creation-ffmpeg-stderr-", ".log");
+            ProcessBuilder builder = new ProcessBuilder(command);
+            builder.redirectOutput(stdoutFile.toFile());
+            builder.redirectError(stderrFile.toFile());
+            Process process = builder.start();
+            boolean finished = process.waitFor(ffmpegCommandProperties.getOperationTimeoutSeconds(), TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                return new CommandExecutionResult(-1, System.currentTimeMillis() - startedAt,
+                        readTail(stdoutFile), appendMessage(readTail(stderrFile), "FFmpeg command timeout"));
+            }
+            return new CommandExecutionResult(process.exitValue(), System.currentTimeMillis() - startedAt,
+                    readTail(stdoutFile), readTail(stderrFile));
+        } catch (Exception ex) {
+            return new CommandExecutionResult(-1, System.currentTimeMillis() - startedAt, "", ex.getMessage());
+        } finally {
+            deleteQuietly(stdoutFile);
+            deleteQuietly(stderrFile);
+        }
+    }
+
+    private CreationFfmpegCommandLogEntity insertRunningLog(
+            String projectId,
+            String versionId,
+            SlotMatchResultEntity row,
+            CreativeMaterialEntity material,
+            String strategyType,
+            List<String> command
+    ) {
+        CreationFfmpegCommandLogEntity entity = new CreationFfmpegCommandLogEntity();
+        entity.setProjectId(projectId);
+        entity.setVersionId(versionId);
+        entity.setMatchId(row.getMatchId());
+        entity.setSegmentIndex(row.getSegmentIndex());
+        entity.setMaterialBizId(material == null ? null : String.valueOf(material.getBizId()));
+        entity.setStrategyType(strategyType);
+        entity.setCommandText(toCommandText(command));
+        entity.setStatus("RUNNING");
+        commandLogMapper.insert(entity);
+        log.info("ffmpeg command running: projectId={}, versionId={}, segmentIndex={}, strategyType={}, command={}",
+                projectId, versionId, row.getSegmentIndex(), strategyType, entity.getCommandText());
+        return entity;
+    }
+
+    private void finishCommandLog(CreationFfmpegCommandLogEntity entity, CommandExecutionResult result) {
+        entity.setExitCode(result.exitCode());
+        entity.setElapsedMs(result.elapsedMs());
+        entity.setStdoutTail(result.stdoutTail());
+        entity.setStderrTail(result.stderrTail());
+        entity.setStatus(result.exitCode() == 0 ? "SUCCESS" : "FAILED");
+        if (result.exitCode() != 0) {
+            entity.setErrorMessage(result.stderrTail());
+        }
+        commandLogMapper.updateById(entity);
+        log.info("ffmpeg command finished: logBizId={}, status={}, exitCode={}, elapsedMs={}, stderrTail={}",
+                entity.getBizId(), entity.getStatus(), entity.getExitCode(), entity.getElapsedMs(), entity.getStderrTail());
+    }
+
+    private void writeVetoLog(String projectId, String versionId, SlotMatchResultEntity row) {
+        CreationFfmpegCommandLogEntity entity = new CreationFfmpegCommandLogEntity();
+        entity.setProjectId(projectId);
+        entity.setVersionId(versionId);
+        entity.setMatchId(row.getMatchId());
+        entity.setSegmentIndex(row.getSegmentIndex());
+        entity.setMaterialBizId(row.getMatchedAssetId());
+        entity.setStrategyType(row.getMatchStatus());
+        entity.setStatus("VETOED");
+        entity.setVetoReason(firstNonBlank(row.getVetoReason(), row.getMatchReason(), "槽位不可执行"));
+        commandLogMapper.insert(entity);
+    }
+
+    private void writeFailureLog(String projectId, String versionId, SlotMatchResultEntity row, CreativeMaterialEntity material, String strategyType, String reason) {
+        CreationFfmpegCommandLogEntity entity = new CreationFfmpegCommandLogEntity();
+        entity.setProjectId(projectId);
+        entity.setVersionId(versionId);
+        entity.setMatchId(row.getMatchId());
+        entity.setSegmentIndex(row.getSegmentIndex());
+        entity.setMaterialBizId(material == null ? row.getMatchedAssetId() : String.valueOf(material.getBizId()));
+        entity.setStrategyType(strategyType);
+        entity.setStatus("FAILED");
+        entity.setErrorMessage(reason);
+        commandLogMapper.insert(entity);
+    }
+
+    private JsonNode parseStrategyChain(String adaptationPlanJson) {
+        try {
+            if (adaptationPlanJson == null || adaptationPlanJson.isBlank()) {
+                return objectMapper.createArrayNode();
+            }
+            JsonNode root = objectMapper.readTree(adaptationPlanJson);
+            JsonNode chain = root.path("strategyChain");
+            return chain.isArray() ? chain : objectMapper.createArrayNode();
+        } catch (Exception ex) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "adaptationPlanJson 非法: " + ex.getMessage());
+        }
+    }
+
+    private boolean isSkippedMatch(SlotMatchResultEntity item) {
+        return MATCH_STATUS_MISSING.equals(item.getMatchStatus())
+                || MATCH_STATUS_VETOED.equals(item.getMatchStatus())
+                || item.getMatchedAssetId() == null
+                || item.getMatchedAssetId().isBlank()
+                || !(MATCH_STATUS_MATCHED.equals(item.getMatchStatus()) || MATCH_STATUS_PARTIAL.equals(item.getMatchStatus()));
+    }
+
+    private CreativeMaterialEntity findMaterial(String projectId, String materialBizId) {
+        return creativeMaterialService.lambdaQuery()
+                .eq(CreativeMaterialEntity::getProjectId, projectId)
+                .eq(CreativeMaterialEntity::getBizId, Long.parseLong(materialBizId))
+                .isNull(CreativeMaterialEntity::getDeletedAt)
+                .last("LIMIT 1")
+                .one();
+    }
+
+    private String resolveVersionId(String projectId, String versionId) {
+        if (versionId != null && !versionId.isBlank()) {
+            return versionId.trim();
+        }
+        SlotMatchResultEntity latest = slotMatchResultMapper.selectOne(
+                new LambdaQueryWrapper<SlotMatchResultEntity>()
+                        .eq(SlotMatchResultEntity::getProjectId, projectId)
+                        .isNull(SlotMatchResultEntity::getDeletedAt)
+                        .orderByDesc(SlotMatchResultEntity::getUpdatedAt)
+                        .last("LIMIT 1")
+        );
+        if (latest == null) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "未找到匹配版本，请先触发 match");
+        }
+        return latest.getVersionId();
+    }
+
+    private List<SlotMatchResultEntity> listMatchResults(String projectId, String versionId) {
+        return slotMatchResultMapper.selectList(
+                new LambdaQueryWrapper<SlotMatchResultEntity>()
+                        .eq(SlotMatchResultEntity::getProjectId, projectId)
+                        .eq(SlotMatchResultEntity::getVersionId, versionId)
+                        .isNull(SlotMatchResultEntity::getDeletedAt)
+                        .orderByAsc(SlotMatchResultEntity::getSegmentIndex)
+        );
+    }
+
+    private String safeExtension(CreativeMaterialEntity material) {
+        String format = material.getFormat();
+        return format == null || format.isBlank() ? "bin" : format.trim();
+    }
+
+    private String extensionFromPathOrFormat(Path path, String format) {
+        if (path != null) {
+            String fileName = path.getFileName().toString();
+            int dotIndex = fileName.lastIndexOf('.');
+            if (dotIndex >= 0 && dotIndex < fileName.length() - 1) {
+                return fileName.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
+            }
+        }
+        return safeExtensionValue(format, "bin");
+    }
+
+    private String normalizeImageExtension(String preferredExtension, Path currentInput, String format) {
+        String extension = safeExtensionValue(preferredExtension, null);
+        if (extension == null && currentInput != null && isImagePath(currentInput)) {
+            extension = extensionFromPathOrFormat(currentInput, format);
+        }
+        if (extension == null) {
+            extension = safeExtensionValue(format, "jpg");
+        }
+        return switch (extension.toLowerCase(Locale.ROOT)) {
+            case "jpeg", "jpg", "png", "webp" -> extension.toLowerCase(Locale.ROOT);
+            default -> "jpg";
+        };
+    }
+
+    private String safeExtensionValue(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value.trim();
+    }
+
+    private boolean isImagePath(Path path) {
+        String value = path == null ? "" : path.getFileName().toString().toLowerCase(Locale.ROOT);
+        return value.endsWith(".jpg") || value.endsWith(".jpeg") || value.endsWith(".png") || value.endsWith(".webp");
+    }
+
+    private boolean detectHasAudio(CreativeMaterialEntity material) {
+        if (!MATERIAL_TYPE_VIDEO.equalsIgnoreCase(material.getMaterialType())) {
+            return false;
+        }
+        String profileJson = material.getProfileJson();
+        if (profileJson == null || profileJson.isBlank()) {
+            return true;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(profileJson);
+            JsonNode hasAudioNode = root.path("physicalAttributes").path("hasAudio");
+            return !hasAudioNode.isBoolean() || hasAudioNode.asBoolean();
+        } catch (Exception ex) {
+            return true;
+        }
+    }
+
+    private boolean detectOutputHasAudio(boolean currentHasAudio, StrategyExecutionFragment fragment) {
+        if (fragment.getOutputKind() == StrategyOutputKind.IMAGE_OUTPUT) {
+            return false;
+        }
+        return currentHasAudio && fragment.isPreserveAudio();
+    }
+
+    private String toCommandText(List<String> command) {
+        return command.stream()
+                .map(this::quoteIfNeeded)
+                .reduce((a, b) -> a + " " + b)
+                .orElse("");
+    }
+
+    private String quoteIfNeeded(String arg) {
+        if (arg == null) {
+            return "";
+        }
+        if (arg.contains(" ") || arg.contains("\t")) {
+            return "\"" + arg.replace("\"", "\\\"") + "\"";
+        }
+        return arg;
+    }
+
+    private String readTail(Path path) {
+        if (path == null || !Files.exists(path)) {
+            return "";
+        }
+        try {
+            String content = Files.readString(path, StandardCharsets.UTF_8);
+            int max = 4000;
+            return content.length() <= max ? content : content.substring(content.length() - max);
+        } catch (Exception ex) {
+            return ex.getMessage();
+        }
+    }
+
+    private void deleteQuietly(Path path) {
+        try {
+            if (path != null) {
+                Files.deleteIfExists(path);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String appendMessage(String original, String message) {
+        if (original == null || original.isBlank()) {
+            return message;
+        }
+        return original + "\n" + message;
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private record CommandExecutionResult(int exitCode, long elapsedMs, String stdoutTail, String stderrTail) {
+    }
+
+    private record StrategyBuildResult(String strategyType, StrategyExecutionFragment fragment) {
+    }
+}

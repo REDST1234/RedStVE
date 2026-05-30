@@ -160,10 +160,6 @@ export default function VisualDashboard() {
           });
   }
       
-  const asrTicks = parsedEvents.filter(e => e.type === 'asr').map(e => ({
-      timePercent: (e.timeRange[0] / totalVideoDuration) * 100
-  }));
-
   // --- Fallback Mock Data generation if empty ---
   const finalTimeline = parsedEvents.length > 0 ? { events: parsedEvents } : {
       events: [

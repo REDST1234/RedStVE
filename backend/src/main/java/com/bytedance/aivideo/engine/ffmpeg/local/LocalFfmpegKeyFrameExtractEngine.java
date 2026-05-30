@@ -2,7 +2,7 @@ package com.bytedance.aivideo.engine.ffmpeg.local;
 
 import com.bytedance.aivideo.common.error.ErrorCode;
 import com.bytedance.aivideo.common.exception.BizException;
-import com.bytedance.aivideo.config.FfmpegAudioExtractProperties;
+import com.bytedance.aivideo.config.FfmpegCommandProperties;
 import com.bytedance.aivideo.engine.ffmpeg.api.KeyFrameExtractEngine;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -23,9 +23,9 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class LocalFfmpegKeyFrameExtractEngine implements KeyFrameExtractEngine {
 
-    private final FfmpegAudioExtractProperties ffmpegProperties;
+    private final FfmpegCommandProperties ffmpegProperties;
 
-    public LocalFfmpegKeyFrameExtractEngine(FfmpegAudioExtractProperties ffmpegProperties) {
+    public LocalFfmpegKeyFrameExtractEngine(FfmpegCommandProperties ffmpegProperties) {
         this.ffmpegProperties = ffmpegProperties;
     }
 

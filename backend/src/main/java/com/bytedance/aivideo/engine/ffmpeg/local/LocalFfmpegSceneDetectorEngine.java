@@ -2,7 +2,7 @@ package com.bytedance.aivideo.engine.ffmpeg.local;
 
 import com.bytedance.aivideo.common.error.ErrorCode;
 import com.bytedance.aivideo.common.exception.BizException;
-import com.bytedance.aivideo.config.FfmpegAudioExtractProperties;
+import com.bytedance.aivideo.config.FfmpegCommandProperties;
 import com.bytedance.aivideo.engine.ffmpeg.api.MediaProbeEngine;
 import com.bytedance.aivideo.engine.ffmpeg.api.SceneDetectorEngine;
 import com.bytedance.aivideo.engine.ffmpeg.model.MediaProbeResult;
@@ -30,14 +30,14 @@ import java.util.regex.Pattern;
 @Slf4j
 public class LocalFfmpegSceneDetectorEngine implements SceneDetectorEngine {
 
-    private final FfmpegAudioExtractProperties ffmpegProperties;
+    private final FfmpegCommandProperties ffmpegProperties;
     private final MediaProbeEngine mediaProbeEngine;
 
     // 匹配 scdet 的输出，例如：lavfi.scd.time=1.233 和 lavfi.scd.score=45.2
     private static final Pattern TIME_PATTERN = Pattern.compile("lavfi\\.scd\\.time=([0-9.]+)");
     private static final Pattern SCORE_PATTERN = Pattern.compile("lavfi\\.scd\\.score=([0-9.]+)");
 
-    public LocalFfmpegSceneDetectorEngine(FfmpegAudioExtractProperties ffmpegProperties, MediaProbeEngine mediaProbeEngine) {
+    public LocalFfmpegSceneDetectorEngine(FfmpegCommandProperties ffmpegProperties, MediaProbeEngine mediaProbeEngine) {
         this.ffmpegProperties = ffmpegProperties;
         this.mediaProbeEngine = mediaProbeEngine;
     }

@@ -20,10 +20,16 @@ public class SlotMatchResultEntity {
     private String segmentRole; // hook/body/climax/outro
     
     private String matchedAssetId;
+
+    private String matchedHighlightId;
     
     private Double matchScore;
     
     private String matchStatus; // MATCHED/PARTIAL/MISSING
+
+    private String matchReason;
+
+    private String vetoReason;
     
     private String versionId;
     

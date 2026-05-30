@@ -16,9 +16,18 @@ public class HighlightSegmentDto {
     // 动作与运镜
     private String actionState;
     private String cameraMovement;
+    // 结构评分刚性标签：STATIC|ZOOM_IN|ZOOM_OUT|PAN
+    private String cameraMovementTag;
+    // 结构评分刚性标签：CLOSE_UP|MID_SHOT|WIDE_SHOT
+    private String shotTypeTag;
+    // 展示/解释字段
+    private String shotType;
     
     // 视听融合提取出的核心台词 (若有)
     private String spokenText; 
+    
+    // 🌟 局部自然语言听觉描述 (Early Fusion)
+    private String audioContext;
     
     // 图片/视频通用: 空间锚点
     private SpatialAnchorDto spatialAnchor;

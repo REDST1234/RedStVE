@@ -17,10 +17,21 @@ public class MybatisAutoFillHandler implements MetaObjectHandler {
 
     @Override
     public void insertFill(MetaObject metaObject) {
-        strictInsertFill(metaObject, "bizId", Long.class, IdWorker.getId());
         LocalDateTime now = LocalDateTime.now();
-        strictInsertFill(metaObject, "createdAt", LocalDateTime.class, now);
-        strictInsertFill(metaObject, "updatedAt", LocalDateTime.class, now);
+        Long bizId = (Long) getFieldValByName("bizId", metaObject);
+        if (bizId == null) {
+            setFieldValByName("bizId", IdWorker.getId(), metaObject);
+        }
+
+        LocalDateTime createdAt = (LocalDateTime) getFieldValByName("createdAt", metaObject);
+        if (createdAt == null) {
+            setFieldValByName("createdAt", now, metaObject);
+        }
+
+        LocalDateTime updatedAt = (LocalDateTime) getFieldValByName("updatedAt", metaObject);
+        if (updatedAt == null) {
+            setFieldValByName("updatedAt", now, metaObject);
+        }
     }
 
     @Override
