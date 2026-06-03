@@ -24,6 +24,7 @@ public class ChromaBootstrapConfiguration {
             ChromaApiProperties apiProperties,
             ChromaVectorStoreProperties vectorStoreProperties,
             TemplateVectorProperties templateVectorProperties,
+            BgmVectorProperties bgmVectorProperties,
             ObjectProvider<RestClient.Builder> restClientBuilderProvider,
             ObjectMapper objectMapper
     ) {
@@ -55,6 +56,15 @@ public class ChromaBootstrapConfiguration {
                 vectorStoreProperties.getTenantName(),
                 vectorStoreProperties.getDatabaseName(),
                 templateVectorProperties.getCollectionName(),
+                true // 强制创建，避免报 Collection does not exist
+        );
+
+        // 额外 ensure creation_bgm collection
+        ensureSchema(
+                chromaApi,
+                vectorStoreProperties.getTenantName(),
+                vectorStoreProperties.getDatabaseName(),
+                bgmVectorProperties.getCollectionName(),
                 true // 强制创建，避免报 Collection does not exist
         );
 

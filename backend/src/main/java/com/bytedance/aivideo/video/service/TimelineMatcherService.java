@@ -422,6 +422,10 @@ public class TimelineMatcherService {
         return switch (extractionReason) {
             case "HOOK_FIRST" -> "HOOK_START";
             case "HOOK_MID" -> "HOOK_MID";
+            case "BOUNDARY_PRE" -> "CUT_BEFORE";
+            case "BOUNDARY_POST" -> "CUT_AFTER";
+            case "UNIFORM_SAMPLE" -> "UNIFORM_COVERAGE";
+            case "LONG_SHOT_MID" -> "LONG_SHOT_MID";
             case "TOP_SCORE" -> "HIGH_SCORE_DYNAMIC";
             default -> extractionReason;
         };

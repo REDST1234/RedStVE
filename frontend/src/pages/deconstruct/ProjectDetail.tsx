@@ -36,10 +36,60 @@ export default function ProjectDetail() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [finalizingTemplate, setFinalizingTemplate] = useState(false);
+  const [retryingStageType, setRetryingStageType] = useState<string | null>(null);
+  const [progressTick, setProgressTick] = useState(() => Date.now());
   const postExtractTriggeredTaskRef = useRef<string | null>(null);
+  const failureToastRef = useRef<string | null>(null);
+  const visualizeRedirectedTaskRef = useRef<string | null>(null);
 
   const isStageSuccessStatus = (status?: string) => status === 'SUCCESS' || status === 'COMPLETED';
   const isStageRunningStatus = (status?: string) => status === 'RUNNING';
+  const isStageFailedStatus = (status?: string) => status === 'FAILED';
+
+  const getFirstFailedStage = (result: VideoTaskResultData | null) => {
+    const orderedStageTypes = ['ASR', 'SCENE', 'KEYFRAME', 'TIMELINE', 'LLM'];
+    for (const stageType of orderedStageTypes) {
+      const stage = result?.stages?.find((item) => item.stageType === stageType);
+      if (isStageFailedStatus(stage?.stageStatus)) {
+        return stage;
+      }
+    }
+    return null;
+  };
+
+  const getRetryButtonLabel = (stageType?: string) => {
+    switch (stageType) {
+      case 'ASR':
+        return '重试语音转写';
+      case 'SCENE':
+        return '重试镜头切分';
+      case 'KEYFRAME':
+        return '重试关键帧抽取';
+      case 'TIMELINE':
+        return '重试模态对齐';
+      case 'LLM':
+        return '重试结构分析';
+      default:
+        return '重试当前阶段';
+    }
+  };
+
+  const getStageDisplayName = (stageType?: string) => {
+    switch (stageType) {
+      case 'ASR':
+        return '语音转写';
+      case 'SCENE':
+        return '镜头切分';
+      case 'KEYFRAME':
+        return '关键帧抽取';
+      case 'TIMELINE':
+        return '模态对齐';
+      case 'LLM':
+        return '结构分析';
+      default:
+        return '当前阶段';
+    }
+  };
 
   // API Load Logic
   useEffect(() => {
@@ -87,6 +137,12 @@ export default function ProjectDetail() {
     return () => { cancelled = true; };
   }, [id]);
 
+  useEffect(() => {
+    if (deconstructStep !== 'processing') return;
+    const timer = window.setInterval(() => setProgressTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [deconstructStep]);
+
   const isStageCompleted = (result: VideoTaskResultData | null, stageType: string) => {
     const stage = result?.stages?.find((s) => s.stageType === stageType);
     return isStageSuccessStatus(stage?.stageStatus);
@@ -117,6 +173,37 @@ export default function ProjectDetail() {
     }
   };
 
+  const handleRetryFailedStage = async () => {
+    const taskId = uploadedFiles[0]?.taskId;
+    const failedStage = getFirstFailedStage(liveTaskResult);
+    if (!taskId || !failedStage) {
+      showToast('当前没有可重试的失败阶段', 'error');
+      return;
+    }
+
+    setRetryingStageType(failedStage.stageType);
+    setFinalizingTemplate(false);
+    try {
+      if (failedStage.stageType === 'TIMELINE' || failedStage.stageType === 'LLM') {
+        postExtractTriggeredTaskRef.current = taskId;
+      } else {
+        postExtractTriggeredTaskRef.current = null;
+      }
+      visualizeRedirectedTaskRef.current = null;
+      const resp = await videoApi.retryTask(taskId);
+      if (resp.code !== '0' && resp.code !== '200') {
+        throw new Error(resp.message || '重试失败');
+      }
+      failureToastRef.current = null;
+      showToast(`${getRetryButtonLabel(failedStage.stageType)}已触发`, 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '重试失败，请稍后再试';
+      showToast(message, 'error');
+    } finally {
+      setRetryingStageType(null);
+    }
+  };
+
   // Polling logic for real data
   useEffect(() => {
     if (deconstructStep === 'processing' && uploadedFiles.length > 0) {
@@ -128,6 +215,7 @@ export default function ProjectDetail() {
           const resp = await videoApi.getTaskResult(taskId, true);
           if (resp.code === '0' || resp.code === '200') {
             setLiveTaskResult(resp.data);
+            const failedStage = getFirstFailedStage(resp.data);
 
             const extractionDone =
               isStageCompleted(resp.data, 'ASR') &&
@@ -136,14 +224,41 @@ export default function ProjectDetail() {
             const timelineDone = isStageCompleted(resp.data, 'TIMELINE');
             const llmDone = isStageCompleted(resp.data, 'LLM');
 
+            if (failedStage) {
+              setFinalizingTemplate(false);
+              const toastKey = `${taskId}:${failedStage.stageType}:${failedStage.errorMessage || ''}`;
+              if (failureToastRef.current !== toastKey) {
+                failureToastRef.current = toastKey;
+                showToast(
+                  `${getStageDisplayName(failedStage.stageType)}失败：${failedStage.errorMessage || '请从当前阶段重试'}`,
+                  'error'
+                );
+              }
+              return;
+            }
+
             if (!isDebugMode && extractionDone && !timelineDone && !llmDone && postExtractTriggeredTaskRef.current !== taskId) {
               postExtractTriggeredTaskRef.current = taskId;
               void runPostExtractionFlow(taskId);
             }
 
+            if (!isDebugMode && extractionDone && timelineDone && llmDone) {
+              setFinalizingTemplate(false);
+              if (visualizeRedirectedTaskRef.current !== taskId) {
+                visualizeRedirectedTaskRef.current = taskId;
+                failureToastRef.current = null;
+                showToast('模板结构分析完成，正在进入全景视图', 'success');
+                navigate('/deconstruct/detail/' + id + '/visualize');
+              }
+              return;
+            }
+
             if (resp.data.status === 'FAILED') {
-              showToast('拆解任务执行失败，请查看日志后重试', 'error');
-              setDeconstructStep('upload');
+              const toastKey = `${taskId}:FAILED`;
+              if (failureToastRef.current !== toastKey) {
+                failureToastRef.current = toastKey;
+                showToast('拆解任务执行失败，请从失败阶段重试', 'error');
+              }
             }
           }
         } catch (error) {
@@ -159,6 +274,22 @@ export default function ProjectDetail() {
   }, [deconstructStep, uploadedFiles, isDebugMode]);
   const getStageInfo = (type: string) => {
     return liveTaskResult?.stages?.find(s => s.stageType === type);
+  };
+  const failedStageInfo = getFirstFailedStage(liveTaskResult);
+
+  const estimateRunningStageProgress = (
+    stage: { stageProgress?: number; startedAt?: string } | undefined,
+    options: { floor: number; cap: number; halfLifeSec: number }
+  ) => {
+    const reported = Math.max(0, Math.min(100, stage?.stageProgress ?? 10));
+    const startedAtMs = stage?.startedAt ? Date.parse(stage.startedAt) : Number.NaN;
+    if (!Number.isFinite(startedAtMs)) {
+      return reported;
+    }
+    const elapsedSec = Math.max(0, (progressTick - startedAtMs) / 1000);
+    const growth = 1 - Math.exp(-elapsedSec / options.halfLifeSec);
+    const simulated = options.floor + (options.cap - options.floor) * growth;
+    return Math.min(options.cap, Math.max(reported, simulated));
   };
 
   const calculateProgress = () => {
@@ -178,15 +309,21 @@ export default function ProjectDetail() {
     else if (isStageRunningStatus(scene?.stageStatus)) total += (scene?.stageProgress || 0) * 0.15;
 
     if (isStageSuccessStatus(keyframe?.stageStatus)) total += 10;
-    else if (isStageRunningStatus(keyframe?.stageStatus)) total += (keyframe?.stageProgress || 0) * 0.10;
+    else if (isStageRunningStatus(keyframe?.stageStatus)) {
+      total += estimateRunningStageProgress(keyframe, { floor: 18, cap: 85, halfLifeSec: 18 }) * 0.10;
+    }
 
     // Timeline: 30%
     if (isStageSuccessStatus(timeline?.stageStatus)) total += 30;
-    else if (isStageRunningStatus(timeline?.stageStatus)) total += (timeline?.stageProgress || 0) * 0.30;
+    else if (isStageRunningStatus(timeline?.stageStatus)) {
+      total += estimateRunningStageProgress(timeline, { floor: 20, cap: 88, halfLifeSec: 14 }) * 0.30;
+    }
 
     // LLM: 30%
     if (isStageSuccessStatus(llm?.stageStatus)) total += 30;
-    else if (isStageRunningStatus(llm?.stageStatus)) total += (llm?.stageProgress || 0) * 0.30;
+    else if (isStageRunningStatus(llm?.stageStatus)) {
+      total += estimateRunningStageProgress(llm, { floor: 12, cap: 92, halfLifeSec: 28 }) * 0.30;
+    }
 
     return Math.min(100, Math.floor(total));
   };
@@ -677,11 +814,27 @@ export default function ProjectDetail() {
                         maxWidth: '700px'
                       }}>
                         <div style={{ textAlign: 'center' }}>
-                          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.5rem', color: '#1e293b' }}>AI 深度拆解中...</h3>
-                          <p style={{ margin: 0, color: '#64748b' }}>正在进行多模态时空对齐与大模型分析</p>
-                          {!isDebugMode && finalizingTemplate && (
+                          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.5rem', color: failedStageInfo ? '#b91c1c' : '#1e293b' }}>
+                            {failedStageInfo ? '拆解阶段异常' : 'AI 深度拆解中...'}
+                          </h3>
+                          <p style={{ margin: 0, color: failedStageInfo ? '#991b1b' : '#64748b' }}>
+                            {failedStageInfo
+                              ? `${getStageDisplayName(failedStageInfo.stageType)}执行失败，可从当前阶段继续重试`
+                              : '正在进行多模态时空对齐与大模型分析'}
+                          </p>
+                          {failedStageInfo?.errorMessage && (
+                            <p style={{ margin: '10px 0 0 0', color: '#7f1d1d', fontSize: '0.9rem', maxWidth: '560px', lineHeight: 1.6 }}>
+                              {failedStageInfo.errorMessage}
+                            </p>
+                          )}
+                          {!failedStageInfo && !isDebugMode && finalizingTemplate && (
                             <p style={{ margin: '8px 0 0 0', color: '#0f766e', fontSize: '0.92rem' }}>
                               基础提取完成，正在执行 Timeline {'->'} LLM 深度分析...
+                            </p>
+                          )}
+                          {!failedStageInfo && isStageRunningStatus(getStageInfo('LLM')?.stageStatus) && (
+                            <p style={{ margin: '8px 0 0 0', color: '#6366f1', fontSize: '0.9rem' }}>
+                              大模型正在理解镜头节奏、段落结构与包装方式，请稍候片刻...
                             </p>
                           )}
                         </div>
@@ -764,6 +917,38 @@ export default function ProjectDetail() {
                             >
                               {triggeringDebugAsr ? '触发中...' : '手动触发下一步 (Debug)'}
                             </button>
+                          </div>
+                        )}
+
+                        {failedStageInfo && (
+                          <div style={{
+                            width: '100%',
+                            borderRadius: '16px',
+                            border: '1px solid rgba(239, 68, 68, 0.18)',
+                            background: 'rgba(254, 242, 242, 0.95)',
+                            padding: '18px 20px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '12px'
+                          }}>
+                            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#991b1b' }}>
+                              失败阶段：{getStageDisplayName(failedStageInfo.stageType)}
+                            </div>
+                            <div style={{ fontSize: '0.88rem', color: '#7f1d1d', lineHeight: 1.6 }}>
+                              我们会从这个阶段继续，不会重复执行已经成功的 ASR / SCENE / KEYFRAME。
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'center' }}>
+                              <button
+                                className="btn-primary"
+                                style={{ minWidth: '220px' }}
+                                disabled={retryingStageType === failedStageInfo.stageType}
+                                onClick={() => void handleRetryFailedStage()}
+                              >
+                                {retryingStageType === failedStageInfo.stageType
+                                  ? '重试中...'
+                                  : getRetryButtonLabel(failedStageInfo.stageType)}
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>

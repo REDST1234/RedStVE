@@ -6,6 +6,8 @@ import com.bytedance.aivideo.video.mapper.VideoAnalysisTaskStageMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
+import java.util.List;
 import java.time.LocalDateTime;
 
 /**
@@ -95,6 +97,34 @@ public class VideoTaskStageService {
         }
         return STAGE_STATUS_RUNNING.equals(stage.getStageStatus())
                 || STAGE_STATUS_SUCCESS.equals(stage.getStageStatus());
+    }
+
+    public VideoAnalysisTaskStageEntity getStage(String taskId, String stageType) {
+        return findByTaskAndType(taskId, stageType);
+    }
+
+    public List<VideoAnalysisTaskStageEntity> listStages(String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            return List.of();
+        }
+        return taskStageMapper.selectList(
+                new LambdaQueryWrapper<VideoAnalysisTaskStageEntity>()
+                        .eq(VideoAnalysisTaskStageEntity::getTaskId, taskId)
+                        .isNull(VideoAnalysisTaskStageEntity::getDeletedAt)
+        ).stream()
+                .sorted(Comparator.comparing(VideoAnalysisTaskStageEntity::getStageType))
+                .toList();
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void resetToPending(String taskId, String stageType) {
+        VideoAnalysisTaskStageEntity stage = getOrCreate(taskId, stageType);
+        stage.setStageStatus(STAGE_STATUS_PENDING);
+        stage.setStageProgress(0);
+        stage.setStartedAt(null);
+        stage.setEndedAt(null);
+        stage.setErrorMessage(null);
+        taskStageMapper.updateById(stage);
     }
 
     private VideoAnalysisTaskStageEntity getOrCreate(String taskId, String stageType) {

@@ -1,0 +1,146 @@
+{
+  "$schema": "composition-script/v1",
+  "projectId": "test_001",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30
+  },
+  "globalStyle": {
+    "fontFamily": "Noto Sans SC",
+    "backgroundColor": "#0a0a0a"
+  },
+  "bgm": {
+    "src": "https://cdn.pixabay.com/download/audio/2022/10/25/audio_946f4ddc0e.mp3?filename=technology-music-126027.mp3",
+    "mixLevel": "BALANCED",
+    "volume": 0.28,
+    "loop": true,
+    "fadeInFrames": 15,
+    "fadeOutFrames": 30
+  },
+  "scenes": [
+    {
+      "sceneId": "scene_0",
+      "sceneIndex": 0,
+      "role": "hook",
+      "durationInFrames": 90,
+      "layers": [
+        {
+          "layerId": "bg_0",
+          "preset": "motion.ken_burns",
+          "params": {
+            "src": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=1080&q=80",
+            "startScale": 1.0,
+            "endScale": 1.3,
+            "startPosition": { "x": 0, "y": 0 },
+            "endPosition": { "x": -20, "y": -15 },
+            "easing": [0.45, 0, 0.55, 1]
+          }
+        },
+        {
+          "layerId": "title_0",
+          "preset": "text.fade_title",
+          "enterAtFrame": 15,
+          "durationInFrames": 60,
+          "params": {
+            "text": "这杯咖啡绝了！",
+            "fontSize": 56,
+            "color": "#FFFFFF",
+            "fontWeight": 700,
+            "position": { "x": "center", "y": "40%" }
+          }
+        },
+        {
+          "layerId": "sub_0",
+          "preset": "caption.subtitle",
+          "enterAtFrame": 30,
+          "durationInFrames": 50,
+          "params": {
+            "text": "每一口都是拿铁的灵魂",
+            "fontSize": 28,
+            "color": "#FFFFFF",
+            "bgColor": "rgba(0,0,0,0.5)",
+            "position": "bottom_center"
+          }
+        }
+      ]
+    },
+    {
+      "sceneId": "scene_1",
+      "sceneIndex": 1,
+      "role": "body",
+      "durationInFrames": 120,
+      "layers": [
+        {
+          "layerId": "bg_1",
+          "preset": "motion.ken_burns",
+          "params": {
+            "src": "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=1080&q=80",
+            "startScale": 1.2,
+            "endScale": 1.0,
+            "startPosition": { "x": -10, "y": 0 },
+            "endPosition": { "x": 0, "y": 0 },
+            "easing": [0.16, 1, 0.3, 1]
+          }
+        },
+        {
+          "layerId": "title_1",
+          "preset": "text.fade_title",
+          "enterAtFrame": 20,
+          "durationInFrames": 80,
+          "params": {
+            "text": "精选阿拉比卡豆",
+            "fontSize": 48,
+            "color": "#F5DEB3"
+          }
+        }
+      ]
+    },
+    {
+      "sceneId": "scene_2",
+      "sceneIndex": 2,
+      "role": "outro",
+      "durationInFrames": 60,
+      "layers": [
+        {
+          "layerId": "bg_2",
+          "preset": "media.image",
+          "params": {
+            "src": "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=1080&q=80"
+          }
+        },
+        {
+          "layerId": "title_2",
+          "preset": "text.fade_title",
+          "enterAtFrame": 0,
+          "params": {
+            "text": "来一杯吧 ☕",
+            "fontSize": 64,
+            "color": "#FFFFFF"
+          }
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "fromSceneIndex": 0,
+      "toSceneIndex": 1,
+      "preset": "transition.fade",
+      "params": {
+        "durationInFrames": 15,
+        "timing": "linear"
+      }
+    },
+    {
+      "fromSceneIndex": 1,
+      "toSceneIndex": 2,
+      "preset": "transition.slide",
+      "params": {
+        "direction": "from-bottom",
+        "durationInFrames": 20,
+        "timing": "spring"
+      }
+    }
+  ]
+}

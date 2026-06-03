@@ -5,6 +5,8 @@ import com.bytedance.aivideo.video.entity.CategoryKnowledgeEntity;
 import com.bytedance.aivideo.video.mapper.CategoryKnowledgeMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -12,6 +14,8 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,18 +75,26 @@ public class CategoryKnowledgeVectorInitRunner implements CommandLineRunner {
 
                 StringBuilder contentBuilder = new StringBuilder();
                 contentBuilder.append("品类: ").append(entity.getCategoryName()).append("\n");
+                if (entity.getSceneThreshold() != null) {
+                    contentBuilder.append("- scene_threshold (DOUBLE): 运行时视频拆解可参考的镜头切分阈值 hint = ")
+                            .append(entity.getSceneThreshold()).append("\n");
+                }
 
-                JsonNode fields = objectMapper.readTree(entity.getDynamicFields());
+                JsonNode fields = buildKnowledgeFieldDefinitions(objectMapper.readTree(entity.getDynamicFields()));
                 if (fields.isArray()) {
                     for (JsonNode field : fields) {
                         String name = field.has("fieldName") ? field.get("fieldName").asText() : "";
                         String type = field.has("fieldType") ? field.get("fieldType").asText("").toUpperCase() : "UNKNOWN";
-                        String shape = inferFieldValueShape(field.get("fieldValue"));
                         String desc = field.has("description") ? field.get("description").asText() : "";
                         if (!name.isBlank()) {
                             contentBuilder.append("- ").append(name)
-                                    .append(" (").append(type).append(", ").append(shape).append(")")
-                                    .append(": ").append(desc).append("\n");
+                                    .append(" (").append(type).append(")")
+                                    .append(": ").append(desc);
+                            JsonNode allowedValues = field.get("allowedValues");
+                            if (allowedValues != null && allowedValues.isArray() && !allowedValues.isEmpty()) {
+                                contentBuilder.append("；allowedValues=").append(allowedValues.toString());
+                            }
+                            contentBuilder.append("\n");
                         }
                     }
                 }
@@ -116,16 +128,110 @@ public class CategoryKnowledgeVectorInitRunner implements CommandLineRunner {
         }
     }
 
-    private String inferFieldValueShape(JsonNode valueNode) {
-        if (valueNode == null || valueNode.isNull()) {
-            return "null";
+    private ArrayNode buildKnowledgeFieldDefinitions(JsonNode rawFields) {
+        ArrayNode definitions = objectMapper.createArrayNode();
+        if (rawFields == null || !rawFields.isArray()) {
+            return definitions;
         }
-        if (valueNode.isArray()) {
-            return "array";
+        Set<String> visited = new HashSet<>();
+        for (JsonNode field : rawFields) {
+            if (!(field instanceof ObjectNode fieldObj)) {
+                continue;
+            }
+            String fieldName = normalizeFieldName(fieldObj.path("fieldName").asText(""));
+            String fieldType = normalizeFieldType(fieldObj.path("fieldType").asText(""), fieldObj.get("fieldValue"));
+            if (fieldName.isBlank() || fieldType.isBlank() || !visited.add(fieldName)) {
+                continue;
+            }
+            ObjectNode definition = objectMapper.createObjectNode();
+            definition.put("fieldName", fieldName);
+            definition.put("fieldType", fieldType);
+            String description = normalizeDescription(fieldObj.path("description").asText(""));
+            if (!description.isBlank()) {
+                definition.put("description", description);
+            }
+            ArrayNode allowedValues = normalizeAllowedValues(fieldObj.get("allowedValues"));
+            if ((allowedValues == null || allowedValues.isEmpty()) && fieldObj.get("fieldValue") != null && fieldObj.get("fieldValue").isArray()) {
+                allowedValues = normalizeAllowedValues(fieldObj.get("fieldValue"));
+            }
+            if (allowedValues != null && !allowedValues.isEmpty()) {
+                definition.set("allowedValues", allowedValues);
+            }
+            definitions.add(definition);
         }
-        if (valueNode.isObject()) {
-            return "object";
+        return definitions;
+    }
+
+    private String normalizeFieldName(String rawFieldName) {
+        if (rawFieldName == null || rawFieldName.isBlank()) {
+            return "";
         }
-        return "scalar";
+        String trimmed = rawFieldName.trim();
+        String snakeCase = trimmed
+                .replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+                .replace('-', '_')
+                .replace(' ', '_')
+                .toLowerCase()
+                .replaceAll("[^a-z0-9_]", "")
+                .replaceAll("_+", "_")
+                .replaceAll("^_+", "")
+                .replaceAll("_+$", "");
+        if (snakeCase.isBlank()) {
+            return "";
+        }
+        if (!Character.isLetter(snakeCase.charAt(0))) {
+            snakeCase = "f_" + snakeCase;
+        }
+        return snakeCase;
+    }
+
+    private String normalizeDescription(String rawDescription) {
+        return rawDescription == null ? "" : rawDescription.trim();
+    }
+
+    private String normalizeFieldType(String rawFieldType, JsonNode fieldValue) {
+        if (rawFieldType == null || rawFieldType.isBlank()) {
+            return "";
+        }
+        String normalized = rawFieldType.trim().toUpperCase();
+        if ("ARRAY".equals(normalized) || "MAP".equals(normalized)) {
+            return "JSON";
+        }
+        if ("NUMBER".equals(normalized)) {
+            return isIntegralNumber(fieldValue) ? "INTEGER" : "DOUBLE";
+        }
+        return Set.of("STRING", "DOUBLE", "INTEGER", "BOOLEAN", "JSON").contains(normalized) ? normalized : "";
+    }
+
+    private boolean isIntegralNumber(JsonNode fieldValue) {
+        if (fieldValue == null || fieldValue.isNull()) {
+            return false;
+        }
+        if (fieldValue.isIntegralNumber()) {
+            return true;
+        }
+        if (!fieldValue.isNumber()) {
+            return false;
+        }
+        double value = fieldValue.asDouble();
+        return Math.rint(value) == value;
+    }
+
+    private ArrayNode normalizeAllowedValues(JsonNode node) {
+        if (node == null || node.isNull() || !node.isArray()) {
+            return null;
+        }
+        ArrayNode normalized = objectMapper.createArrayNode();
+        Set<String> dedup = new LinkedHashSet<>();
+        for (JsonNode item : node) {
+            if (item == null || item.isNull()) {
+                continue;
+            }
+            String key = item.toString();
+            if (dedup.add(key)) {
+                normalized.add(item);
+            }
+        }
+        return normalized;
     }
 }

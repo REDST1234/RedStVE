@@ -21,7 +21,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -32,12 +34,31 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class KeyFrameAnalysisService {
 
+    private static final double HOOK_START_OFFSET_SEC = 0.10D;
+    private static final double BOUNDARY_DELTA_SEC = 0.15D;
+    private static final double UNIFORM_SAMPLE_INTERVAL_SEC = 2.0D;
+    private static final double LONG_SHOT_MIDPOINT_THRESHOLD_SEC = 2.5D;
+    private static final double CUT_SCORE_THRESHOLD_FOR_BOUNDARY_BOOST = 0.15D;
+    private static final double MIN_FRAME_GAP_SEC = 0.08D;
+    private static final double UNIFORM_SAMPLE_SKIP_RADIUS_SEC = 0.60D;
+    private static final int MAX_FRAMES = 24;
+    private static final Set<String> ALLOWED_EXTRACTION_REASONS = Set.of(
+            "HOOK_FIRST",
+            "HOOK_MID",
+            "TOP_SCORE",
+            "BOUNDARY_PRE",
+            "BOUNDARY_POST",
+            "UNIFORM_SAMPLE",
+            "LONG_SHOT_MID"
+    );
+
     private final KeyFrameExtractEngine keyFrameExtractEngine;
     private final VideoAnalysisTaskMapper videoAnalysisTaskMapper;
     private final KeyFrameMapper keyFrameMapper;
     private final VideoTaskStageService videoTaskStageService;
     private final MediaUploadProperties mediaUploadProperties;
     private final ObjectMapper objectMapper;
+    private final VideoAnalysisResultService videoAnalysisResultService;
 
     public KeyFrameAnalysisService(
             KeyFrameExtractEngine keyFrameExtractEngine,
@@ -45,7 +66,8 @@ public class KeyFrameAnalysisService {
             KeyFrameMapper keyFrameMapper,
             VideoTaskStageService videoTaskStageService,
             MediaUploadProperties mediaUploadProperties,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            VideoAnalysisResultService videoAnalysisResultService
     ) {
         this.keyFrameExtractEngine = keyFrameExtractEngine;
         this.videoAnalysisTaskMapper = videoAnalysisTaskMapper;
@@ -53,6 +75,7 @@ public class KeyFrameAnalysisService {
         this.videoTaskStageService = videoTaskStageService;
         this.mediaUploadProperties = mediaUploadProperties;
         this.objectMapper = objectMapper;
+        this.videoAnalysisResultService = videoAnalysisResultService;
     }
 
     @Async("videoTaskExecutor")
@@ -85,12 +108,16 @@ public class KeyFrameAnalysisService {
             if (!Files.exists(sceneJsonPath)) {
                 log.warn("keyframe extract skip: scene_result.json not found, taskId={}", taskId);
                 videoTaskStageService.markFailed(taskId, VideoTaskStageService.STAGE_TYPE_KEYFRAME, "scene_result.json not found");
+                videoAnalysisResultService.markTaskFailed(taskId, VideoTaskStageService.STAGE_TYPE_KEYFRAME, "scene_result.json not found");
                 return;
             }
             SceneDetectResult sceneResult = objectMapper.readValue(sceneJsonPath.toFile(), SceneDetectResult.class);
 
             // 执行 Hook-Locking 策略选点
             List<KeyFrameInfo> keyFrameInfos = selectKeyFrameInfos(sceneResult.getShots());
+            log.info("keyframe extract selected reasons: taskId={}, reasons={}",
+                    taskId,
+                    keyFrameInfos.stream().map(KeyFrameInfo::reason).distinct().toList());
 
             if (keyFrameInfos.isEmpty()) {
                 videoTaskStageService.markSuccess(taskId, VideoTaskStageService.STAGE_TYPE_KEYFRAME);
@@ -111,13 +138,19 @@ public class KeyFrameAnalysisService {
             for (int i = 0; i < extractedPaths.size() && i < keyFrameInfos.size(); i++) {
                 Path path = extractedPaths.get(i);
                 KeyFrameInfo info = keyFrameInfos.get(i);
+                String normalizedReason = normalizeExtractionReason(info.reason());
+                if (!ALLOWED_EXTRACTION_REASONS.contains(normalizedReason)) {
+                    log.error("keyframe extract invalid extractionReason before insert: taskId={}, frameIndex={}, rawReason={}, normalizedReason={}",
+                            taskId, i + 1, info.reason(), normalizedReason);
+                    throw new IllegalStateException("Unsupported extractionReason before insert: " + normalizedReason);
+                }
                 
                 KeyFrameEntity entity = new KeyFrameEntity();
                 entity.setTaskId(taskId);
                 entity.setFrameIndex(i + 1);
                 entity.setTimePoint(java.math.BigDecimal.valueOf(info.timestamp()));
                 entity.setSourceShotIndex(info.shotIndex());
-                entity.setExtractionReason(info.reason());
+                entity.setExtractionReason(normalizedReason);
                 entity.setFilePath(path.toAbsolutePath().toString());
                 
                 keyFrameMapper.insert(entity);
@@ -129,6 +162,7 @@ public class KeyFrameAnalysisService {
         } catch (Exception ex) {
             log.error("keyframe extract failed: taskId={}, reason={}", taskId, ex.getMessage(), ex);
             videoTaskStageService.markFailed(taskId, VideoTaskStageService.STAGE_TYPE_KEYFRAME, ex.getMessage());
+            videoAnalysisResultService.markTaskFailed(taskId, VideoTaskStageService.STAGE_TYPE_KEYFRAME, ex.getMessage());
         }
     }
 
@@ -144,10 +178,11 @@ public class KeyFrameAnalysisService {
     }
 
     /**
-     * Hook-Locking 抽帧策略：
-     * 1. 强制提取首镜头的 开头(0.1s偏移) 与 居中时间点。
-     * 2. 剩余所有镜头按 sceneScore 降序，取补充帧。
-     * 动态总数 N = min(15, max(5, floor(totalDuration / 20) + 4))
+     * P0 关键帧策略：
+     * 1. 强制提取首镜头的 HOOK_FIRST / HOOK_MID。
+     * 2. 对高价值 cut 点补帧：BOUNDARY_PRE / BOUNDARY_POST。
+     * 3. 对长镜头补 LONG_SHOT_MID。
+     * 4. 对全片追加低密度均匀采样 UNIFORM_SAMPLE 作为兜底覆盖。
      */
     private List<KeyFrameInfo> selectKeyFrameInfos(List<SceneShot> shots) {
         List<KeyFrameInfo> infos = new ArrayList<>();
@@ -155,49 +190,220 @@ public class KeyFrameAnalysisService {
             return infos;
         }
 
-        double totalDuration = shots.get(shots.size() - 1).getEndTime();
-        int maxFrames = (int) Math.min(15, Math.max(5, Math.floor(totalDuration / 20.0) + 4));
-
-        // 1. Hook 槽位：第一个镜头强制抽两帧
-        SceneShot hookShot = shots.get(0);
-        // 为了防止 0.0 秒是纯黑帧，给一个 0.1s 的微小偏移。若总时长不到 0.1，则取 0
-        double hookStart = hookShot.getDuration() > 0.1 ? hookShot.getStartTime() + 0.1 : hookShot.getStartTime();
-        infos.add(new KeyFrameInfo(hookStart, hookShot.getShotIndex(), "HOOK_FIRST"));
-
-        double hookMid = hookShot.getStartTime() + hookShot.getDuration() / 2.0;
-        // 避免极短视频导致两个点重合
-        if (hookMid > hookStart + 0.1) {
-            infos.add(new KeyFrameInfo(hookMid, hookShot.getShotIndex(), "HOOK_MID"));
+        double totalDuration = resolveTotalDuration(shots);
+        if (totalDuration <= 0) {
+            return infos;
         }
 
-        // 2. 剩余镜头按 sceneScore 降序，取剩余名额
-        if (shots.size() > 1) {
-            List<SceneShot> rest = new ArrayList<>(shots.subList(1, shots.size()));
-            rest.sort((a, b) -> Double.compare(b.getSceneScore() != null ? b.getSceneScore() : 0.0, 
-                                               a.getSceneScore() != null ? a.getSceneScore() : 0.0));
-            
-            int remainingQuota = Math.max(0, maxFrames - infos.size());
-            int limit = Math.min(remainingQuota, rest.size());
-            for (int i = 0; i < limit; i++) {
-                SceneShot target = rest.get(i);
-                infos.add(new KeyFrameInfo(target.getStartTime() + target.getDuration() / 2.0, target.getShotIndex(), "TOP_SCORE"));
+        addHookFrames(shots.get(0), infos);
+        addBoundaryBoostFrames(shots, infos);
+        addLongShotMidFrames(shots, infos);
+        addUniformSampleFrames(shots, totalDuration, infos);
+
+        return normalizeAndTrim(infos, MAX_FRAMES);
+    }
+
+    private void addHookFrames(SceneShot hookShot, List<KeyFrameInfo> infos) {
+        if (hookShot == null) {
+            return;
+        }
+        double hookStart = clampWithinShot(
+                safeStart(hookShot) + HOOK_START_OFFSET_SEC,
+                hookShot
+        );
+        infos.add(new KeyFrameInfo(hookStart, safeShotIndex(hookShot), "HOOK_FIRST"));
+
+        double hookMid = midpoint(hookShot);
+        if (Math.abs(hookMid - hookStart) > MIN_FRAME_GAP_SEC) {
+            infos.add(new KeyFrameInfo(hookMid, safeShotIndex(hookShot), "HOOK_MID"));
+        }
+    }
+
+    private void addBoundaryBoostFrames(List<SceneShot> shots, List<KeyFrameInfo> infos) {
+        for (int i = 1; i < shots.size(); i++) {
+            SceneShot current = shots.get(i);
+            if (!isHighValueCut(current)) {
+                continue;
             }
-        }
 
-        // 去重并排序，保证按时间轴顺序
-        // 这里为了保持记录和原顺序一致，我们简单按时间升序重排
-        infos.sort((a, b) -> Double.compare(a.timestamp(), b.timestamp()));
-        
-        // 简单去重（防止相同时间点被多次添加）
+            SceneShot previous = shots.get(i - 1);
+            double cutTime = resolveCutTime(previous, current);
+            infos.add(new KeyFrameInfo(
+                    clampWithinShot(cutTime - BOUNDARY_DELTA_SEC, previous),
+                    safeShotIndex(previous),
+                    "BOUNDARY_PRE"
+            ));
+            infos.add(new KeyFrameInfo(
+                    clampWithinShot(cutTime + BOUNDARY_DELTA_SEC, current),
+                    safeShotIndex(current),
+                    "BOUNDARY_POST"
+            ));
+        }
+    }
+
+    private void addLongShotMidFrames(List<SceneShot> shots, List<KeyFrameInfo> infos) {
+        for (SceneShot shot : shots) {
+            if (safeDuration(shot) < LONG_SHOT_MIDPOINT_THRESHOLD_SEC) {
+                continue;
+            }
+            int shotIndex = safeShotIndex(shot);
+            if (countFramesForShot(infos, shotIndex) >= 2) {
+                continue;
+            }
+            infos.add(new KeyFrameInfo(midpoint(shot), shotIndex, "LONG_SHOT_MID"));
+        }
+    }
+
+    private void addUniformSampleFrames(List<SceneShot> shots, double totalDuration, List<KeyFrameInfo> infos) {
+        for (double timestamp = UNIFORM_SAMPLE_INTERVAL_SEC; timestamp < totalDuration; timestamp += UNIFORM_SAMPLE_INTERVAL_SEC) {
+            if (hasNearbyFrame(infos, timestamp, UNIFORM_SAMPLE_SKIP_RADIUS_SEC)) {
+                continue;
+            }
+            SceneShot shot = findShotByTime(shots, timestamp);
+            if (shot == null) {
+                continue;
+            }
+            infos.add(new KeyFrameInfo(
+                    clampWithinShot(timestamp, shot),
+                    safeShotIndex(shot),
+                    "UNIFORM_SAMPLE"
+            ));
+        }
+    }
+
+    private List<KeyFrameInfo> normalizeAndTrim(List<KeyFrameInfo> infos, int maxFrames) {
+        List<KeyFrameInfo> prioritized = new ArrayList<>(infos);
+        prioritized.sort(Comparator
+                .comparingInt((KeyFrameInfo info) -> reasonPriority(info.reason()))
+                .thenComparingDouble(KeyFrameInfo::timestamp));
+
         List<KeyFrameInfo> distinctInfos = new ArrayList<>();
-        Double lastTime = null;
-        for (KeyFrameInfo info : infos) {
-            if (lastTime == null || Math.abs(info.timestamp() - lastTime) > 0.01) {
-                distinctInfos.add(info);
-                lastTime = info.timestamp();
+        for (KeyFrameInfo info : prioritized) {
+            if (hasNearbyFrame(distinctInfos, info.timestamp(), MIN_FRAME_GAP_SEC)) {
+                continue;
+            }
+            distinctInfos.add(info);
+            if (distinctInfos.size() >= maxFrames) {
+                break;
             }
         }
+
+        distinctInfos.sort(Comparator.comparingDouble(KeyFrameInfo::timestamp));
         return distinctInfos;
+    }
+
+    private double resolveTotalDuration(List<SceneShot> shots) {
+        SceneShot last = shots.get(shots.size() - 1);
+        double end = safeEnd(last);
+        if (end > 0) {
+            return end;
+        }
+        return shots.stream().mapToDouble(this::safeDuration).sum();
+    }
+
+    private boolean isHighValueCut(SceneShot shot) {
+        double score = shot != null && shot.getSceneScore() != null ? shot.getSceneScore() : 0.0D;
+        return score >= CUT_SCORE_THRESHOLD_FOR_BOUNDARY_BOOST;
+    }
+
+    private double resolveCutTime(SceneShot previous, SceneShot current) {
+        double currentStart = safeStart(current);
+        if (currentStart > 0) {
+            return currentStart;
+        }
+        return safeEnd(previous);
+    }
+
+    private SceneShot findShotByTime(List<SceneShot> shots, double timestamp) {
+        for (SceneShot shot : shots) {
+            double start = safeStart(shot);
+            double end = safeEnd(shot);
+            if (timestamp >= start && timestamp <= end) {
+                return shot;
+            }
+        }
+        return shots.isEmpty() ? null : shots.get(shots.size() - 1);
+    }
+
+    private int countFramesForShot(List<KeyFrameInfo> infos, int shotIndex) {
+        int count = 0;
+        for (KeyFrameInfo info : infos) {
+            if (info.shotIndex() == shotIndex) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean hasNearbyFrame(List<KeyFrameInfo> infos, double timestamp, double radiusSec) {
+        for (KeyFrameInfo info : infos) {
+            if (Math.abs(info.timestamp() - timestamp) <= radiusSec) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private double clampWithinShot(double candidate, SceneShot shot) {
+        double start = safeStart(shot);
+        double end = safeEnd(shot);
+        if (end <= start) {
+            return start;
+        }
+        double min = Math.min(start + 0.02D, end);
+        double max = Math.max(min, end - 0.02D);
+        if (candidate < min) {
+            return min;
+        }
+        if (candidate > max) {
+            return max;
+        }
+        return candidate;
+    }
+
+    private double midpoint(SceneShot shot) {
+        return safeStart(shot) + safeDuration(shot) / 2.0D;
+    }
+
+    private double safeStart(SceneShot shot) {
+        return shot != null && shot.getStartTime() != null ? shot.getStartTime() : 0.0D;
+    }
+
+    private double safeEnd(SceneShot shot) {
+        return shot != null && shot.getEndTime() != null ? shot.getEndTime() : safeStart(shot) + safeDuration(shot);
+    }
+
+    private double safeDuration(SceneShot shot) {
+        if (shot == null) {
+            return 0.0D;
+        }
+        if (shot.getDuration() != null) {
+            return Math.max(0.0D, shot.getDuration());
+        }
+        return Math.max(0.0D, safeEnd(shot) - safeStart(shot));
+    }
+
+    private int safeShotIndex(SceneShot shot) {
+        return shot != null && shot.getShotIndex() != null ? shot.getShotIndex() : -1;
+    }
+
+    private int reasonPriority(String reason) {
+        if (reason == null) {
+            return 99;
+        }
+        return switch (reason) {
+            case "HOOK_FIRST" -> 0;
+            case "HOOK_MID" -> 1;
+            case "BOUNDARY_PRE", "BOUNDARY_POST" -> 2;
+            case "LONG_SHOT_MID" -> 3;
+            case "UNIFORM_SAMPLE" -> 4;
+            case "TOP_SCORE" -> 5;
+            default -> 10;
+        };
+    }
+
+    private String normalizeExtractionReason(String reason) {
+        return reason == null ? null : reason.trim();
     }
 
     private Path getFramesOutputDir(String taskId) {

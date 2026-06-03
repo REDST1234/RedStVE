@@ -154,6 +154,13 @@ export default function CreateProjectGapDetection() {
           >
             去往模板推荐 Debug
           </button>
+          <button
+            onClick={() => navigate(`/create/detail/${projectId}/bgm-debug`)}
+            className="action-btn secondary"
+            style={{ padding: '6px 12px', fontSize: '0.85rem', marginLeft: '6px' }}
+          >
+            去往 BGM 推荐 Debug
+          </button>
         </div>
       </div>
 
@@ -199,9 +206,17 @@ export default function CreateProjectGapDetection() {
               </div>
             </div>
             {matchResult && (
-              <button className="btn-primary" onClick={confirmAdaptation} disabled={adaptingSlots}>
-                {adaptingSlots ? '适配中...' : '确认并执行适配'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn-outline" onClick={confirmAdaptation} disabled={adaptingSlots}>
+                  {adaptingSlots ? '适配中...' : '确认并重新执行适配'}
+                </button>
+                <button 
+                  className="btn-primary" 
+                  onClick={() => navigate(`/create/detail/${projectId}/generation`)}
+                >
+                  去往视频生成 (P3)
+                </button>
+              </div>
             )}
           </div>
 

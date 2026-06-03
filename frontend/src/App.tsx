@@ -8,7 +8,9 @@ import CreateProjectList from './pages/create/ProjectList';
 import CreateProjectDetail from './pages/create/ProjectDetail';
 import CreateProjectWorkflow from './pages/create/ProjectWorkflow';
 import CreateProjectGapDetection from './pages/create/ProjectGapDetection';
+import CreateProjectGeneration from './pages/create/ProjectGeneration';
 import { TemplateMatchDebug } from './pages/create/TemplateMatchDebug';
+import { BgmMatchDebug } from './pages/create/BgmMatchDebug';
 import './index.css';
 
 export default function App() {
@@ -27,7 +29,9 @@ export default function App() {
             <Route path="create/detail/:id" element={<CreateProjectDetail />} />
             <Route path="create/detail/:id/workflow" element={<CreateProjectWorkflow />} />
             <Route path="create/detail/:id/gap-detection" element={<CreateProjectGapDetection />} />
+            <Route path="create/detail/:id/generation" element={<CreateProjectGeneration />} />
             <Route path="create/detail/:projectId/template-debug" element={<TemplateMatchDebug />} />
+            <Route path="create/detail/:projectId/bgm-debug" element={<BgmMatchDebug />} />
           </Route>
         </Routes>
       </ToastProvider>

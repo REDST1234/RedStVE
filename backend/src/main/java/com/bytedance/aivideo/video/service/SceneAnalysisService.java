@@ -29,6 +29,7 @@ public class SceneAnalysisService {
     private final MediaUploadProperties mediaUploadProperties;
     private final ObjectMapper objectMapper;
     private final KeyFrameAnalysisService keyFrameAnalysisService;
+    private final VideoAnalysisResultService videoAnalysisResultService;
 
     // 高敏提取模式下，初始默认使用一个极低的物理阈值，供下游 TimelineMatcher 后置过滤
     private static final double HIGH_SENSITIVITY_THRESHOLD = 0.1;
@@ -39,7 +40,8 @@ public class SceneAnalysisService {
             VideoTaskStageService videoTaskStageService,
             MediaUploadProperties mediaUploadProperties,
             ObjectMapper objectMapper,
-            KeyFrameAnalysisService keyFrameAnalysisService
+            KeyFrameAnalysisService keyFrameAnalysisService,
+            VideoAnalysisResultService videoAnalysisResultService
     ) {
         this.sceneDetectorEngine = sceneDetectorEngine;
         this.videoAnalysisTaskMapper = videoAnalysisTaskMapper;
@@ -47,6 +49,7 @@ public class SceneAnalysisService {
         this.mediaUploadProperties = mediaUploadProperties;
         this.objectMapper = objectMapper;
         this.keyFrameAnalysisService = keyFrameAnalysisService;
+        this.videoAnalysisResultService = videoAnalysisResultService;
     }
 
     @Async("videoTaskExecutor")
@@ -69,6 +72,7 @@ public class SceneAnalysisService {
         if (task.getSourceFilePath() == null || task.getSourceFilePath().isBlank()) {
             log.warn("scene detect skip: source file path empty, taskId={}", taskId);
             videoTaskStageService.markFailed(taskId, VideoTaskStageService.STAGE_TYPE_SCENE, "source file path empty");
+            videoAnalysisResultService.markTaskFailed(taskId, VideoTaskStageService.STAGE_TYPE_SCENE, "source file path empty");
             return;
         }
 
@@ -93,6 +97,7 @@ public class SceneAnalysisService {
         } catch (Exception ex) {
             log.error("scene detect failed: taskId={}, reason={}", taskId, ex.getMessage(), ex);
             videoTaskStageService.markFailed(taskId, VideoTaskStageService.STAGE_TYPE_SCENE, ex.getMessage());
+            videoAnalysisResultService.markTaskFailed(taskId, VideoTaskStageService.STAGE_TYPE_SCENE, ex.getMessage());
         }
     }
 

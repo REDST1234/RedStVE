@@ -15,13 +15,14 @@ import com.bytedance.aivideo.video.entity.KeyFrameEntity;
 import com.bytedance.aivideo.video.mapper.CategoryKnowledgeMapper;
 import com.bytedance.aivideo.video.mapper.KeyFrameMapper;
 import com.bytedance.aivideo.video.util.TimelinePromptFormatter;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -57,6 +59,10 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
             "strategy", "style", "transition", "motion", "cut", "bpm", "sync",
             "pace", "hook", "selling", "cta", "socialProof", "shot", "scene"
     );
+    private static final Set<String> ALLOWED_DYNAMIC_FIELD_TYPES = Set.of(
+            "STRING", "DOUBLE", "INTEGER", "BOOLEAN", "JSON"
+    );
+    private static final int MIN_NEW_FIELD_DESCRIPTION_LENGTH = 8;
 
     private static final Set<String> SCENARIO_LEAK_KEYWORDS = Set.of(
             "食堂", "校园", "学校", "地铁站", "教室", "宿舍", "办公室", "商场", "停车场", "工地",
@@ -202,7 +208,9 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
                     catEntity.setSceneThreshold(sceneThreshold);
                     
                     if (ext.has("dynamicExtensionFields")) {
-                        catEntity.setDynamicFields(ext.get("dynamicExtensionFields").toString());
+                        catEntity.setDynamicFields(objectMapper.writeValueAsString(
+                                buildKnowledgeFieldDefinitions(ext.get("dynamicExtensionFields"), null)
+                        ));
                     }
                     if (ext.has("discoveredPromptOverrides")) {
                         catEntity.setPromptOverrides(ext.get("discoveredPromptOverrides").toString());
@@ -352,21 +360,21 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
             return;
         }
         try {
-            JsonNode newFields = newExt.get("dynamicExtensionFields");
+            ArrayNode newDefinitions = buildKnowledgeFieldDefinitions(newExt.get("dynamicExtensionFields"), null);
             if (dbCat.getDynamicFields() == null || dbCat.getDynamicFields().isBlank()) {
-                dbCat.setDynamicFields(newFields.toString());
+                dbCat.setDynamicFields(objectMapper.writeValueAsString(newDefinitions));
                 return;
             }
-            
-            // 旧字段解析为 List
+
+            ArrayNode oldDefinitions = buildKnowledgeFieldDefinitions(
+                    objectMapper.readTree(dbCat.getDynamicFields()),
+                    null
+            );
             List<JsonNode> oldFieldsList = new ArrayList<>();
-            JsonNode oldFields = objectMapper.readTree(dbCat.getDynamicFields());
-            if (oldFields.isArray()) {
-                oldFields.forEach(oldFieldsList::add);
-            }
-            
+            oldDefinitions.forEach(oldFieldsList::add);
+
             // 合并逻辑：同名字段按类型兼容更新；新字段追加；冲突字段跳过并记录
-            for (JsonNode newField : newFields) {
+            for (JsonNode newField : newDefinitions) {
                 String newFieldName = newField.has("fieldName") ? newField.get("fieldName").asText() : null;
                 if (newFieldName == null) continue;
                 int existingIdx = -1;
@@ -404,30 +412,19 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
         if (!(oldField instanceof ObjectNode oldObj) || !(newField instanceof ObjectNode newObj)) {
             return newField;
         }
-        JsonNode oldValue = oldObj.get("fieldValue");
-        JsonNode newValue = newObj.get("fieldValue");
-        if (oldValue != null && oldValue.isArray() && newValue != null && newValue.isArray()) {
-            Set<String> dedup = new HashSet<>();
-            ArrayNode merged = objectMapper.createArrayNode();
-            for (JsonNode v : oldValue) {
-                String key = v.toString();
-                if (dedup.add(key)) {
-                    merged.add(v);
-                }
-            }
-            for (JsonNode v : newValue) {
-                String key = v.toString();
-                if (dedup.add(key)) {
-                    merged.add(v);
-                }
-            }
-            oldObj.set("fieldValue", merged);
-            if (newObj.has("description")) {
-                oldObj.set("description", newObj.get("description"));
-            }
-            return oldObj;
+        ArrayNode mergedAllowedValues = mergeAllowedValues(oldObj.get("allowedValues"), newObj.get("allowedValues"));
+        if (mergedAllowedValues != null && !mergedAllowedValues.isEmpty()) {
+            oldObj.set("allowedValues", mergedAllowedValues);
+        } else {
+            oldObj.remove("allowedValues");
         }
-        return newField;
+        String newDescription = normalizeDescription(newObj.path("description").asText(""));
+        if (!newDescription.isBlank()) {
+            oldObj.put("description", newDescription);
+        }
+        oldObj.put("fieldName", normalizeFieldName(newObj.path("fieldName").asText("")));
+        oldObj.put("fieldType", normalizeFieldType(newObj.path("fieldType").asText(""), null));
+        return oldObj;
     }
 
     private CategorySanitizeResult sanitizeCategoryExtensions(String taskId, JsonNode unifiedJson) {
@@ -460,6 +457,25 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
             log.info("category normalized: taskId={}, rawCategoryId={}, normalizedCategoryId={}", taskId, rawCategoryId, normalizedCategoryId);
         }
 
+        Set<String> existingFieldNames = new HashSet<>();
+        CategoryKnowledgeEntity existingCategory = categoryKnowledgeMapper.selectById(normalizedCategoryId);
+        if (existingCategory != null && existingCategory.getDynamicFields() != null && !existingCategory.getDynamicFields().isBlank()) {
+            try {
+                ArrayNode knownDefinitions = buildKnowledgeFieldDefinitions(
+                        objectMapper.readTree(existingCategory.getDynamicFields()),
+                        null
+                );
+                for (JsonNode knownField : knownDefinitions) {
+                    String knownName = normalizeFieldName(knownField.path("fieldName").asText(""));
+                    if (!knownName.isBlank()) {
+                        existingFieldNames.add(knownName);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse existing category definitions: categoryId={}", normalizedCategoryId, e);
+            }
+        }
+
         ArrayNode sanitizedFields = objectMapper.createArrayNode();
         List<DiscoveryFieldCandidate> rejected = new ArrayList<>();
         JsonNode rawFields = ext.get("dynamicExtensionFields");
@@ -469,15 +485,16 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
                     rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, "", "FORMAT_INVALID", field));
                     continue;
                 }
-                String fieldName = fieldObj.path("fieldName").asText("").trim();
-                String fieldType = fieldObj.path("fieldType").asText("").trim().toUpperCase(Locale.ROOT);
+                String fieldName = normalizeFieldName(fieldObj.path("fieldName").asText(""));
                 JsonNode fieldValue = fieldObj.get("fieldValue");
+                String fieldType = normalizeFieldType(fieldObj.path("fieldType").asText(""), fieldValue);
+                String description = normalizeDescription(fieldObj.path("description").asText(""));
 
                 if (fieldName.isBlank() || fieldType.isBlank() || fieldValue == null) {
                     rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, fieldName, "FORMAT_INVALID", fieldObj));
                     continue;
                 }
-                if (containsLeak(fieldName) || containsLeak(fieldObj.path("description").asText("")) || containsLeak(fieldValue.toString())) {
+                if (containsLeak(fieldName) || containsLeak(description) || containsLeak(fieldValue.toString())) {
                     rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, fieldName, detectLeakReason(fieldObj), fieldObj));
                     continue;
                 }
@@ -485,10 +502,21 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
                     rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, fieldName, "NON_MACRO_FEATURE", fieldObj));
                     continue;
                 }
+                if (!existingFieldNames.contains(fieldName) && description.replaceAll("\\s+", "").length() < MIN_NEW_FIELD_DESCRIPTION_LENGTH) {
+                    rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, fieldName, "NEW_FIELD_DESCRIPTION_REQUIRED", fieldObj));
+                    continue;
+                }
 
                 ObjectNode normalizedField = fieldObj.deepCopy();
                 normalizedField.put("fieldName", fieldName);
                 normalizedField.put("fieldType", fieldType);
+                normalizedField.put("description", description);
+                ArrayNode normalizedAllowedValues = normalizeAllowedValues(fieldObj.get("allowedValues"));
+                if (normalizedAllowedValues != null && !normalizedAllowedValues.isEmpty()) {
+                    normalizedField.set("allowedValues", normalizedAllowedValues);
+                } else {
+                    normalizedField.remove("allowedValues");
+                }
                 sanitizedFields.add(normalizedField);
             }
         }
@@ -642,18 +670,26 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
             
             StringBuilder contentBuilder = new StringBuilder();
             contentBuilder.append("品类: ").append(catEntity.getCategoryName()).append("\n");
+            if (catEntity.getSceneThreshold() != null) {
+                contentBuilder.append("- scene_threshold (DOUBLE): 运行时视频拆解可参考的镜头切分阈值 hint = ")
+                        .append(catEntity.getSceneThreshold()).append("\n");
+            }
             
-            JsonNode fields = objectMapper.readTree(catEntity.getDynamicFields());
+            JsonNode fields = buildKnowledgeFieldDefinitions(objectMapper.readTree(catEntity.getDynamicFields()), null);
             if (fields.isArray()) {
                 for (JsonNode field : fields) {
                     String name = field.has("fieldName") ? field.get("fieldName").asText() : "";
                     String type = field.has("fieldType") ? field.get("fieldType").asText("").toUpperCase(Locale.ROOT) : "UNKNOWN";
-                    String shape = inferFieldValueShape(field.get("fieldValue"));
                     String desc = field.has("description") ? field.get("description").asText() : "";
                     if (!name.isBlank()) {
                         contentBuilder.append("- ").append(name)
-                                .append(" (").append(type).append(", ").append(shape).append(")")
-                                .append(": ").append(desc).append("\n");
+                                .append(" (").append(type).append(")")
+                                .append(": ").append(desc);
+                        JsonNode allowedValues = field.get("allowedValues");
+                        if (allowedValues != null && allowedValues.isArray() && !allowedValues.isEmpty()) {
+                            contentBuilder.append("；allowedValues=").append(allowedValues.toString());
+                        }
+                        contentBuilder.append("\n");
                     }
                 }
             }
@@ -672,6 +708,140 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
         }
     }
 
+    private String normalizeFieldName(String rawFieldName) {
+        if (rawFieldName == null || rawFieldName.isBlank()) {
+            return "";
+        }
+        String trimmed = rawFieldName.trim();
+        String snakeCase = trimmed
+                .replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+                .replace('-', '_')
+                .replace(' ', '_')
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9_]", "")
+                .replaceAll("_+", "_")
+                .replaceAll("^_+", "")
+                .replaceAll("_+$", "");
+        if (snakeCase.isBlank()) {
+            return "";
+        }
+        if (!Character.isLetter(snakeCase.charAt(0))) {
+            snakeCase = "f_" + snakeCase;
+        }
+        return snakeCase;
+    }
+
+    private String normalizeDescription(String rawDescription) {
+        return rawDescription == null ? "" : rawDescription.trim();
+    }
+
+    private String normalizeFieldType(String rawFieldType, JsonNode fieldValue) {
+        if (rawFieldType == null || rawFieldType.isBlank()) {
+            return "";
+        }
+        String normalized = rawFieldType.trim().toUpperCase(Locale.ROOT);
+        if ("ARRAY".equals(normalized) || "MAP".equals(normalized)) {
+            return "JSON";
+        }
+        if ("NUMBER".equals(normalized)) {
+            return isIntegralNumber(fieldValue) ? "INTEGER" : "DOUBLE";
+        }
+        return ALLOWED_DYNAMIC_FIELD_TYPES.contains(normalized) ? normalized : "";
+    }
+
+    private boolean isIntegralNumber(JsonNode fieldValue) {
+        if (fieldValue == null || fieldValue.isNull()) {
+            return false;
+        }
+        if (fieldValue.isIntegralNumber()) {
+            return true;
+        }
+        if (!fieldValue.isNumber()) {
+            return false;
+        }
+        double value = fieldValue.asDouble();
+        return Math.rint(value) == value;
+    }
+
+    private ArrayNode normalizeAllowedValues(JsonNode node) {
+        if (node == null || node.isNull() || !node.isArray()) {
+            return null;
+        }
+        ArrayNode normalized = objectMapper.createArrayNode();
+        Set<String> dedup = new LinkedHashSet<>();
+        for (JsonNode item : node) {
+            if (item == null || item.isNull()) {
+                continue;
+            }
+            String key = item.toString();
+            if (dedup.add(key)) {
+                normalized.add(item);
+            }
+        }
+        return normalized;
+    }
+
+    private ArrayNode mergeAllowedValues(JsonNode oldNode, JsonNode newNode) {
+        ArrayNode merged = objectMapper.createArrayNode();
+        Set<String> dedup = new HashSet<>();
+        appendAllowedValues(merged, dedup, oldNode);
+        appendAllowedValues(merged, dedup, newNode);
+        return merged;
+    }
+
+    private void appendAllowedValues(ArrayNode target, Set<String> dedup, JsonNode source) {
+        if (source == null || !source.isArray()) {
+            return;
+        }
+        for (JsonNode item : source) {
+            if (item == null || item.isNull()) {
+                continue;
+            }
+            String key = item.toString();
+            if (dedup.add(key)) {
+                target.add(item);
+            }
+        }
+    }
+
+    private ArrayNode buildKnowledgeFieldDefinitions(JsonNode rawFields, Set<String> knownFieldNames) {
+        ArrayNode definitions = objectMapper.createArrayNode();
+        if (rawFields == null || !rawFields.isArray()) {
+            return definitions;
+        }
+        Set<String> visited = new HashSet<>();
+        for (JsonNode field : rawFields) {
+            if (!(field instanceof ObjectNode fieldObj)) {
+                continue;
+            }
+            String fieldName = normalizeFieldName(fieldObj.path("fieldName").asText(""));
+            JsonNode fieldValue = fieldObj.get("fieldValue");
+            String fieldType = normalizeFieldType(fieldObj.path("fieldType").asText(""), fieldValue);
+            if (fieldName.isBlank() || fieldType.isBlank() || !visited.add(fieldName)) {
+                continue;
+            }
+            if (knownFieldNames != null) {
+                knownFieldNames.add(fieldName);
+            }
+            ObjectNode definition = objectMapper.createObjectNode();
+            definition.put("fieldName", fieldName);
+            definition.put("fieldType", fieldType);
+            String description = normalizeDescription(fieldObj.path("description").asText(""));
+            if (!description.isBlank()) {
+                definition.put("description", description);
+            }
+            ArrayNode allowedValues = normalizeAllowedValues(fieldObj.get("allowedValues"));
+            if ((allowedValues == null || allowedValues.isEmpty()) && fieldValue != null && fieldValue.isArray()) {
+                allowedValues = normalizeAllowedValues(fieldValue);
+            }
+            if (allowedValues != null && !allowedValues.isEmpty()) {
+                definition.set("allowedValues", allowedValues);
+            }
+            definitions.add(definition);
+        }
+        return definitions;
+    }
+
     @Override
     public AnalysisOutput triggerLlmAnalysis(String taskId) {
         videoTaskStageService.initStageIfAbsent(taskId, VideoTaskStageService.STAGE_TYPE_TIMELINE);
@@ -688,29 +858,78 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
             videoTaskStageService.markSuccess(taskId, VideoTaskStageService.STAGE_TYPE_TIMELINE);
         } catch (Exception e) {
             videoTaskStageService.markFailed(taskId, VideoTaskStageService.STAGE_TYPE_TIMELINE, e.getMessage());
+            videoAnalysisResultService.markTaskFailed(taskId, VideoTaskStageService.STAGE_TYPE_TIMELINE, e.getMessage());
             throw e;
         }
 
+        return runLlmStage(taskId, fatTimeline);
+    }
+
+    @Override
+    public AnalysisOutput triggerLlmOnly(String taskId) {
+        videoTaskStageService.initStageIfAbsent(taskId, VideoTaskStageService.STAGE_TYPE_LLM);
+        TimelineMatchResult fatTimeline = videoAnalysisResultService.getSavedFatTimeline(taskId);
+        if (fatTimeline == null) {
+            log.warn("llm-only retry fallback to timeline+llm: taskId={}", taskId);
+            return triggerLlmAnalysis(taskId);
+        }
+        return runLlmStage(taskId, fatTimeline);
+    }
+
+    @Override
+    @Async("videoTaskExecutor")
+    public void runTimelineAndLlmAsync(String taskId) {
+        try {
+            triggerLlmAnalysis(taskId);
+        } catch (Exception ex) {
+            log.warn("async timeline+llm retry failed: taskId={}", taskId, ex);
+        }
+    }
+
+    @Override
+    @Async("videoTaskExecutor")
+    public void runLlmOnlyAsync(String taskId) {
+        try {
+            triggerLlmOnly(taskId);
+        } catch (Exception ex) {
+            log.warn("async llm-only retry failed: taskId={}", taskId, ex);
+        }
+    }
+
+    private AnalysisOutput runLlmStage(String taskId, TimelineMatchResult fatTimeline) {
         videoTaskStageService.markRunning(taskId, VideoTaskStageService.STAGE_TYPE_LLM);
-        // 2. 加载关键帧
-        List<KeyFrameEntity> keyFrames = keyFrameMapper.selectList(
+        List<KeyFrameEntity> keyFrames = loadKeyFrames(taskId);
+
+        AnalysisOutput output;
+        try {
+            output = analyzeAndRefine(taskId, fatTimeline, keyFrames);
+        } catch (Exception e) {
+            videoTaskStageService.markFailed(taskId, VideoTaskStageService.STAGE_TYPE_LLM, e.getMessage());
+            videoAnalysisResultService.markTaskFailed(taskId, VideoTaskStageService.STAGE_TYPE_LLM, e.getMessage());
+            throw e;
+        }
+
+        try {
+            saveAndPublishLlmResult(taskId, fatTimeline, output);
+            videoTaskStageService.markSuccess(taskId, VideoTaskStageService.STAGE_TYPE_LLM);
+        } catch (Exception e) {
+            videoTaskStageService.markFailed(taskId, VideoTaskStageService.STAGE_TYPE_LLM, e.getMessage());
+            videoAnalysisResultService.markTaskFailed(taskId, VideoTaskStageService.STAGE_TYPE_LLM, e.getMessage());
+            throw e;
+        }
+        return output;
+    }
+
+    private List<KeyFrameEntity> loadKeyFrames(String taskId) {
+        return keyFrameMapper.selectList(
                 new LambdaQueryWrapper<KeyFrameEntity>()
                         .eq(KeyFrameEntity::getTaskId, taskId)
                         .isNull(KeyFrameEntity::getDeletedAt)
                         .orderByAsc(KeyFrameEntity::getFrameIndex)
         );
+    }
 
-        // 3. 执行核心分析与精修
-        AnalysisOutput output;
-        try {
-            output = analyzeAndRefine(taskId, fatTimeline, keyFrames);
-            videoTaskStageService.markSuccess(taskId, VideoTaskStageService.STAGE_TYPE_LLM);
-        } catch (Exception e) {
-            videoTaskStageService.markFailed(taskId, VideoTaskStageService.STAGE_TYPE_LLM, e.getMessage());
-            throw e;
-        }
-
-        // 4. 落库保存结果（仅 timeline 资产，避免覆盖 core/text）
+    private void saveAndPublishLlmResult(String taskId, TimelineMatchResult fatTimeline, AnalysisOutput output) {
         try {
             String fatTimelineJson = objectMapper.writeValueAsString(fatTimeline);
             String refinedTimelineJson = objectMapper.writeValueAsString(output.getRefinedTimeline());
@@ -731,7 +950,5 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
         } catch (Exception ex) {
             log.warn("template publish failed after timeline saved: taskId={}", taskId, ex);
         }
-
-        return output;
     }
 }

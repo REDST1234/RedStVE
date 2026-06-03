@@ -12,6 +12,7 @@ import com.bytedance.aivideo.video.service.KeyFrameAnalysisService;
 import com.bytedance.aivideo.video.service.SceneAnalysisService;
 import com.bytedance.aivideo.video.service.TimelineMatcherService;
 import com.bytedance.aivideo.video.service.VideoAnalysisResultService;
+import com.bytedance.aivideo.video.service.VideoAnalysisRetryService;
 import com.bytedance.aivideo.video.service.VideoMaterialService;
 import com.bytedance.aivideo.video.service.VideoUploadService;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -38,6 +39,7 @@ public class VideoAnalysisController {
     private final KeyFrameAnalysisService keyFrameAnalysisService;
     private final TimelineMatcherService timelineMatcherService;
     private final VideoAnalysisResultService videoAnalysisResultService;
+    private final VideoAnalysisRetryService videoAnalysisRetryService;
     private final VideoMaterialService videoMaterialService;
     private final com.bytedance.aivideo.video.service.StructureAnalyzerService structureAnalyzerService;
 
@@ -48,6 +50,7 @@ public class VideoAnalysisController {
             KeyFrameAnalysisService keyFrameAnalysisService,
             TimelineMatcherService timelineMatcherService,
             VideoAnalysisResultService videoAnalysisResultService,
+            VideoAnalysisRetryService videoAnalysisRetryService,
             VideoMaterialService videoMaterialService,
             com.bytedance.aivideo.video.service.StructureAnalyzerService structureAnalyzerService
     ) {
@@ -57,6 +60,7 @@ public class VideoAnalysisController {
         this.keyFrameAnalysisService = keyFrameAnalysisService;
         this.timelineMatcherService = timelineMatcherService;
         this.videoAnalysisResultService = videoAnalysisResultService;
+        this.videoAnalysisRetryService = videoAnalysisRetryService;
         this.videoMaterialService = videoMaterialService;
         this.structureAnalyzerService = structureAnalyzerService;
     }
@@ -140,6 +144,18 @@ public class VideoAnalysisController {
             throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
         }
         return ApiResponse.success(videoUploadService.startExtraction(taskId));
+    }
+
+    /**
+     * 从当前失败阶段开始重试，不重复执行已成功阶段。
+     */
+    @PostMapping("/tasks/{taskId}/retry")
+    public ApiResponse<Boolean> retryFromFailedStage(@PathVariable("taskId") String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
+        }
+        videoAnalysisRetryService.retryFromFailedStage(taskId);
+        return ApiResponse.success(Boolean.TRUE);
     }
 
     /**

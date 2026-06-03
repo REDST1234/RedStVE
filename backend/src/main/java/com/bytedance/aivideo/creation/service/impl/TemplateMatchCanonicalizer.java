@@ -4,6 +4,7 @@ import com.bytedance.aivideo.creation.entity.CreativeMaterialEntity;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -39,11 +40,21 @@ final class TemplateMatchCanonicalizer {
                 String role = segmentNode.path("role").asText("");
                 double minDuration = segmentNode.path("durationRange").path("min").asDouble(0.0);
 
-                String cameraMovementTag = TAG_UNKNOWN;
-                String shotTypeTag = TAG_UNKNOWN;
-                if (shotsNode.isArray()) {
+                List<String> preferredMovementTags = readAllowedArray(segmentNode.path("preferredCameraMovements"), true);
+                List<String> preferredShotTags = readAllowedArray(segmentNode.path("preferredShotTypes"), false);
+                List<String> requiredVisualFunctions = readLowerCaseArray(segmentNode.path("requiredVisualFunctions"));
+
+                String cameraMovementTag = preferredMovementTags.isEmpty() ? TAG_UNKNOWN : preferredMovementTags.get(0);
+                String shotTypeTag = preferredShotTags.isEmpty() ? TAG_UNKNOWN : preferredShotTags.get(0);
+
+                boolean movementResolvedFromSegment = !preferredMovementTags.isEmpty();
+                boolean shotResolvedFromSegment = !preferredShotTags.isEmpty();
+                if (shotsNode.isArray() && (!movementResolvedFromSegment || !shotResolvedFromSegment)) {
                     for (JsonNode shotNode : shotsNode) {
-                        if (shotNode.path("belongsToSegment").asInt(-1) == segmentIndex) {
+                        if (shotNode.path("belongsToSegment").asInt(-1) != segmentIndex) {
+                            continue;
+                        }
+                        if (!movementResolvedFromSegment) {
                             TagValue movementTag = normalizeCameraMovementTag(
                                     shotNode.path("cameraMovementTag").asText(""),
                                     shotNode.path("cameraMovement").asText("")
@@ -55,7 +66,8 @@ final class TemplateMatchCanonicalizer {
                             if (movementTag.fallbackUsed()) {
                                 fallbackMappingCount++;
                             }
-
+                        }
+                        if (!shotResolvedFromSegment) {
                             TagValue shotTag = normalizeShotTypeTag(
                                     shotNode.path("shotTypeTag").asText(""),
                                     shotNode.path("shotType").asText("")
@@ -67,8 +79,8 @@ final class TemplateMatchCanonicalizer {
                             if (shotTag.fallbackUsed()) {
                                 fallbackMappingCount++;
                             }
-                            break;
                         }
+                        break;
                     }
                 }
 
@@ -79,7 +91,16 @@ final class TemplateMatchCanonicalizer {
                     templateMissingTagCount++;
                 }
 
-                segments.add(new CanonicalSegment(segmentIndex, role, minDuration, cameraMovementTag, shotTypeTag));
+                segments.add(new CanonicalSegment(
+                        segmentIndex,
+                        role,
+                        minDuration,
+                        cameraMovementTag,
+                        shotTypeTag,
+                        preferredMovementTags,
+                        preferredShotTags,
+                        requiredVisualFunctions
+                ));
             }
         }
 
@@ -119,7 +140,12 @@ final class TemplateMatchCanonicalizer {
                     fallbackMappingCount++;
                 }
 
-                highlights.add(new CanonicalHighlight(movementTag.tag(), shotTag.tag()));
+                highlights.add(new CanonicalHighlight(
+                        movementTag.tag(),
+                        shotTag.tag(),
+                        highlight.path("actionState").asText(""),
+                        highlight.path("textType").asText("")
+                ));
             }
         }
 
@@ -151,6 +177,46 @@ final class TemplateMatchCanonicalizer {
             return new TagValue(TAG_PAN, false, true);
         }
         return new TagValue(TAG_UNKNOWN, false, true);
+    }
+
+    private List<String> readAllowedArray(JsonNode node, boolean movement) {
+        if (!node.isArray() || node.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> values = new ArrayList<>();
+        for (JsonNode item : node) {
+            String raw = item.asText("");
+            if (raw == null || raw.isBlank()) {
+                continue;
+            }
+            String normalized = raw.trim().toUpperCase(Locale.ROOT);
+            if (movement) {
+                if (TAG_STATIC.equals(normalized) || TAG_ZOOM_IN.equals(normalized)
+                        || TAG_ZOOM_OUT.equals(normalized) || TAG_PAN.equals(normalized)
+                        || TAG_UNKNOWN.equals(normalized)) {
+                    values.add(normalized);
+                }
+            } else if (TAG_CLOSE_UP.equals(normalized) || TAG_MID_SHOT.equals(normalized)
+                    || TAG_WIDE_SHOT.equals(normalized) || TAG_UNKNOWN.equals(normalized)) {
+                values.add(normalized);
+            }
+        }
+        return values.isEmpty() ? Collections.emptyList() : values;
+    }
+
+    private List<String> readLowerCaseArray(JsonNode node) {
+        if (!node.isArray() || node.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> values = new ArrayList<>();
+        for (JsonNode item : node) {
+            String raw = item.asText("");
+            if (raw == null || raw.isBlank()) {
+                continue;
+            }
+            values.add(raw.trim().toLowerCase(Locale.ROOT));
+        }
+        return values.isEmpty() ? Collections.emptyList() : values;
     }
 
     private TagValue normalizeShotTypeTag(String rawTag, String rawText) {
@@ -190,7 +256,10 @@ final class TemplateMatchCanonicalizer {
             String role,
             double minDuration,
             String cameraMovementTag,
-            String shotTypeTag
+            String shotTypeTag,
+            List<String> preferredCameraMovements,
+            List<String> preferredShotTypes,
+            List<String> requiredVisualFunctions
     ) {
     }
 
@@ -205,11 +274,12 @@ final class TemplateMatchCanonicalizer {
 
     record CanonicalHighlight(
             String cameraMovementTag,
-            String shotTypeTag
+            String shotTypeTag,
+            String actionState,
+            String textType
     ) {
     }
 
     record TagValue(String tag, boolean missing, boolean fallbackUsed) {
     }
 }
-

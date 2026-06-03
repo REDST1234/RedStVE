@@ -29,4 +29,19 @@ public interface StructureAnalyzerService {
      * 一键执行全链路：获取胖数据、关键帧 -> 调用大模型 -> 返回结果并落库
      */
     AnalysisOutput triggerLlmAnalysis(String taskId);
+
+    /**
+     * 基于已保存的 fatTimeline 直接重跑 LLM 结构分析，避免重复执行 TimelineMatcher。
+     */
+    AnalysisOutput triggerLlmOnly(String taskId);
+
+    /**
+     * 异步执行 Timeline + LLM 全链路。
+     */
+    void runTimelineAndLlmAsync(String taskId);
+
+    /**
+     * 异步执行仅 LLM 重试。
+     */
+    void runLlmOnlyAsync(String taskId);
 }

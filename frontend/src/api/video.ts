@@ -47,6 +47,13 @@ export const videoApi = {
     });
   },
 
+  // 从失败阶段开始重试
+  retryTask: (taskId: string) => {
+    return request<ApiResponse<boolean>>(`/v1/videos/tasks/${taskId}/retry`, {
+      method: 'POST'
+    });
+  },
+
   // 触发 Timeline 组装
   triggerTimelineMatch: (taskId: string, threshold?: number) => {
     const query = typeof threshold === 'number' ? `?threshold=${threshold}` : '';

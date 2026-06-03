@@ -9,14 +9,17 @@ import com.bytedance.aivideo.engine.asr.model.AsrTranscriptionResult;
 import com.bytedance.aivideo.video.dto.AnalysisResultWriteCommand;
 import com.bytedance.aivideo.video.dto.MediaInfo;
 import com.bytedance.aivideo.video.dto.VideoTaskResultResponse;
+import com.bytedance.aivideo.video.dto.timeline.TimelineMatchResult;
 import com.bytedance.aivideo.video.entity.AnalysisResultCoreEntity;
 import com.bytedance.aivideo.video.entity.AnalysisResultTextAssetEntity;
 import com.bytedance.aivideo.video.entity.AnalysisResultTimelineAssetEntity;
 import com.bytedance.aivideo.video.entity.AsrSegmentEntity;
+import com.bytedance.aivideo.video.entity.VideoAnalysisTaskEntity;
 import com.bytedance.aivideo.video.mapper.AnalysisResultCoreMapper;
 import com.bytedance.aivideo.video.mapper.AnalysisResultTextAssetMapper;
 import com.bytedance.aivideo.video.mapper.AnalysisResultTimelineAssetMapper;
 import com.bytedance.aivideo.video.mapper.AsrSegmentMapper;
+import com.bytedance.aivideo.video.mapper.VideoAnalysisTaskMapper;
 import com.bytedance.aivideo.video.mapper.VideoAnalysisTaskStageMapper;
 import com.bytedance.aivideo.video.entity.VideoAnalysisTaskStageEntity;
 import com.bytedance.aivideo.video.dto.TaskStageDto;
@@ -54,6 +57,7 @@ public class VideoAnalysisResultService {
     private final AnalysisResultTextAssetMapper textAssetMapper;
     private final AnalysisResultTimelineAssetMapper timelineAssetMapper;
     private final AsrSegmentMapper asrSegmentMapper;
+    private final VideoAnalysisTaskMapper videoAnalysisTaskMapper;
     private final VideoAnalysisTaskStageMapper taskStageMapper;
     private final ObjectMapper objectMapper;
     private final MediaUploadProperties mediaUploadProperties;
@@ -66,6 +70,7 @@ public class VideoAnalysisResultService {
             AnalysisResultTextAssetMapper textAssetMapper,
             AnalysisResultTimelineAssetMapper timelineAssetMapper,
             AsrSegmentMapper asrSegmentMapper,
+            VideoAnalysisTaskMapper videoAnalysisTaskMapper,
             VideoAnalysisTaskStageMapper taskStageMapper,
             ObjectMapper objectMapper,
             MediaUploadProperties mediaUploadProperties
@@ -74,6 +79,7 @@ public class VideoAnalysisResultService {
         this.textAssetMapper = textAssetMapper;
         this.timelineAssetMapper = timelineAssetMapper;
         this.asrSegmentMapper = asrSegmentMapper;
+        this.videoAnalysisTaskMapper = videoAnalysisTaskMapper;
         this.taskStageMapper = taskStageMapper;
         this.objectMapper = objectMapper;
         this.mediaUploadProperties = mediaUploadProperties;
@@ -368,6 +374,83 @@ public class VideoAnalysisResultService {
         coreMapper.updateById(core);
     }
 
+    @Transactional(rollbackFor = Exception.class)
+    public void markTaskFailed(String taskId, String stageType, String errorMessage) {
+        if (taskId == null || taskId.isBlank()) {
+            return;
+        }
+        AnalysisResultCoreEntity core = coreMapper.selectOne(
+                new LambdaQueryWrapper<AnalysisResultCoreEntity>().eq(AnalysisResultCoreEntity::getTaskId, taskId)
+        );
+        if (core != null) {
+            core.setStatus(TASK_STATUS_FAILED);
+            if (stageType != null && !stageType.isBlank()) {
+                addFailedDimension(core, normalizeFailedDimension(stageType));
+            }
+            coreMapper.updateById(core);
+        }
+
+        VideoAnalysisTaskEntity task = videoAnalysisTaskMapper.selectOne(
+                new LambdaQueryWrapper<VideoAnalysisTaskEntity>()
+                        .eq(VideoAnalysisTaskEntity::getTaskId, taskId)
+                        .isNull(VideoAnalysisTaskEntity::getDeletedAt)
+        );
+        if (task == null) {
+            return;
+        }
+        task.setStatus(TASK_STATUS_FAILED);
+        task.setProgress(100);
+        task.setCompletedAt(LocalDateTime.now());
+        task.setErrorStep(stageType);
+        task.setErrorMessage(errorMessage);
+        videoAnalysisTaskMapper.updateById(task);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void markTaskProcessingForRetry(String taskId, String stageType) {
+        if (taskId == null || taskId.isBlank()) {
+            return;
+        }
+        AnalysisResultCoreEntity core = coreMapper.selectOne(
+                new LambdaQueryWrapper<AnalysisResultCoreEntity>().eq(AnalysisResultCoreEntity::getTaskId, taskId)
+        );
+        if (core != null) {
+            core.setStatus(TASK_STATUS_PROCESSING);
+            if (stageType != null && !stageType.isBlank()) {
+                removeFailedDimension(core, normalizeFailedDimension(stageType));
+            }
+            coreMapper.updateById(core);
+        }
+
+        VideoAnalysisTaskEntity task = videoAnalysisTaskMapper.selectOne(
+                new LambdaQueryWrapper<VideoAnalysisTaskEntity>()
+                        .eq(VideoAnalysisTaskEntity::getTaskId, taskId)
+                        .isNull(VideoAnalysisTaskEntity::getDeletedAt)
+        );
+        if (task == null) {
+            return;
+        }
+        task.setStatus(TASK_STATUS_PROCESSING);
+        task.setProgress(Math.max(task.getProgress() == null ? 0 : task.getProgress(), 20));
+        task.setCompletedAt(null);
+        task.setErrorStep(null);
+        task.setErrorMessage(null);
+        task.setRetryCount((task.getRetryCount() == null ? 0 : task.getRetryCount()) + 1);
+        videoAnalysisTaskMapper.updateById(task);
+    }
+
+    public TimelineMatchResult getSavedFatTimeline(String taskId) {
+        AnalysisResultTimelineAssetEntity timelineAsset = findActiveTimelineAsset(taskId);
+        if (timelineAsset == null || timelineAsset.getFatTimelineJson() == null || timelineAsset.getFatTimelineJson().isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(timelineAsset.getFatTimelineJson(), TimelineMatchResult.class);
+        } catch (JsonProcessingException ex) {
+            throw new BizException(ErrorCode.INTERNAL_ERROR, "fatTimelineJson 解析失败: " + ex.getMessage());
+        }
+    }
+
     private void upsertCore(AnalysisResultWriteCommand command) {
         AnalysisResultCoreEntity entity = coreMapper.selectOne(
                 new LambdaQueryWrapper<AnalysisResultCoreEntity>().eq(AnalysisResultCoreEntity::getTaskId, command.getTaskId())
@@ -565,6 +648,10 @@ public class VideoAnalysisResultService {
         List<String> failed = new ArrayList<>(parseJsonArray(core.getPartialFailedDimensions()));
         failed.removeIf(item -> item.equalsIgnoreCase(dimension));
         core.setPartialFailedDimensions(failed.isEmpty() ? null : toJsonSafely(failed));
+    }
+
+    private String normalizeFailedDimension(String stageType) {
+        return stageType == null ? "" : stageType.trim().toLowerCase();
     }
 
     private int resolveSegmentIndex(Integer preferredIndex, int fallbackIndex, Set<Integer> usedIndexes) {

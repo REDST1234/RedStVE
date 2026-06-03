@@ -19,6 +19,8 @@ import com.bytedance.aivideo.creation.dto.MatchResultItemResponse;
 import com.bytedance.aivideo.creation.dto.MatchResultResponse;
 import com.bytedance.aivideo.creation.dto.MatchTriggerRequest;
 import com.bytedance.aivideo.creation.dto.MatchTriggerResponse;
+import com.bytedance.aivideo.creation.dto.ProjectBgmBindingResponse;
+import com.bytedance.aivideo.creation.dto.ProjectBgmSelectRequest;
 import com.bytedance.aivideo.creation.dto.TimelineSegmentResponse;
 import com.bytedance.aivideo.creation.dto.UpdateProjectRequest;
 import com.bytedance.aivideo.creation.dto.UploadCreativeAssetResponse;
@@ -58,6 +60,8 @@ public class CreationProjectController {
     private final SlotMatchResultMapper slotMatchResultMapper;
     private final CreativeMaterialGridMapper creativeMaterialGridMapper;
     private final TemplateRecommendService templateRecommendService;
+    private final com.bytedance.aivideo.creation.service.BgmRecommendService bgmRecommendService;
+    private final com.bytedance.aivideo.creation.service.CreationProjectBgmBindingService creationProjectBgmBindingService;
 
     public CreationProjectController(
             CreationProjectService creationProjectService,
@@ -66,7 +70,9 @@ public class CreationProjectController {
             AdaptationOrchestratorService adaptationOrchestratorService,
             SlotMatchResultMapper slotMatchResultMapper,
             CreativeMaterialGridMapper creativeMaterialGridMapper,
-            TemplateRecommendService templateRecommendService
+            TemplateRecommendService templateRecommendService,
+            com.bytedance.aivideo.creation.service.BgmRecommendService bgmRecommendService,
+            com.bytedance.aivideo.creation.service.CreationProjectBgmBindingService creationProjectBgmBindingService
     ) {
         this.creationProjectService = creationProjectService;
         this.creativeMaterialService = creativeMaterialService;
@@ -75,6 +81,8 @@ public class CreationProjectController {
         this.slotMatchResultMapper = slotMatchResultMapper;
         this.creativeMaterialGridMapper = creativeMaterialGridMapper;
         this.templateRecommendService = templateRecommendService;
+        this.bgmRecommendService = bgmRecommendService;
+        this.creationProjectBgmBindingService = creationProjectBgmBindingService;
     }
 
     @PostMapping
@@ -196,6 +204,37 @@ public class CreationProjectController {
         return ApiResponse.success(response);
     }
 
+    @PostMapping("/{projectId}/recommend-bgm")
+    public ApiResponse<com.bytedance.aivideo.creation.dto.BgmRecommendResponse> recommendBgm(
+            @PathVariable("projectId") String projectId,
+            @RequestBody(required = false) com.bytedance.aivideo.creation.dto.BgmRecommendRequest request) {
+        if (request == null) {
+            request = new com.bytedance.aivideo.creation.dto.BgmRecommendRequest();
+        }
+        com.bytedance.aivideo.creation.dto.BgmRecommendResponse response = bgmRecommendService.recommend(
+                projectId, request.getW1(), request.getW2(), request.getW3(), request.getTopN());
+        return ApiResponse.success(response);
+    }
+
+    @PostMapping("/{projectId}/bgm/select")
+    public ApiResponse<ProjectBgmBindingResponse> selectBgm(
+            @PathVariable("projectId") String projectId,
+            @RequestBody ProjectBgmSelectRequest request
+    ) {
+        return ApiResponse.success(creationProjectBgmBindingService.selectBgm(projectId, request));
+    }
+
+    @GetMapping("/{projectId}/bgm")
+    public ApiResponse<ProjectBgmBindingResponse> getSelectedBgm(@PathVariable("projectId") String projectId) {
+        return ApiResponse.success(creationProjectBgmBindingService.getCurrentBgm(projectId));
+    }
+
+    @DeleteMapping("/{projectId}/bgm")
+    public ApiResponse<Boolean> clearSelectedBgm(@PathVariable("projectId") String projectId) {
+        creationProjectBgmBindingService.clearCurrentBgm(projectId);
+        return ApiResponse.success(Boolean.TRUE);
+    }
+
     @PostMapping("/{projectId}/match")
     public ApiResponse<MatchTriggerResponse> triggerMatch(
             @PathVariable("projectId") String projectId,
@@ -301,6 +340,24 @@ public class CreationProjectController {
         }
         response.setSegments(segments);
         return ApiResponse.success(response);
+    }
+
+    @PostMapping("/{projectId}/generate")
+    public ApiResponse<Boolean> generateVideo(@PathVariable("projectId") String projectId) {
+        creationProjectService.generateVideo(projectId);
+        return ApiResponse.success(Boolean.TRUE);
+    }
+
+    @PostMapping("/{projectId}/regenerate")
+    public ApiResponse<Boolean> regenerateVideo(@PathVariable("projectId") String projectId) {
+        creationProjectService.regenerateVideo(projectId);
+        return ApiResponse.success(Boolean.TRUE);
+    }
+
+    @GetMapping("/{projectId}/render-status")
+    public ApiResponse<com.bytedance.aivideo.engine.remotion.dto.RenderResponse> getRenderStatus(@PathVariable("projectId") String projectId) {
+        com.bytedance.aivideo.engine.remotion.dto.RenderResponse status = creationProjectService.getRenderStatus(projectId);
+        return ApiResponse.success(status);
     }
 
     private List<SlotMatchResultEntity> listMatchResults(String projectId, String versionId) {

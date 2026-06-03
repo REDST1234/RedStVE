@@ -667,7 +667,13 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
         "label": "开头钩子",
         "description": "前3秒用数据+提问制造好奇心",
         "durationRange": { "min": 2, "max": 4 },
-        "durationWeight": 0.12
+        "durationWeight": 0.12,
+        "preferredShotTypes": ["CLOSE_UP"],
+        "preferredCameraMovements": ["STATIC", "ZOOM_IN"],
+        "requiredVisualFunctions": ["subject_intro", "emotion_push"],
+        "subtitleStrategy": "guided",
+        "packagingDensity": "medium",
+        "fallbackStrategies": ["text_overlay_replace", "packaging_emphasis"]
       }
     ]
   },
@@ -738,10 +744,10 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
       "discoveredCategoryName": "赛博探店反转类",
       "dynamicExtensionFields": [
         {
-          "fieldName": "dramaConflictLevel",
+          "fieldName": "drama_conflict_level",
           "fieldType": "STRING",
           "fieldValue": "extreme_reverse",
-          "description": "短剧式矛盾冲突评级"
+          "description": "描述该品类常见的戏剧冲突强度级别"
         }
       ],
       "discoveredPromptOverrides": {
@@ -757,6 +763,7 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
 
 > [!IMPORTANT]
 > 此接口触发热注册流程：如果 LLM 判定的品类在 `category_knowledge` 表中不存在，系统会自动执行 `INSERT` 创建新品类记录。
+> 同时，知识库回填时只会从 `dynamicExtensionFields` 中提取字段定义层（`fieldName / fieldType / description / allowedValues`），不会把当前样例的 `fieldValue` 直接写回 `dynamic_fields`。
 
 ---
 
@@ -979,34 +986,30 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
     "reviewStatus": "APPROVED",
     "dynamicFields": [
       {
-        "fieldName": "hookType",
+        "fieldName": "hook_type",
         "fieldType": "STRING",
-        "fieldValue": "question",
-        "description": "钩子类型"
+        "description": "描述该品类常见的开头钩子类型"
       },
       {
-        "fieldName": "hookOptions",
-        "fieldType": "ARRAY",
-        "fieldValue": ["question","pain_point","data_shock","controversy"],
-        "description": "可选钩子策略池"
+        "fieldName": "hook_options",
+        "fieldType": "JSON",
+        "description": "该品类可用的钩子策略候选池",
+        "allowedValues": ["question", "pain_point", "data_shock", "controversy"]
       },
       {
-        "fieldName": "sellingPointCount",
-        "fieldType": "NUMBER",
-        "fieldValue": 3,
-        "description": "推荐卖点数量"
+        "fieldName": "selling_point_count",
+        "fieldType": "INTEGER",
+        "description": "描述该品类内容中常见的核心卖点覆盖数量"
       },
       {
-        "fieldName": "ctaType",
+        "fieldName": "cta_type",
         "fieldType": "STRING",
-        "fieldValue": "click_link",
-        "description": "行动号召类型"
+        "description": "描述该品类常用的行动号召类型"
       },
       {
-        "fieldName": "socialProofType",
+        "fieldName": "social_proof_type",
         "fieldType": "STRING",
-        "fieldValue": "review_count",
-        "description": "社会认同方式"
+        "description": "描述该品类常见的社会认同表达方式"
       }
     ],
     "promptOverrides": {
@@ -1055,16 +1058,14 @@ data: {"taskId":"xxx","status":"FAILED","progress":45,"progressStep":"LLM 调用
   "categoryName": "教程类",
   "dynamicFields": [
     {
-      "fieldName": "difficultyLevel",
+      "fieldName": "difficulty_level",
       "fieldType": "STRING",
-      "fieldValue": "beginner",
-      "description": "教程难度等级"
+      "description": "描述该品类内容常见的难度等级"
     },
     {
-      "fieldName": "stepCount",
-      "fieldType": "NUMBER",
-      "fieldValue": 3,
-      "description": "教程步骤数量"
+      "fieldName": "step_count",
+      "fieldType": "INTEGER",
+      "description": "描述该品类内容常见的步骤数量规模"
     }
   ],
   "promptOverrides": {

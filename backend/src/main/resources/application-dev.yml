@@ -69,3 +69,6 @@ logging:
 creation:
   template-vector:
     collection-name: ${CREATION_TEMPLATE_COLLECTION:creation_template}
+  bgm-vector:
+    collection-name: ${CREATION_BGM_COLLECTION:creation_bgm}
+    audio-database-dir: ${AUDIO_DATABASE_DIR:storage/audio-database}

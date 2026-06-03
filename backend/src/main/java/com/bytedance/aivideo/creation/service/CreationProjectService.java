@@ -23,4 +23,13 @@ public interface CreationProjectService extends IService<CreationProjectEntity> 
 
     // 删除项目（逻辑删除）
     void deleteProject(String projectId);
+
+    // 智能编排并调用 Remotion 服务生成视频
+    void generateVideo(String projectId);
+
+    // 强制重新编排并生成视频（清除缓存，不复用上次脚本）
+    void regenerateVideo(String projectId);
+
+    // 查询视频渲染进度 (结合 Redis 与 MySQL)
+    com.bytedance.aivideo.engine.remotion.dto.RenderResponse getRenderStatus(String projectId);
 }

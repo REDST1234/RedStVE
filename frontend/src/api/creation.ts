@@ -10,7 +10,9 @@ import {
   CreationTimelineData,
   CreationConfirmAssetsData,
   TemplateSummaryData,
-  TemplateRecommendData
+  TemplateRecommendData,
+  BgmRecommendData,
+  ProjectBgmBindingData
 } from '../types';
 
 export const creationApi = {
@@ -98,6 +100,47 @@ export const creationApi = {
       body: { w1, w2, topN }
     }),
 
+  recommendBgm: (projectId: string, w1: number = 0.35, w2: number = 0.5, w3: number = 0.15, topN: number = 5) =>
+    request<ApiResponse<BgmRecommendData>>(`/v1/creation/projects/${projectId}/recommend-bgm`, {
+      method: 'POST',
+      body: { w1, w2, w3, topN }
+    }),
+
+  selectBgm: (
+    projectId: string,
+    payload: {
+      audioId: string;
+      audioName?: string;
+      filePath: string;
+      sourceType?: string;
+      recommendScore?: number;
+      semanticScore?: number;
+      energyCurveScore?: number;
+      durationBpmScore?: number;
+      mixLevel?: 'QUIET' | 'BALANCED' | 'DRIVE';
+      loopEnabled?: boolean;
+      fadeInFrames?: number;
+      fadeOutFrames?: number;
+      duckingEnabled?: boolean;
+      duckingRatio?: number;
+      metadata?: Record<string, unknown>;
+    }
+  ) =>
+    request<ApiResponse<ProjectBgmBindingData>>(`/v1/creation/projects/${projectId}/bgm/select`, {
+      method: 'POST',
+      body: payload
+    }),
+
+  getSelectedBgm: (projectId: string) =>
+    request<ApiResponse<ProjectBgmBindingData | null>>(`/v1/creation/projects/${projectId}/bgm`, {
+      method: 'GET'
+    }),
+
+  clearSelectedBgm: (projectId: string) =>
+    request<ApiResponse<boolean>>(`/v1/creation/projects/${projectId}/bgm`, {
+      method: 'DELETE'
+    }),
+
   triggerMatch: (projectId: string, versionId?: string) =>
     request<ApiResponse<CreationMatchTriggerData>>(`/v1/creation/projects/${projectId}/match`, {
       method: 'POST',
@@ -120,5 +163,20 @@ export const creationApi = {
     request<ApiResponse<CreationTimelineData>>(`/v1/creation/projects/${projectId}/timeline`, {
       method: 'GET',
       query: versionId ? { versionId } : undefined
+    }),
+
+  generateVideo: (projectId: string) =>
+    request<ApiResponse<boolean>>(`/v1/creation/projects/${projectId}/generate`, {
+      method: 'POST'
+    }),
+
+  regenerateVideo: (projectId: string) =>
+    request<ApiResponse<boolean>>(`/v1/creation/projects/${projectId}/regenerate`, {
+      method: 'POST'
+    }),
+
+  getRenderStatus: (projectId: string) =>
+    request<ApiResponse<{ taskId: string; status: string; progress: number; outputPath?: string; error?: string }>>(`/v1/creation/projects/${projectId}/render-status`, {
+      method: 'GET'
     })
 };

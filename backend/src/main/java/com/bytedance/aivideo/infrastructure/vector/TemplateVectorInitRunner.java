@@ -122,6 +122,11 @@ public class TemplateVectorInitRunner implements CommandLineRunner {
                         if (segment.has("description")) {
                             contentBuilder.append(", 说明: ").append(segment.get("description").asText());
                         }
+                        appendIfPresent(contentBuilder, ", 视觉镜头偏好: ", joinArray(segment.path("preferredShotTypes")));
+                        appendIfPresent(contentBuilder, ", 运镜偏好: ", joinArray(segment.path("preferredCameraMovements")));
+                        appendIfPresent(contentBuilder, ", 视觉功能需求: ", joinArray(segment.path("requiredVisualFunctions")));
+                        appendIfPresent(contentBuilder, ", 字幕策略: ", segment.path("subtitleStrategy").asText(""));
+                        appendIfPresent(contentBuilder, ", 包装密度: ", segment.path("packagingDensity").asText(""));
                         contentBuilder.append("\n");
                     }
                 }
@@ -130,21 +135,29 @@ public class TemplateVectorInitRunner implements CommandLineRunner {
                 if (shotsNode.isArray() && !shotsNode.isEmpty()) {
                     List<String> shotTypeTags = new ArrayList<>();
                     List<String> movementTags = new ArrayList<>();
+                    List<String> functionHints = new ArrayList<>();
                     for (JsonNode shot : shotsNode) {
                         String shotTypeTag = shot.path("shotTypeTag").asText("");
                         String movementTag = shot.path("cameraMovementTag").asText("");
+                        String functionHint = shot.path("functionHint").asText("");
                         if (!shotTypeTag.isBlank()) {
                             shotTypeTags.add(shotTypeTag);
                         }
                         if (!movementTag.isBlank()) {
                             movementTags.add(movementTag);
                         }
+                        if (!functionHint.isBlank()) {
+                            functionHints.add(functionHint);
+                        }
                     }
                     if (!shotTypeTags.isEmpty()) {
-                        contentBuilder.append("镜头标签(shotTypeTag): ").append(String.join(", ", shotTypeTags)).append("\n");
+                        contentBuilder.append("代表镜头原型标签(shotTypeTag): ").append(String.join(", ", shotTypeTags)).append("\n");
                     }
                     if (!movementTags.isEmpty()) {
-                        contentBuilder.append("运镜标签(cameraMovementTag): ").append(String.join(", ", movementTags)).append("\n");
+                        contentBuilder.append("代表镜头原型运镜(cameraMovementTag): ").append(String.join(", ", movementTags)).append("\n");
+                    }
+                    if (!functionHints.isEmpty()) {
+                        contentBuilder.append("代表镜头原型功能(functionHint): ").append(String.join(", ", functionHints)).append("\n");
                     }
                 }
 
@@ -177,5 +190,25 @@ public class TemplateVectorInitRunner implements CommandLineRunner {
             vectorStore.add(documents);
             log.info("成功将 {} 个模板的特征语义刷入 Chroma creation_template VectorStore!", documents.size());
         }
+    }
+
+    private void appendIfPresent(StringBuilder contentBuilder, String prefix, String value) {
+        if (value != null && !value.isBlank()) {
+            contentBuilder.append(prefix).append(value);
+        }
+    }
+
+    private String joinArray(JsonNode node) {
+        if (!node.isArray() || node.isEmpty()) {
+            return "";
+        }
+        List<String> values = new ArrayList<>();
+        for (JsonNode item : node) {
+            String value = item.asText("");
+            if (value != null && !value.isBlank()) {
+                values.add(value);
+            }
+        }
+        return values.isEmpty() ? "" : String.join(", ", values);
     }
 }

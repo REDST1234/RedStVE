@@ -244,3 +244,47 @@ export interface TemplateRecommendData {
   projectId: string;
   recommendations: TemplateRecommendItemData[];
 }
+
+export interface BgmRecommendItemData {
+  rank: number;
+  audioId: string;
+  audioName: string;
+  bpm: number;
+  overallStyle: string;
+  durationSeconds: number;
+  filePath: string;
+  semanticScore: number;
+  energyCurveScore: number;
+  durationBpmScore: number;
+  finalScore: number;
+}
+
+export interface BgmRecommendData {
+  projectId: string;
+  recommendations: BgmRecommendItemData[];
+}
+
+export interface ProjectBgmBindingData {
+  projectId: string;
+  versionId?: string | null;
+  audioId: string;
+  audioName?: string | null;
+  srcPath: string;
+  previewUrl?: string | null;
+  sourceType: string;
+  recommendScore?: number | null;
+  semanticScore?: number | null;
+  energyCurveScore?: number | null;
+  durationBpmScore?: number | null;
+  mixLevel: 'QUIET' | 'BALANCED' | 'DRIVE';
+  volume: number;
+  loopEnabled: boolean;
+  fadeInFrames: number;
+  fadeOutFrames: number;
+  duckingEnabled: boolean;
+  duckingRatio?: number | null;
+  metadata?: Record<string, unknown> | null;
+  status: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}

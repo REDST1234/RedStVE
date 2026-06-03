@@ -8,8 +8,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -227,6 +229,9 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
             score -= 0.3;
         }
 
+        double visualFunctionPenalty = calculateVisualFunctionPenalty(profile, segment);
+        score -= visualFunctionPenalty;
+
         double matDur = profile.material().getDuration() != null ? profile.material().getDuration() : 0.0;
         if (matDur > 0 && matDur < segment.minDuration()) {
             double diff = segment.minDuration() - matDur;
@@ -254,6 +259,123 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
         }
 
         return new SegmentEvaluation(Math.max(0.0, score), unknownTagPenaltyCount);
+    }
+
+    private double calculateVisualFunctionPenalty(
+            TemplateMatchCanonicalizer.CanonicalMaterial profile,
+            TemplateMatchCanonicalizer.CanonicalSegment segment
+    ) {
+        List<String> requiredFunctions = segment.requiredVisualFunctions();
+        if (requiredFunctions == null || requiredFunctions.isEmpty()) {
+            return 0.0;
+        }
+        Set<String> materialFunctions = inferMaterialVisualFunctions(profile);
+        if (materialFunctions.isEmpty()) {
+            return 0.1;
+        }
+        int matched = 0;
+        int expected = 0;
+        for (String function : requiredFunctions) {
+            if (function == null || function.isBlank()) {
+                continue;
+            }
+            String normalized = function.trim().toLowerCase(Locale.ROOT);
+            if (!isSupportedVisualFunction(normalized)) {
+                continue;
+            }
+            expected++;
+            if (materialFunctions.contains(normalized)) {
+                matched++;
+            }
+        }
+        if (expected == 0) {
+            return 0.0;
+        }
+        double coverage = (double) matched / expected;
+        return (1.0 - coverage) * 0.15;
+    }
+
+    private Set<String> inferMaterialVisualFunctions(TemplateMatchCanonicalizer.CanonicalMaterial profile) {
+        Set<String> functions = new HashSet<>();
+        JsonNode rolesNode = profile.semanticTagsNode().path("suitableRoles");
+        if (rolesNode.isArray()) {
+            for (JsonNode node : rolesNode) {
+                String role = node.asText("").trim().toLowerCase(Locale.ROOT);
+                if ("hook".equals(role)) {
+                    functions.add("subject_intro");
+                    functions.add("emotion_push");
+                } else if ("body".equals(role)) {
+                    functions.add("usage_process");
+                    functions.add("detail_showcase");
+                } else if ("climax".equals(role)) {
+                    functions.add("emotion_push");
+                    functions.add("proof_or_comparison");
+                } else if ("outro".equals(role)) {
+                    functions.add("benefit_recall");
+                    functions.add("cta_prompt");
+                    functions.add("static_summary_card");
+                }
+            }
+        }
+
+        for (TemplateMatchCanonicalizer.CanonicalHighlight highlight : profile.highlights()) {
+            String actionState = safeLower(highlight.actionState());
+            String textType = safeLower(highlight.textType());
+            String shotTypeTag = safeUpper(highlight.shotTypeTag());
+            String cameraMovementTag = safeUpper(highlight.cameraMovementTag());
+
+            if ("CLOSE_UP".equals(shotTypeTag)) {
+                functions.add("detail_showcase");
+            }
+            if ("STATIC".equals(cameraMovementTag) && ("title_overlay".equals(textType) || "normal_subtitle".equals(textType))) {
+                functions.add("static_summary_card");
+            }
+            if ("title_overlay".equals(textType)) {
+                functions.add("cta_prompt");
+                functions.add("benefit_recall");
+            }
+            if (actionState.contains("showcase") || actionState.contains("display") || actionState.contains("detail")
+                    || actionState.contains("closeup") || actionState.contains("product")) {
+                functions.add("detail_showcase");
+            }
+            if (actionState.contains("process") || actionState.contains("usage") || actionState.contains("demo")
+                    || actionState.contains("operation") || actionState.contains("apply") || actionState.contains("assemble")
+                    || actionState.contains("cook") || actionState.contains("step")) {
+                functions.add("usage_process");
+            }
+            if (actionState.contains("compare") || actionState.contains("before_after")
+                    || actionState.contains("proof") || actionState.contains("test") || actionState.contains("review")) {
+                functions.add("proof_or_comparison");
+            }
+            if (actionState.contains("intro") || actionState.contains("hook") || actionState.contains("arrival")) {
+                functions.add("subject_intro");
+            }
+            if (actionState.contains("cta") || actionState.contains("prompt") || actionState.contains("summary")
+                    || actionState.contains("recall") || actionState.contains("benefit")) {
+                functions.add("cta_prompt");
+                functions.add("benefit_recall");
+            }
+        }
+        return functions;
+    }
+
+    private boolean isSupportedVisualFunction(String normalized) {
+        return "subject_intro".equals(normalized)
+                || "detail_showcase".equals(normalized)
+                || "usage_process".equals(normalized)
+                || "emotion_push".equals(normalized)
+                || "proof_or_comparison".equals(normalized)
+                || "benefit_recall".equals(normalized)
+                || "cta_prompt".equals(normalized)
+                || "static_summary_card".equals(normalized);
+    }
+
+    private String safeLower(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String safeUpper(String value) {
+        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
     }
 
     private record SegmentEvaluation(double score, int unknownTagPenaltyCount) {

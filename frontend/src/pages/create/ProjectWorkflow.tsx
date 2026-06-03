@@ -160,6 +160,13 @@ export default function CreateProjectWorkflow() {
           >
             去往模板推荐 Debug
           </button>
+          <button 
+            onClick={() => navigate(`/create/detail/${projectId}/bgm-debug`)}
+            className="action-btn secondary"
+            style={{ padding: '6px 12px', fontSize: '0.85rem', marginLeft: '6px' }}
+          >
+            去往 BGM 推荐 Debug
+          </button>
         </div>
       </div>
 

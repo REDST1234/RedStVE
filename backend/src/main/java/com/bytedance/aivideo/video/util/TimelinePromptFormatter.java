@@ -31,6 +31,7 @@ public class TimelinePromptFormatter {
         StringBuilder sb = new StringBuilder();
         sb.append("--- 视频多模态时序日志 (Markdown 剧本格式) ---\n\n");
         sb.append("说明: 关键帧标签【IMAGE_XXX】与多模态输入图片顺序严格一致。\n");
+        sb.append("说明: 关键帧角色用于解释系统为什么选择这张图，你必须结合相邻关键帧的前后变化来理解镜头切换、段落推进和包装密度变化，不能只基于单张画面做静态总结。\n");
         if (result.getSystemMeta() != null && result.getSystemMeta().getVisualWaveform() != null) {
             sb.append("【全局画面变动波形】: 视频被 10 等分，数值越大代表该区间画面切分越剧烈\n");
             sb.append(result.getSystemMeta().getVisualWaveform().toString()).append("\n");
@@ -64,10 +65,11 @@ public class TimelinePromptFormatter {
                     String imageTag = resolveImageTag(frame, imageTagByPath);
                     String timestamp = frame.getTimestamp() != null ? frame.getTimestamp() : "未知时间";
                     String frameRole = frame.getFrameRole() != null ? frame.getFrameRole() : "UNKNOWN";
+                    String frameRoleMeaning = describeFrameRole(frameRole);
                     if (imageTag != null) {
-                        sb.append(String.format("    > %s @ %s (角色:%s)\n", imageTag, timestamp, frameRole));
+                        sb.append(String.format("    > %s @ %s (角色:%s | 用途:%s)\n", imageTag, timestamp, frameRole, frameRoleMeaning));
                     } else {
-                        sb.append(String.format("    > [UNSENT_IMAGE] @ %s (角色:%s)\n", timestamp, frameRole));
+                        sb.append(String.format("    > [UNSENT_IMAGE] @ %s (角色:%s | 用途:%s)\n", timestamp, frameRole, frameRoleMeaning));
                     }
                 }
             }
@@ -105,5 +107,21 @@ public class TimelinePromptFormatter {
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private static String describeFrameRole(String frameRole) {
+        if (frameRole == null) {
+            return "未知用途";
+        }
+        return switch (frameRole) {
+            case "HOOK_START" -> "开场锚点帧，用于建立第一印象";
+            case "HOOK_MID" -> "开场补充帧，用于确认 hook 的主体、动作或构图";
+            case "CUT_BEFORE" -> "切换前帧，用于观察镜头切换前的画面状态";
+            case "CUT_AFTER" -> "切换后帧，用于观察新镜头如何承接前一镜头";
+            case "LONG_SHOT_MID" -> "长镜头中点帧，用于补充镜头内部变化";
+            case "UNIFORM_COVERAGE" -> "均匀覆盖帧，用于补足全片时间分布";
+            case "HIGH_SCORE_DYNAMIC" -> "高动态代表帧，用于补充高画面变动镜头";
+            default -> "辅助系统理解镜头变化的关键帧";
+        };
     }
 }
