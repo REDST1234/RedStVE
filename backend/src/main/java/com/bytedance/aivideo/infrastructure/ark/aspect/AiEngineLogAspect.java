@@ -4,7 +4,10 @@ import com.bytedance.aivideo.infrastructure.ark.model.ArkInputContent;
 import com.bytedance.aivideo.infrastructure.ark.model.ArkInputMessage;
 import com.bytedance.aivideo.infrastructure.ark.model.ArkResponseRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -49,8 +52,8 @@ public class AiEngineLogAspect {
         try {
             Object result = joinPoint.proceed();
             long elapsedMs = System.currentTimeMillis() - startMs;
-            log.info("ai response finished: traceId={}, elapsedMs={}, result={}",
-                    traceId, elapsedMs, limit(toJsonSafely(result)));
+            log.info("ai response finished: traceId={}, elapsedMs={}, response={}",
+                    traceId, elapsedMs, limit(formatResponseForLog(result)));
             return result;
         } catch (Throwable ex) {
             long elapsedMs = System.currentTimeMillis() - startMs;
@@ -113,6 +116,82 @@ public class AiEngineLogAspect {
         } catch (JsonProcessingException ex) {
             return String.valueOf(obj);
         }
+    }
+
+    private String formatResponseForLog(Object result) {
+        if (!(result instanceof JsonNode root)) {
+            return toJsonSafely(result);
+        }
+        try {
+            JsonNode choices = root.path("choices");
+            if (choices.isArray()) {
+                for (JsonNode choice : choices) {
+                    JsonNode message = choice.path("message");
+                    if (message.isObject()) {
+                        String content = textValue(message.get("content"));
+                        if (content != null) {
+                            JsonNode contentJson = parseStructuredContent(content);
+                            if (contentJson != null) {
+                                return objectMapper.writerWithDefaultPrettyPrinter()
+                                        .writeValueAsString(contentJson);
+                            }
+                        }
+                    }
+                }
+            }
+            return "\"content_json_parse_failed\"";
+        } catch (Exception ex) {
+            log.warn("Failed to extract content_json for ai logging", ex);
+            return "\"content_json_parse_failed\"";
+        }
+    }
+
+    private JsonNode parseStructuredContent(String content) {
+        String normalized = normalizeText(content);
+        if (normalized == null || normalized.isBlank()) {
+            return null;
+        }
+        String stripped = stripMarkdownJsonFence(normalized);
+        try {
+            return objectMapper.readTree(stripped);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String stripMarkdownJsonFence(String raw) {
+        String cleaned = raw == null ? "" : raw.trim();
+        if (cleaned.startsWith("```")) {
+            int firstLineEnd = cleaned.indexOf('\n');
+            if (firstLineEnd >= 0) {
+                cleaned = cleaned.substring(firstLineEnd + 1).trim();
+            }
+        }
+        if (cleaned.endsWith("```")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 3).trim();
+        }
+        return cleaned;
+    }
+
+    private String normalizeText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value
+                .replace("\uFEFF", "")
+                .replace("\u00A0", " ")
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .trim();
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private String textValue(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        String text = node.asText();
+        return text == null || text.isBlank() ? null : text;
     }
 
     private String limit(String value) {

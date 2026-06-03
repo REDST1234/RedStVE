@@ -117,6 +117,7 @@ export interface CreationProjectData {
   description?: string;
   status: string;
   templateId?: string;
+  aspectRatio?: string;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -3,6 +3,19 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { creationApi } from '../../api/creation';
 import { useToast } from '../../contexts/ToastContext';
 
+type AspectRatioOption = '9:16' | '16:9' | '1:1' | '4:5';
+
+const ASPECT_RATIO_OPTIONS: Array<{
+  value: AspectRatioOption;
+  label: string;
+  hint: string;
+}> = [
+  { value: '9:16', label: '9:16', hint: '竖屏短视频' },
+  { value: '16:9', label: '16:9', hint: '横屏宣传 / 演示' },
+  { value: '1:1', label: '1:1', hint: '方形社媒' },
+  { value: '4:5', label: '4:5', hint: '信息流 / 电商' }
+];
+
 export default function CreateProjectGeneration() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -12,6 +25,7 @@ export default function CreateProjectGeneration() {
 
   const [projectTitle, setProjectTitle] = useState('');
   const [projectStatus, setProjectStatus] = useState('DRAFT');
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>('9:16');
   
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -19,6 +33,7 @@ export default function CreateProjectGeneration() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const aspectRatioStorageKey = projectId ? `creation:aspectRatio:${projectId}` : '';
 
   useEffect(() => {
     if (!projectId || projectId === 'new') {
@@ -33,12 +48,41 @@ export default function CreateProjectGeneration() {
     };
   }, [projectId]);
 
+  useEffect(() => {
+    if (!aspectRatioStorageKey) {
+      return;
+    }
+    try {
+      const saved = window.localStorage.getItem(aspectRatioStorageKey);
+      if (saved && ASPECT_RATIO_OPTIONS.some((option) => option.value === saved)) {
+        setAspectRatio(saved as AspectRatioOption);
+      }
+    } catch (error) {
+      console.warn('Failed to restore aspect ratio preference', error);
+    }
+  }, [aspectRatioStorageKey]);
+
+  useEffect(() => {
+    if (!aspectRatioStorageKey) {
+      return;
+    }
+    try {
+      window.localStorage.setItem(aspectRatioStorageKey, aspectRatio);
+    } catch (error) {
+      console.warn('Failed to persist aspect ratio preference', error);
+    }
+  }, [aspectRatioStorageKey, aspectRatio]);
+
   const loadProject = async () => {
     if (!projectId) return;
     try {
       const resp = await creationApi.getProject(projectId);
       setProjectTitle(resp.data?.title || '');
       setProjectStatus(resp.data?.status || 'DRAFT');
+      const savedAspectRatio = resp.data?.aspectRatio;
+      if (savedAspectRatio && ASPECT_RATIO_OPTIONS.some((option) => option.value === savedAspectRatio)) {
+        setAspectRatio(savedAspectRatio as AspectRatioOption);
+      }
     } catch (error: any) {
       showToast(error?.message || '加载项目失败', 'error');
     }
@@ -63,10 +107,10 @@ export default function CreateProjectGeneration() {
     setVideoUrl(null);
     try {
       if (forceRegenerate) {
-        await creationApi.regenerateVideo(projectId);
+        await creationApi.regenerateVideo(projectId, { aspectRatio });
         showToast('已清除旧缓存，重新交给大模型编排生成', 'success');
       } else {
-        await creationApi.generateVideo(projectId);
+        await creationApi.generateVideo(projectId, { aspectRatio });
         showToast('视频生成任务已提交，大模型正在思考...', 'success');
       }
       startPolling();
@@ -142,6 +186,51 @@ export default function CreateProjectGeneration() {
             AI 将根据您前序阶段选定的模板结构、补充的素材以及适配策略，为您自动编排视频时间轴，并驱动渲染引擎进行极速出片。
           </p>
 
+          <div
+            style={{
+              marginBottom: '28px',
+              padding: '18px',
+              background: '#f8fafc',
+              border: '1px solid #dbeafe',
+              borderRadius: '14px',
+              textAlign: 'left'
+            }}
+          >
+            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', marginBottom: '12px' }}>
+              选择画面比例
+            </div>
+            <div style={{ color: '#64748b', fontSize: '0.88rem', marginBottom: '14px', lineHeight: 1.6 }}>
+              这里的选择会作为大模型编排和最终渲染的硬约束。我们会把目标画幅直接写进提示词，避免只在渲染末端被动裁切。
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
+              {ASPECT_RATIO_OPTIONS.map((option) => {
+                const selected = aspectRatio === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setAspectRatio(option.value)}
+                    style={{
+                      border: selected ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                      background: selected ? '#eff6ff' : '#ffffff',
+                      borderRadius: '12px',
+                      padding: '14px 12px',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'all 0.2s ease',
+                      boxShadow: selected ? '0 8px 20px rgba(37,99,235,0.12)' : 'none'
+                    }}
+                  >
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a', marginBottom: '4px' }}>
+                      {option.label}
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: '#64748b' }}>{option.hint}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {!isGenerating && !videoUrl && (
             <button 
               className="btn-primary" 
@@ -172,8 +261,37 @@ export default function CreateProjectGeneration() {
           )}
 
           {errorMsg && (
-            <div style={{ marginTop: '20px', padding: '16px', background: '#fef2f2', color: '#ef4444', borderRadius: '8px', border: '1px solid #fca5a5' }}>
-              <strong>渲染失败: </strong> {errorMsg}
+            <div style={{ marginTop: '20px', width: '100%' }}>
+              <div style={{ padding: '16px', background: '#fef2f2', color: '#ef4444', borderRadius: '8px', border: '1px solid #fca5a5' }}>
+                <strong>渲染失败: </strong> {errorMsg}
+              </div>
+
+              {!isGenerating && (
+                <div
+                  style={{
+                    marginTop: '14px',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <button
+                    className="btn-primary"
+                    style={{ padding: '10px 18px', borderRadius: '8px' }}
+                    onClick={() => startGeneration()}
+                  >
+                    重试渲染
+                  </button>
+                  <button
+                    className="btn-outline"
+                    style={{ padding: '10px 18px', borderRadius: '8px' }}
+                    onClick={() => startGeneration(true)}
+                  >
+                    重新生成
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -197,6 +315,9 @@ export default function CreateProjectGeneration() {
               </div>
               
               <div style={{ marginTop: '20px' }}>
+                <div style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '12px' }}>
+                  本次按 {aspectRatio} 画面比例完成编排与渲染
+                </div>
                 <button 
                   className="btn-outline" 
                   onClick={() => startGeneration(true)}

@@ -24,6 +24,8 @@ public class CreationProjectEntity {
     private String templateSnapshotJson;
     
     private String status; // DRAFT/MATCHING/ADAPTING/COMPOSED/EXPORTED
+
+    private String renderAspectRatio;
     
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

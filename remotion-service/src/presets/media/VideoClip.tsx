@@ -5,6 +5,7 @@
 import React from 'react';
 import { Video } from '@remotion/media';
 import { useVideoConfig } from 'remotion';
+import { normalizeMediaStyle } from './normalizeMediaStyle';
 
 interface VideoClipProps {
   src: string;
@@ -14,7 +15,7 @@ interface VideoClipProps {
   playbackRate?: number;
   loop?: boolean;
   muted?: boolean;
-  style?: React.CSSProperties;
+  style?: React.CSSProperties | Record<string, unknown>;
 }
 
 export const VideoClip: React.FC<VideoClipProps> = ({
@@ -29,12 +30,7 @@ export const VideoClip: React.FC<VideoClipProps> = ({
 }) => {
   const { fps: _fps } = useVideoConfig();
 
-  const videoStyle: React.CSSProperties = {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover' as const,
-    ...style,
-  };
+  const videoStyle = normalizeMediaStyle(style, 'cover');
 
   return (
     <Video

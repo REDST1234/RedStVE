@@ -56,8 +56,17 @@ import java.util.stream.Collectors;
 public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMapper, CreationProjectEntity> implements CreationProjectService {
 
     private static final String PROJECT_STATUS_DRAFT = "DRAFT";
+    private static final String ASPECT_RATIO_PORTRAIT = "9:16";
+    private static final String ASPECT_RATIO_LANDSCAPE = "16:9";
+    private static final String ASPECT_RATIO_SQUARE = "1:1";
+    private static final String ASPECT_RATIO_FOUR_FIVE = "4:5";
+    private static final int DEFAULT_PORTRAIT_WIDTH = 1080;
+    private static final int DEFAULT_PORTRAIT_HEIGHT = 1920;
     private static final int DEFAULT_LANDSCAPE_WIDTH = 1920;
     private static final int DEFAULT_LANDSCAPE_HEIGHT = 1080;
+    private static final int DEFAULT_SQUARE_SIZE = 1080;
+    private static final int DEFAULT_FOUR_FIVE_WIDTH = 1080;
+    private static final int DEFAULT_FOUR_FIVE_HEIGHT = 1350;
     private static final int DEFAULT_CANVAS_FPS = 30;
     private static final long ORCHESTRATION_CACHE_TTL_DAYS = 7;
     private static final String RENDER_TASK_KEY_PREFIX = "render:task:";
@@ -186,30 +195,28 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void generateVideo(String projectId) {
-        generateVideoInternal(projectId, false);
+    public void generateVideo(String projectId, String aspectRatio) {
+        generateVideoInternal(projectId, false, aspectRatio);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void regenerateVideo(String projectId) {
+    public void regenerateVideo(String projectId, String aspectRatio) {
         clearRenderCache(projectId);
-        generateVideoInternal(projectId, true);
+        generateVideoInternal(projectId, true, aspectRatio);
     }
 
-    private void generateVideoInternal(String projectId, boolean forceRefresh) {
+    private void generateVideoInternal(String projectId, boolean forceRefresh, String aspectRatio) {
         CreationProjectEntity project = requireActiveProject(projectId);
-        CompositionScript script = forceRefresh ? null : loadRetryableScript(projectId, project);
-        if (script != null) {
-            script = videoOrchestrationService.sanitizeScript(script);
-            log.info("Reuse cached composition script for render retry: projectId={}", projectId);
-        } else if (forceRefresh) {
-            log.info("Force regenerate composition script via LLM: projectId={}", projectId);
+        String normalizedAspectRatio = normalizeAspectRatio(
+                aspectRatio != null && !aspectRatio.isBlank() ? aspectRatio : project.getRenderAspectRatio()
+        );
+        if (normalizedAspectRatio != null && !normalizedAspectRatio.equals(project.getRenderAspectRatio())) {
+            project.setRenderAspectRatio(normalizedAspectRatio);
         }
-
-        String description = project.getDescription() != null && !project.getDescription().isBlank() 
+        String description = project.getDescription() != null && !project.getDescription().isBlank()
                 ? project.getDescription() : project.getTitle();
-                
+
         // 获取真实素材
         List<CreativeMaterialEntity> materials = creativeMaterialMapper.selectList(
                 new LambdaQueryWrapper<CreativeMaterialEntity>()
@@ -218,12 +225,22 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
                         .isNull(CreativeMaterialEntity::getDeletedAt)
         );
 
+        CanvasConfig inferredCanvas = inferCanvasConfig(materials);
+        CanvasConfig targetCanvas = resolveTargetCanvas(normalizedAspectRatio, inferredCanvas);
+        CompositionScript script = forceRefresh ? null : loadRetryableScript(projectId, project, targetCanvas);
+        if (script != null) {
+            script = videoOrchestrationService.sanitizeScript(script);
+            log.info("Reuse cached composition script for render retry: projectId={}, aspectRatio={}", projectId, normalizedAspectRatio);
+        } else if (forceRefresh) {
+            log.info("Force regenerate composition script via LLM: projectId={}, aspectRatio={}", projectId, normalizedAspectRatio);
+        }
+
         CreationProjectBgmBindingEntity selectedBgm = creationProjectBgmBindingService.findCurrentBindingEntity(projectId);
         List<Map<String, Object>> assetList = buildRenderAssetList(projectId, materials);
         String templateBrief = buildTemplateBrief(project);
         String assetBrief = buildAssetBrief(assetList);
         String selectedBgmBrief = buildSelectedBgmBrief(selectedBgm);
-        CanvasConfig inferredCanvas = inferCanvasConfig(materials);
+        String canvasBrief = buildCanvasBrief(normalizedAspectRatio, targetCanvas);
 
         if (script == null) {
             // 调用 LLM 智能编排
@@ -231,15 +248,16 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
                     description,
                     templateBrief,
                     assetBrief,
-                    selectedBgmBrief
+                    selectedBgmBrief,
+                    canvasBrief
             );
             script = orchestrationResult.getScript();
             script.setProjectId(projectId);
             applySelectedBgm(script, selectedBgm);
-            applyCanvas(script, inferredCanvas);
+            applyCanvas(script, targetCanvas);
             persistOrchestrationArtifacts(projectId, orchestrationResult, script);
         } else {
-            applyCanvas(script, inferredCanvas);
+            applyCanvas(script, targetCanvas);
         }
         normalizeMediaSources(script);
 
@@ -802,8 +820,71 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         return fallback;
     }
 
-    private void applyCanvas(CompositionScript script, CanvasConfig inferredCanvas) {
-        if (script == null || inferredCanvas == null) {
+    private String normalizeAspectRatio(String aspectRatio) {
+        if (aspectRatio == null || aspectRatio.isBlank()) {
+            return null;
+        }
+        String normalized = aspectRatio.trim();
+        if (ASPECT_RATIO_PORTRAIT.equals(normalized)
+                || ASPECT_RATIO_LANDSCAPE.equals(normalized)
+                || ASPECT_RATIO_SQUARE.equals(normalized)
+                || ASPECT_RATIO_FOUR_FIVE.equals(normalized)) {
+            return normalized;
+        }
+        throw new BizException(ErrorCode.INVALID_REQUEST, "不支持的画面比例: " + aspectRatio);
+    }
+
+    private CanvasConfig resolveTargetCanvas(String aspectRatio, CanvasConfig inferredCanvas) {
+        if (aspectRatio == null) {
+            return inferredCanvas;
+        }
+        CanvasConfig canvas = new CanvasConfig();
+        switch (aspectRatio) {
+            case ASPECT_RATIO_PORTRAIT -> {
+                canvas.setWidth(DEFAULT_PORTRAIT_WIDTH);
+                canvas.setHeight(DEFAULT_PORTRAIT_HEIGHT);
+            }
+            case ASPECT_RATIO_LANDSCAPE -> {
+                canvas.setWidth(DEFAULT_LANDSCAPE_WIDTH);
+                canvas.setHeight(DEFAULT_LANDSCAPE_HEIGHT);
+            }
+            case ASPECT_RATIO_SQUARE -> {
+                canvas.setWidth(DEFAULT_SQUARE_SIZE);
+                canvas.setHeight(DEFAULT_SQUARE_SIZE);
+            }
+            case ASPECT_RATIO_FOUR_FIVE -> {
+                canvas.setWidth(DEFAULT_FOUR_FIVE_WIDTH);
+                canvas.setHeight(DEFAULT_FOUR_FIVE_HEIGHT);
+            }
+            default -> throw new BizException(ErrorCode.INVALID_REQUEST, "不支持的画面比例: " + aspectRatio);
+        }
+        int fps = inferredCanvas != null && inferredCanvas.getFps() != null && inferredCanvas.getFps() > 0
+                ? inferredCanvas.getFps()
+                : DEFAULT_CANVAS_FPS;
+        canvas.setFps(fps);
+        return canvas;
+    }
+
+    private String buildCanvasBrief(String aspectRatio, CanvasConfig targetCanvas) {
+        if (targetCanvas == null) {
+            return "当前未提供有效的画幅约束，请保持默认画幅。";
+        }
+        StringBuilder sb = new StringBuilder("目标画幅要求：\n");
+        if (aspectRatio == null) {
+            sb.append("- 当前未显式选择画面比例，请以系统推断的 canvas 为准。\n");
+        } else {
+            sb.append("- 用户已显式选择画面比例：").append(aspectRatio).append("。\n");
+            sb.append("- 你必须严格按照该比例编排所有 scenes、文字排版、背景构图与媒体 fit，禁止擅自改成其他比例。\n");
+        }
+        sb.append("- 最终 canvas 必须满足：width=").append(targetCanvas.getWidth())
+                .append("，height=").append(targetCanvas.getHeight())
+                .append("，fps=").append(targetCanvas.getFps())
+                .append("。\n");
+        return sb.toString().trim();
+    }
+
+    private void applyCanvas(CompositionScript script, CanvasConfig targetCanvas) {
+        if (script == null || targetCanvas == null) {
             return;
         }
         CanvasConfig canvas = script.getCanvas();
@@ -811,16 +892,9 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             canvas = new CanvasConfig();
             script.setCanvas(canvas);
         }
-
-        if (canvas.getWidth() == null || canvas.getWidth() <= 0) {
-            canvas.setWidth(inferredCanvas.getWidth());
-        }
-        if (canvas.getHeight() == null || canvas.getHeight() <= 0) {
-            canvas.setHeight(inferredCanvas.getHeight());
-        }
-        if (canvas.getFps() == null || canvas.getFps() <= 0) {
-            canvas.setFps(inferredCanvas.getFps());
-        }
+        canvas.setWidth(targetCanvas.getWidth());
+        canvas.setHeight(targetCanvas.getHeight());
+        canvas.setFps(targetCanvas.getFps());
     }
 
     private void normalizeMediaSources(CompositionScript script) {
@@ -947,7 +1021,7 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         return response;
     }
 
-    private CompositionScript loadRetryableScript(String projectId, CreationProjectEntity project) {
+    private CompositionScript loadRetryableScript(String projectId, CreationProjectEntity project, CanvasConfig targetCanvas) {
         if (!"FAILED".equals(project.getStatus())) {
             return null;
         }
@@ -956,11 +1030,33 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             return null;
         }
         try {
-            return objectMapper.readValue(json, CompositionScript.class);
+            CompositionScript script = objectMapper.readValue(json, CompositionScript.class);
+            if (!matchesCanvas(script, targetCanvas)) {
+                log.info("Skip cached composition script because canvas changed: projectId={}, target={}x{}, cached={}x{}",
+                        projectId,
+                        targetCanvas == null ? null : targetCanvas.getWidth(),
+                        targetCanvas == null ? null : targetCanvas.getHeight(),
+                        script != null && script.getCanvas() != null ? script.getCanvas().getWidth() : null,
+                        script != null && script.getCanvas() != null ? script.getCanvas().getHeight() : null);
+                return null;
+            }
+            return script;
         } catch (Exception e) {
             log.warn("Failed to read cached composition script for retry: projectId={}", projectId, e);
             return null;
         }
+    }
+
+    private boolean matchesCanvas(CompositionScript script, CanvasConfig targetCanvas) {
+        if (script == null || targetCanvas == null || script.getCanvas() == null) {
+            return false;
+        }
+        return samePositive(script.getCanvas().getWidth(), targetCanvas.getWidth())
+                && samePositive(script.getCanvas().getHeight(), targetCanvas.getHeight());
+    }
+
+    private boolean samePositive(Integer actual, Integer expected) {
+        return actual != null && expected != null && actual > 0 && expected > 0 && actual.intValue() == expected.intValue();
     }
 
     private void persistOrchestrationArtifacts(String projectId, VideoOrchestrationResult orchestrationResult, CompositionScript script) {

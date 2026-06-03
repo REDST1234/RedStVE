@@ -29,6 +29,23 @@ import java.util.Set;
 public class SlotMatchLlmServiceImpl implements SlotMatchLlmService {
 
     private static final Set<String> ALLOWED_MATCH_STATUS = Set.of("MATCHED", "PARTIAL", "MISSING", "VETOED");
+    private static final Set<String> PROTECTED_VISUAL_KEYWORDS = Set.of(
+            "logo",
+            "brand_logo",
+            "brandmark",
+            "wordmark",
+            "icon",
+            "sticker",
+            "badge",
+            "illustration",
+            "mascot",
+            "挂件",
+            "插图",
+            "图标",
+            "角标",
+            "徽标",
+            "徽章"
+    );
     private static final Set<String> EXECUTABLE_STRATEGIES = Set.of(
             "TRIM_AND_CUT",
             "SMART_CROP",
@@ -185,6 +202,12 @@ public class SlotMatchLlmServiceImpl implements SlotMatchLlmService {
             }
             return;
         }
+        if (isProtectedVisualAsset(matchedMaterial)) {
+            if (chain.size() > 0) {
+                throw new BizException(ErrorCode.INVALID_REQUEST, "LOGO/插图/挂件图等保护类 IMAGE 素材不允许返回可执行 strategyChain");
+            }
+            return;
+        }
         for (JsonNode strategy : chain) {
             String strategyType = strategy.path("strategyType").asText("").trim().toUpperCase(Locale.ROOT);
             if (!EXECUTABLE_STRATEGIES.contains(strategyType)) {
@@ -275,5 +298,74 @@ public class SlotMatchLlmServiceImpl implements SlotMatchLlmService {
 
     private double clamp(double value) {
         return Math.max(0.0, Math.min(1.0, value));
+    }
+
+    private boolean isProtectedVisualAsset(CreativeMaterialEntity material) {
+        if (material == null || !"IMAGE".equalsIgnoreCase(material.getMaterialType())) {
+            return false;
+        }
+        if (containsProtectedKeyword(material.getOriginalFileName())
+                || containsProtectedKeyword(material.getDescription())
+                || containsProtectedKeyword(material.getTags())
+                || containsProtectedKeyword(material.getTextContent())) {
+            return true;
+        }
+        String profileJson = material.getProfileJson();
+        if (profileJson == null || profileJson.isBlank()) {
+            return false;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(profileJson);
+            if (nodeContainsProtectedKeyword(root.path("semanticTags").path("mainEntities"))
+                    || nodeContainsProtectedKeyword(root.path("semanticTags").path("mainKeywords"))
+                    || nodeContainsProtectedKeyword(root.path("semanticTags").path("overallStyle"))
+                    || nodeContainsProtectedKeyword(root.path("highlights"))
+                    || nodeContainsProtectedKeyword(root.path("semanticTags"))) {
+                return true;
+            }
+        } catch (Exception ex) {
+            return containsProtectedKeyword(profileJson);
+        }
+        return containsProtectedKeyword(profileJson);
+    }
+
+    private boolean nodeContainsProtectedKeyword(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return false;
+        }
+        if (node.isTextual()) {
+            return containsProtectedKeyword(node.asText(""));
+        }
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                if (nodeContainsProtectedKeyword(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (node.isObject()) {
+            var fields = node.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> entry = fields.next();
+                if (containsProtectedKeyword(entry.getKey()) || nodeContainsProtectedKeyword(entry.getValue())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean containsProtectedKeyword(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        for (String keyword : PROTECTED_VISUAL_KEYWORDS) {
+            if (normalized.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

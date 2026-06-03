@@ -59,6 +59,7 @@
 | `motion.ken_burns` | 运镜 | 图片伪运镜（推/拉/平移） | `src, startScale, endScale, startPos, endPos, easing` |
 | `text.fade_title` | 文字 | 标题卡淡入淡出 | `text, fontSize, color, fontWeight, position, positionPreset, layoutMode, easing` |
 | `text.kinetic_pop` | 文字 | 冲击型弹簧大字报 | `text, fontSize, color, fontWeight, position, positionPreset, layoutMode, scaleFrom, scaleTo, rotationFrom, rotationTo, enterFrames, settleFrames` |
+| `text.hero_billboard` | 文字 | 版式型大字报/卖点排版 | `text/texts, layoutPattern, animationMode, easingPreset, fontSize, color, accentColor, fontWeight, layoutMode, strokeEnabled, strokeColor, strokeWidth, glowColor, glowBlur, glowOpacity` |
 | `text.typewriter` | 文字 | 打字机短标题 | `text, fontSize, color, fontWeight, position, positionPreset, layoutMode, charIntervalFrames, cursor, cursorColor, cursorScale` |
 | `text.mask_reveal` | 文字 | 遮罩滑入文字 | `text, fontSize, color, fontWeight, position, positionPreset, layoutMode, revealDirection, revealFrames` |
 | `text.word_highlight` | 文字 | 逐词高亮短句 | `text/tokens, highlightWords, fontSize, color, highlightColor, highlightBackground, position, positionPreset, layoutMode, wordDurationInFrames` |
@@ -89,6 +90,7 @@
 典型能力：
 
 - 文字动效：`text.kinetic_pop`、`text.typewriter`、`text.mask_reveal`、`text.word_highlight`
+- 版式型大字报：`text.hero_billboard`
 - 叠加包装：`overlay.flash`、`overlay.badge_pop`、`overlay.glow_frame`
 - 背景库：`bg.mesh_gradient`、`bg.tech_grid`、`bg.noise_grain`
 - 现有已接入：`text.fade_title`、`overlay.light_leak`
@@ -231,7 +233,7 @@
 
 | 能力类别 | 当前状态 | 说明 |
 |---------|----------|------|
-| 纯代码型视觉特效 | 已接入增强版 | 已有 `text.fade_title`、`text.kinetic_pop`、`text.typewriter`、`text.mask_reveal`、`text.word_highlight`、`overlay.light_leak`、`overlay.flash`、`overlay.badge_pop`、`overlay.glow_frame`，并新增 `bg.mesh_gradient`、`bg.tech_grid`、`bg.noise_grain` 背景库 |
+| 纯代码型视觉特效 | 已接入增强版 | 已有 `text.fade_title`、`text.kinetic_pop`、`text.hero_billboard`、`text.typewriter`、`text.mask_reveal`、`text.word_highlight`、`overlay.light_leak`、`overlay.flash`、`overlay.badge_pop`、`overlay.glow_frame`，并新增 `bg.mesh_gradient`、`bg.tech_grid`、`bg.noise_grain` 背景库 |
 | 资源型视觉特效 | 未接入 | Lottie / 透明视频 / GIF 目前还未接系统主链 |
 | 音频/音效型能力 | 部分接入 | 顶层 `bgm` 与 `media.audio` 已通，SFX 资源语义尚未产品化 |
 | 字幕与文本理解型能力 | 部分接入 | 已有基础标题与字幕，缺逐词高亮和高级字幕体系 |

@@ -45,8 +45,8 @@ public class VideoOrchestrationService {
         this.objectMapper = objectMapper;
     }
 
-    public CompositionScript orchestrateVideo(String projectDescription, String templateBrief, String assetBrief, String selectedBgmBrief) {
-        return orchestrateVideoResult(projectDescription, templateBrief, assetBrief, selectedBgmBrief).getScript();
+    public CompositionScript orchestrateVideo(String projectDescription, String templateBrief, String assetBrief, String selectedBgmBrief, String canvasBrief) {
+        return orchestrateVideoResult(projectDescription, templateBrief, assetBrief, selectedBgmBrief, canvasBrief).getScript();
     }
 
     public CompositionScript sanitizeScript(CompositionScript script) {
@@ -78,14 +78,16 @@ public class VideoOrchestrationService {
             String projectDescription,
             String templateBrief,
             String assetBrief,
-            String selectedBgmBrief
+            String selectedBgmBrief,
+            String canvasBrief
     ) {
         String promptText = String.format(
                 ArkPromptTemplates.REMOTION_ORCHESTRATOR_JSON,
                 projectDescription,
                 templateBrief,
                 assetBrief,
-                selectedBgmBrief
+                selectedBgmBrief,
+                canvasBrief
         );
 
         ArkResponseRequest request = new ArkResponseRequest();

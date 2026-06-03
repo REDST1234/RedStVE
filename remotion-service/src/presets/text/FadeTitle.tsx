@@ -73,17 +73,18 @@ export const FadeTitle: React.FC<FadeTitleProps> = ({
   const opacity = Math.min(enterOpacity, exitOpacity);
 
   return (
-    <AbsoluteFill style={layout.containerStyle}>
+    <AbsoluteFill>
       <div
         style={{
+          ...layout.wrapperStyle,
           fontFamily,
           fontSize,
           fontWeight,
           color,
           textShadow,
           opacity,
-          transform: `translateY(${enterY}px)`,
-          textAlign: 'center',
+          transform: `${layout.wrapperStyle.transform ?? ''} translateY(${enterY}px)`.trim(),
+          textAlign: layout.textAlign,
           padding: '0 40px',
           maxWidth: layout.maxWidth,
           lineHeight: 1.4,

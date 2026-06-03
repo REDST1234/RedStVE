@@ -45,7 +45,7 @@ export const WordHighlightText: React.FC<WordHighlightTextProps> = ({
   wordDurationInFrames = 10,
   textShadow = '0 2px 10px rgba(0,0,0,0.4)',
   gap = 10,
-  textAlign = 'center',
+  textAlign,
   highlightScale = 1.08,
 }) => {
   const frame = useCurrentFrame();
@@ -87,21 +87,17 @@ export const WordHighlightText: React.FC<WordHighlightTextProps> = ({
   });
 
   return (
-    <AbsoluteFill style={layout.containerStyle}>
+    <AbsoluteFill>
       <div
         style={{
+          ...layout.wrapperStyle,
           display: 'flex',
           flexWrap: 'wrap',
-          justifyContent:
-            layout.position.x === 'center'
-              ? 'center'
-              : layout.position.x === 'right'
-                ? 'flex-end'
-                : 'flex-start',
+          justifyContent: layout.contentJustify,
           gap,
           maxWidth: layout.maxWidth,
           opacity: enterOpacity,
-          textAlign,
+          textAlign: textAlign ?? layout.textAlign,
         }}
       >
         {derivedTokens.map((token, index) => {

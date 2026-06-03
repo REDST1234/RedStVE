@@ -17,7 +17,7 @@ interface MaskRevealTextProps {
   position?: { x: string | number; y: string | number };
   positionPreset?: TextPositionPreset;
   layoutMode?: LayoutMode;
-  revealDirection?: 'left_to_right' | 'bottom_to_top' | 'top_to_bottom';
+  revealDirection?: 'left_to_right' | 'right_to_left' | 'bottom_to_top' | 'top_to_bottom';
   revealFrames?: number;
   textShadow?: string;
   letterSpacing?: string | number;
@@ -38,7 +38,7 @@ export const MaskRevealText: React.FC<MaskRevealTextProps> = ({
   revealFrames = 22,
   textShadow = '0 4px 16px rgba(0,0,0,0.3)',
   letterSpacing = 0,
-  textAlign = 'center',
+  textAlign,
   maxWidth = '88%',
   maskPadding = 16,
 }) => {
@@ -80,6 +80,8 @@ export const MaskRevealText: React.FC<MaskRevealTextProps> = ({
         return `inset(${(1 - progress) * 100}% -${maskPadding}px -${maskPadding}px -${maskPadding}px)`;
       case 'top_to_bottom':
         return `inset(-${maskPadding}px -${maskPadding}px ${(1 - progress) * 100}% -${maskPadding}px)`;
+      case 'right_to_left':
+        return `inset(-${maskPadding}px -${maskPadding}px -${maskPadding}px ${(1 - progress) * 100}%)`;
       case 'left_to_right':
       default:
         return `inset(-${maskPadding}px ${(1 - progress) * 100}% -${maskPadding}px -${maskPadding}px)`;
@@ -87,14 +89,15 @@ export const MaskRevealText: React.FC<MaskRevealTextProps> = ({
   })();
 
   return (
-    <AbsoluteFill style={layout.containerStyle}>
+    <AbsoluteFill>
       <div
         style={{
+          ...layout.wrapperStyle,
           maxWidth: layout.maxWidth,
           overflow: 'hidden',
           clipPath,
           opacity,
-          transform: `translateY(${offsetY}px)`,
+          transform: `${layout.wrapperStyle.transform ?? ''} translateY(${offsetY}px)`.trim(),
         }}
       >
         <div
@@ -105,7 +108,7 @@ export const MaskRevealText: React.FC<MaskRevealTextProps> = ({
             color,
             lineHeight: 1.18,
             letterSpacing,
-            textAlign,
+            textAlign: textAlign ?? layout.textAlign,
             textShadow,
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',

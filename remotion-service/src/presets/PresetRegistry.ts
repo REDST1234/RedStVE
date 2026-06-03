@@ -9,15 +9,21 @@ export type PresetId =
   | 'motion.ken_burns'
   | 'text.fade_title'
   | 'text.kinetic_pop'
+  | 'text.hero_billboard'
   | 'text.typewriter'
   | 'text.mask_reveal'
   | 'text.word_highlight'
+  | 'text.counter_number'
+  | 'text.label_chip'
   | 'caption.subtitle'
   | 'transition.fade' | 'transition.slide' | 'transition.wipe'
   | 'overlay.light_leak'
   | 'overlay.flash'
   | 'overlay.badge_pop'
-  | 'overlay.glow_frame';
+  | 'overlay.glow_frame'
+  | 'backing.solid_plate'
+  | 'backing.capsule'
+  | 'backing.glass_plate';
 
 export interface PresetEntry<TProps = unknown> {
   id: PresetId;

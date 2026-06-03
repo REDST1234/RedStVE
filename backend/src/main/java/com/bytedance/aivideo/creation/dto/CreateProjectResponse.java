@@ -16,6 +16,7 @@ public class CreateProjectResponse {
     private String status;
     private String templateId;
     private String templateSnapshotId;
+    private String aspectRatio;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 }

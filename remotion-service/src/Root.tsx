@@ -107,7 +107,7 @@ const showcaseScript: CompositionScript = {
       ]
     },
     {
-      sceneId: "scene_2_product_card",
+      sceneId: "scene_2_billboard_layouts",
       sceneIndex: 1,
       role: "body",
       durationInFrames: 120,
@@ -134,19 +134,26 @@ const showcaseScript: CompositionScript = {
           }
         },
         {
-          layerId: "title_2",
-          preset: "text.word_highlight",
+          layerId: "title_2_billboard",
+          preset: "text.hero_billboard",
           enterAtFrame: 20,
           durationInFrames: 100,
           params: {
-            tokens: ["Ken", "Burns", "运镜", "演示"],
-            highlightWords: ["运镜", "演示"],
-            fontSize: 58,
-            color: "#FFFFFF",
-            highlightColor: "#111111",
-            highlightBackground: "#F8C630",
-            position: { x: "center", y: "45%" },
-            wordDurationInFrames: 12
+            texts: ["拉新促活更直接", "转化复购更自动"],
+            layoutPattern: "top_bottom_split",
+            animationMode: "whole_pop",
+            easingPreset: "expo_out",
+            fontSize: 66,
+            color: "#F8FAFC",
+            accentColor: "#67E8F9",
+            layoutMode: "portrait",
+            letterSpacing: "0.1em",
+            strokeEnabled: true,
+            strokeColor: "#06111F",
+            strokeWidth: 2.4,
+            glowColor: "#22D3EE",
+            glowBlur: 28,
+            glowOpacity: 0.32
           }
         }
       ]
@@ -241,6 +248,393 @@ const showcaseScript: CompositionScript = {
   ]
 };
 
+/** 新增组件演示脚本 — text.counter_number / text.label_chip / backing.* */
+const newComponentsShowcaseScript: CompositionScript = {
+  canvas: { width: 1080, height: 1920, fps: 30 },
+  globalStyle: { fontFamily: 'Noto Sans SC', backgroundColor: '#0B1120' },
+  scenes: [
+    // ═══ Scene 1: 数据看板 — glass_plate + counter_number + label_chip ═══
+    {
+      sceneId: 'scene_1_data_dashboard',
+      sceneIndex: 0,
+      role: 'hook',
+      durationInFrames: 96,
+      layers: [
+        // 背景
+        {
+          layerId: 'bg_mesh',
+          preset: 'bg.mesh_gradient',
+          params: {
+            colors: ['#0A1628', '#0F2B4C', '#112240', '#3B82F6'],
+            intensity: 0.9,
+          },
+        },
+        {
+          layerId: 'bg_noise',
+          preset: 'bg.noise_grain',
+          params: {
+            backgroundColor: 'transparent',
+            grainOpacity: 0.09,
+            scale: 1,
+          },
+        },
+        // 玻璃底板
+        {
+          layerId: 'dashboard_glass',
+          preset: 'backing.glass_plate',
+          enterAtFrame: 8,
+          durationInFrames: 84,
+          params: {
+            width: '84%',
+            height: '58%',
+            blurAmount: 22,
+            tintColor: 'rgba(255,255,255,0.10)',
+            borderRadius: 32,
+            borderColor: 'rgba(255,255,255,0.15)',
+            borderWidth: 1,
+            position: { x: 'center', y: 'center' },
+            shadowEnabled: true,
+            shadowColor: 'rgba(0,0,0,0.25)',
+          },
+        },
+        // 标题 chip
+        {
+          layerId: 'label_dashboard_title',
+          preset: 'text.label_chip',
+          enterAtFrame: 14,
+          durationInFrames: 74,
+          params: {
+            text: '📊 实时数据',
+            variant: 'filled',
+            bgColor: '#3B82F6',
+            color: '#FFFFFF',
+            fontSize: 26,
+            fontWeight: 700,
+            position: { x: 'center', y: '24%' },
+            icon: '📊',
+          },
+        },
+        // 数字计数器 - GMV
+        {
+          layerId: 'counter_gmv',
+          preset: 'text.counter_number',
+          enterAtFrame: 22,
+          durationInFrames: 66,
+          params: {
+            value: 1280,
+            prefix: '¥',
+            suffix: '万',
+            decimals: 0,
+            fontSize: 84,
+            color: '#F8FAFC',
+            fontWeight: 900,
+            scrollFrames: 34,
+            digitGap: 4,
+            position: { x: 'center', y: '38%' },
+          },
+        },
+        // 数字计数器 - 增长
+        {
+          layerId: 'counter_growth',
+          preset: 'text.counter_number',
+          enterAtFrame: 28,
+          durationInFrames: 60,
+          params: {
+            value: 34.8,
+            suffix: '%',
+            decimals: 1,
+            fontSize: 64,
+            color: '#67E8F9',
+            fontWeight: 800,
+            scrollFrames: 28,
+            digitGap: 2,
+            position: { x: 'center', y: '56%' },
+          },
+        },
+        // 底部标签
+        {
+          layerId: 'label_outlined',
+          preset: 'text.label_chip',
+          enterAtFrame: 38,
+          durationInFrames: 50,
+          params: {
+            text: 'GMV 环比增长',
+            variant: 'outlined',
+            color: '#94A3B8',
+            borderColor: 'rgba(148,163,184,0.5)',
+            fontSize: 22,
+            position: { x: 'center', y: '70%' },
+          },
+        },
+      ],
+    },
+    // ═══ Scene 2: 信息卡片 — solid_plate + capsule + text ═══
+    {
+      sceneId: 'scene_2_info_cards',
+      sceneIndex: 1,
+      role: 'body',
+      durationInFrames: 90,
+      layers: [
+        {
+          layerId: 'bg_tech',
+          preset: 'bg.tech_grid',
+          params: {
+            backgroundColor: '#06111F',
+            lineColor: '#475569',
+            accentColor: '#F8C630',
+            gridSize: 68,
+            lineOpacity: 0.18,
+            driftSpeed: 14,
+          },
+        },
+        {
+          layerId: 'bg_noise',
+          preset: 'bg.noise_grain',
+          params: {
+            backgroundColor: 'transparent',
+            grainOpacity: 0.07,
+            scale: 0.9,
+          },
+        },
+        // 实色底板 - 上方卡片
+        {
+          layerId: 'solid_plate_top',
+          preset: 'backing.solid_plate',
+          enterAtFrame: 6,
+          durationInFrames: 78,
+          params: {
+            width: '78%',
+            height: 'auto',
+            color: '#1E293B',
+            opacity: 0.8,
+            borderRadius: 24,
+            padding: 36,
+            position: { x: 'center', y: '32%' },
+            shadowEnabled: true,
+            shadowColor: 'rgba(0,0,0,0.35)',
+          },
+        },
+        // 胶囊底板 + 文字 — 衬在关键词后面
+        {
+          layerId: 'capsule_keyword',
+          preset: 'backing.capsule',
+          enterAtFrame: 10,
+          durationInFrames: 72,
+          params: {
+            color: '#F8C630',
+            opacity: 0.78,
+            borderRadius: 999,
+            paddingX: 32,
+            paddingY: 16,
+            position: { x: 'center', y: '28%' },
+            shadowEnabled: true,
+            shadowColor: 'rgba(248,198,48,0.28)',
+          },
+        },
+        {
+          layerId: 'text_on_capsule',
+          preset: 'text.kinetic_pop',
+          enterAtFrame: 12,
+          durationInFrames: 72,
+          params: {
+            text: '高转化',
+            fontSize: 56,
+            color: '#0F172A',
+            fontWeight: 900,
+            position: { x: 'center', y: '28%' },
+            scaleFrom: 1.2,
+            rotationFrom: 0,
+            enterFrames: 12,
+            settleFrames: 14,
+          },
+        },
+        // 实色底板 - 下方卡片
+        {
+          layerId: 'solid_plate_bottom',
+          preset: 'backing.solid_plate',
+          enterAtFrame: 22,
+          durationInFrames: 62,
+          params: {
+            width: '72%',
+            height: 'auto',
+            color: '#312E81',
+            opacity: 0.7,
+            borderRadius: 20,
+            padding: 30,
+            position: { x: 'center', y: '58%' },
+            borderColor: 'rgba(99,102,241,0.35)',
+            borderWidth: 1.5,
+            shadowEnabled: true,
+            shadowColor: 'rgba(49,46,129,0.25)',
+          },
+        },
+        {
+          layerId: 'text_reveal_on_plate',
+          preset: 'text.mask_reveal',
+          enterAtFrame: 26,
+          durationInFrames: 56,
+          params: {
+            text: 'AI 编排·自动成片',
+            fontSize: 52,
+            color: '#E0E7FF',
+            fontWeight: 800,
+            position: { x: 'center', y: '58%' },
+            revealDirection: 'left_to_right',
+            revealFrames: 22,
+            textShadow: '0 2px 12px rgba(0,0,0,0.4)',
+          },
+        },
+        // soft 变体 chip
+        {
+          layerId: 'label_soft',
+          preset: 'text.label_chip',
+          enterAtFrame: 40,
+          durationInFrames: 44,
+          params: {
+            text: '✨ Beta',
+            variant: 'soft',
+            color: '#C7D2FE',
+            bgColor: '#6366F1',
+            fontSize: 22,
+            position: { x: 'center', y: '68%' },
+          },
+        },
+      ],
+    },
+    // ═══ Scene 3: Outro — glass_plate + counter + chips 收尾 ═══
+    {
+      sceneId: 'scene_3_outro_new',
+      sceneIndex: 2,
+      role: 'outro',
+      durationInFrames: 72,
+      layers: [
+        {
+          layerId: 'bg_gradient_outro',
+          preset: 'bg.mesh_gradient',
+          params: {
+            colors: ['#171347', '#312E81', '#4F46E5', '#22D3EE'],
+            intensity: 0.92,
+          },
+        },
+        {
+          layerId: 'bg_noise_outro',
+          preset: 'bg.noise_grain',
+          params: {
+            backgroundColor: 'transparent',
+            grainOpacity: 0.08,
+            scale: 1.1,
+          },
+        },
+        // 玻璃底板
+        {
+          layerId: 'outro_glass',
+          preset: 'backing.glass_plate',
+          enterAtFrame: 6,
+          durationInFrames: 62,
+          params: {
+            width: '82%',
+            height: '48%',
+            blurAmount: 18,
+            tintColor: 'rgba(255,255,255,0.08)',
+            borderRadius: 30,
+            borderColor: 'rgba(255,255,255,0.14)',
+            borderWidth: 1,
+            position: { x: 'center', y: 'center' },
+            shadowEnabled: true,
+            shadowColor: 'rgba(0,0,0,0.22)',
+          },
+        },
+        // 计数器 — 处理量
+        {
+          layerId: 'counter_total',
+          preset: 'text.counter_number',
+          enterAtFrame: 12,
+          durationInFrames: 52,
+          params: {
+            value: 9999,
+            prefix: '#',
+            decimals: 0,
+            fontSize: 78,
+            color: '#FFFFFF',
+            fontWeight: 900,
+            scrollFrames: 38,
+            position: { x: 'center', y: '36%' },
+          },
+        },
+        // filled chip
+        {
+          layerId: 'label_total',
+          preset: 'text.label_chip',
+          enterAtFrame: 18,
+          durationInFrames: 46,
+          params: {
+            text: '🏆 累计服务企业',
+            variant: 'filled',
+            bgColor: '#0284C7',
+            color: '#FFFFFF',
+            fontSize: 22,
+            position: { x: 'center', y: '54%' },
+          },
+        },
+        // outlined chip
+        {
+          layerId: 'label_sub',
+          preset: 'text.label_chip',
+          enterAtFrame: 24,
+          durationInFrames: 40,
+          params: {
+            text: 'Powered by AI Video',
+            variant: 'outlined',
+            color: '#94A3B8',
+            borderColor: 'rgba(148,163,184,0.45)',
+            fontSize: 18,
+            position: { x: 'center', y: '64%' },
+          },
+        },
+        // glow frame 收尾
+        {
+          layerId: 'outro_glow',
+          preset: 'overlay.glow_frame',
+          enterAtFrame: 8,
+          durationInFrames: 56,
+          params: {
+            color: '#22D3EE',
+            thickness: 8,
+            glowBlur: 20,
+            opacity: 0.55,
+            borderRadius: 30,
+            inset: 22,
+          },
+        },
+      ],
+    },
+  ],
+  transitions: [
+    {
+      fromSceneIndex: 0,
+      toSceneIndex: 1,
+      preset: 'transition.fade',
+      params: {
+        durationInFrames: 16,
+        timing: 'linear',
+      },
+      overlay: {
+        preset: 'overlay.flash',
+        params: { color: '#FFFFFF', maxOpacity: 0.5, enterFrames: 2, holdFrames: 1, exitFrames: 8 },
+      },
+    },
+    {
+      fromSceneIndex: 1,
+      toSceneIndex: 2,
+      preset: 'transition.slide',
+      params: {
+        direction: 'from-bottom',
+        durationInFrames: 14,
+        timing: 'spring',
+      },
+    },
+  ],
+};
 const showcaseLandscapeScript: CompositionScript = {
   canvas: { width: 1920, height: 1080, fps: 30 },
   globalStyle: { fontFamily: 'Noto Sans SC', backgroundColor: '#0B1120' },
@@ -332,20 +726,26 @@ const showcaseLandscapeScript: CompositionScript = {
           }
         },
         {
-          layerId: "landscape_words",
-          preset: "text.word_highlight",
+          layerId: "landscape_billboard",
+          preset: "text.hero_billboard",
           enterAtFrame: 14,
           durationInFrames: 80,
           params: {
-            tokens: ["mesh", "gradient", "tech", "grid", "noise"],
-            highlightWords: ["tech", "grid"],
-            fontSize: 64,
+            texts: ["纯代码背景", "横屏也能打"],
+            layoutPattern: "left_right_balance",
+            animationMode: "char_stagger",
+            easingPreset: "spring_bounce",
+            fontSize: 70,
             color: "#E2E8F0",
-            highlightColor: "#111111",
-            highlightBackground: "#F8C630",
+            accentColor: "#F8C630",
             layoutMode: "landscape",
-            positionPreset: "hero_center",
-            wordDurationInFrames: 12
+            letterSpacing: "0.08em",
+            strokeEnabled: true,
+            strokeColor: "#08111F",
+            strokeWidth: 2.2,
+            glowColor: "#67E8F9",
+            glowBlur: 26,
+            glowOpacity: 0.28
           }
         },
         {
@@ -402,6 +802,17 @@ export const RemotionRoot: React.FC = () => {
         width={1920}
         height={1080}
         defaultProps={showcaseLandscapeScript}
+        schema={CompositionScriptSchema}
+        calculateMetadata={calculateMetadata}
+      />
+      <Composition
+        id="NewComponentsShowcase"
+        component={DynamicVideoRenderer}
+        durationInFrames={226}
+        fps={30}
+        width={1080}
+        height={1920}
+        defaultProps={newComponentsShowcaseScript}
         schema={CompositionScriptSchema}
         calculateMetadata={calculateMetadata}
       />

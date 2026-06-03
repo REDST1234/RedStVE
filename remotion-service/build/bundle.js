@@ -1,7 +1,7 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 2734
+/***/ 2342
 (__unused_webpack_module, __unused_webpack___webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -100,12 +100,12 @@ const MeshGradientBackground = ({
 
 
 
-const gridSvg = (gridSize, lineColor, accentColor, lineOpacity) => {
+const gridSvg = (gridSize, lineColor, accentColor, lineOpacity, lineWidth) => {
   const encoded = encodeURIComponent(`
     <svg xmlns="http://www.w3.org/2000/svg" width="${gridSize}" height="${gridSize}" viewBox="0 0 ${gridSize} ${gridSize}">
       <rect width="${gridSize}" height="${gridSize}" fill="none"/>
-      <path d="M ${gridSize} 0 L 0 0 0 ${gridSize}" fill="none" stroke="${lineColor}" stroke-opacity="${lineOpacity}" stroke-width="1"/>
-      <circle cx="${gridSize / 2}" cy="${gridSize / 2}" r="1.6" fill="${accentColor}" fill-opacity="0.55"/>
+      <path d="M ${gridSize} 0 L 0 0 0 ${gridSize}" fill="none" stroke="${lineColor}" stroke-opacity="${lineOpacity}" stroke-width="${lineWidth}"/>
+      <circle cx="${gridSize / 2}" cy="${gridSize / 2}" r="${Math.max(2.2, lineWidth * 1.85)}" fill="${accentColor}" fill-opacity="0.75"/>
     </svg>
   `);
   return `url("data:image/svg+xml;utf8,${encoded}")`;
@@ -116,6 +116,7 @@ const TechGridBackground = ({
   accentColor = "#22D3EE",
   gridSize = 76,
   lineOpacity = 0.26,
+  lineWidth = 1.45,
   driftSpeed = 18,
   layoutMode = "auto"
 }) => {
@@ -127,6 +128,8 @@ const TechGridBackground = ({
     extrapolateRight: "clamp"
   });
   const resolvedGridSize = isLandscape ? Math.max(60, gridSize - 10) : gridSize;
+  const resolvedLineOpacity = Math.max(0.24, lineOpacity);
+  const resolvedLineWidth = isLandscape ? Math.max(1.55, lineWidth + 0.15) : Math.max(1.35, lineWidth);
   const rotateX = isLandscape ? 64 : 72;
   const scale = isLandscape ? 1.35 : 1.55;
   const transformOrigin = isLandscape ? "center 78%" : "center 72%";
@@ -134,7 +137,7 @@ const TechGridBackground = ({
     esm.AbsoluteFill,
     {
       style: {
-        background: `linear-gradient(180deg, ${backgroundColor} 0%, #0f1f3a 55%, #102d56 100%)`,
+        background: `linear-gradient(180deg, ${backgroundColor} 0%, #10274b 58%, #14376a 100%)`,
         overflow: "hidden"
       },
       children: [
@@ -142,12 +145,28 @@ const TechGridBackground = ({
           esm.AbsoluteFill,
           {
             style: {
-              backgroundImage: gridSvg(resolvedGridSize, lineColor, accentColor, lineOpacity),
+              backgroundImage: gridSvg(
+                resolvedGridSize,
+                lineColor,
+                accentColor,
+                resolvedLineOpacity,
+                resolvedLineWidth
+              ),
               backgroundRepeat: "repeat",
               backgroundSize: `${resolvedGridSize}px ${resolvedGridSize}px`,
               transform: `translateY(${yOffset}px) perspective(${isLandscape ? 1500 : 1200}px) rotateX(${rotateX}deg) scale(${scale})`,
               transformOrigin,
-              opacity: 0.92
+              opacity: 0.98
+            }
+          }
+        ),
+        /* @__PURE__ */ (0,jsx_runtime.jsx)(
+          esm.AbsoluteFill,
+          {
+            style: {
+              background: `radial-gradient(circle at 50% 42%, ${accentColor}22 0%, transparent 38%), radial-gradient(circle at 50% 60%, ${lineColor}14 0%, transparent 46%)`,
+              mixBlendMode: "screen",
+              opacity: 0.9
             }
           }
         ),
@@ -5893,7 +5912,83 @@ var experimental_Audio = (/* unused pure expression or super */ null && (Audio))
 var experimental_Video = (/* unused pure expression or super */ null && (Video));
 
 
+;// ./src/presets/media/normalizeMediaStyle.ts
+
+const isSemanticPosition = (value) => {
+  return typeof value === "object" && value !== null && ("x" in value || "y" in value);
+};
+const appendTranslate = (current, segment) => {
+  const normalized = (current ?? "").trim();
+  return normalized ? `${normalized} ${segment}` : segment;
+};
+const normalizeMediaStyle = (style, defaultObjectFit = "cover") => {
+  const nextStyle = {
+    width: "100%",
+    height: "100%",
+    objectFit: defaultObjectFit
+  };
+  if (!style) {
+    return nextStyle;
+  }
+  const rawStyle = { ...style };
+  const hasExplicitObjectFit = Object.prototype.hasOwnProperty.call(rawStyle, "objectFit");
+  const hasExplicitWidth = Object.prototype.hasOwnProperty.call(rawStyle, "width");
+  const hasExplicitHeight = Object.prototype.hasOwnProperty.call(rawStyle, "height");
+  const maybePosition = rawStyle.position;
+  const semanticX = rawStyle.x;
+  const semanticY = rawStyle.y;
+  delete rawStyle.position;
+  delete rawStyle.x;
+  delete rawStyle.y;
+  Object.assign(nextStyle, rawStyle);
+  const normalizedSemanticPosition = isSemanticPosition(maybePosition) ? maybePosition : semanticX != null || semanticY != null ? { x: semanticX, y: semanticY } : null;
+  if (!normalizedSemanticPosition) {
+    if (maybePosition != null) {
+      nextStyle.position = maybePosition;
+    }
+    return nextStyle;
+  }
+  nextStyle.position = "absolute";
+  if (!hasExplicitObjectFit) {
+    nextStyle.objectFit = "contain";
+  }
+  if (!hasExplicitWidth && !hasExplicitHeight) {
+    nextStyle.width = "auto";
+    nextStyle.height = "auto";
+    nextStyle.maxWidth = "100%";
+    nextStyle.maxHeight = "100%";
+  } else if (hasExplicitWidth && !hasExplicitHeight) {
+    nextStyle.height = "auto";
+    nextStyle.maxHeight = "100%";
+  } else if (!hasExplicitWidth && hasExplicitHeight) {
+    nextStyle.width = "auto";
+    nextStyle.maxWidth = "100%";
+  }
+  let transform = typeof nextStyle.transform === "string" ? nextStyle.transform : void 0;
+  const { x, y } = normalizedSemanticPosition;
+  if (x === "center") {
+    nextStyle.left = "50%";
+    transform = appendTranslate(transform, "translateX(-50%)");
+  } else if (x != null) {
+    nextStyle.left = x;
+  }
+  if (y === "center") {
+    nextStyle.top = "50%";
+    transform = appendTranslate(transform, "translateY(-50%)");
+  } else if (y != null) {
+    nextStyle.top = y;
+    if (typeof y === "string" && y.trim().endsWith("%")) {
+      transform = appendTranslate(transform, "translateY(-50%)");
+    }
+  }
+  if (transform) {
+    nextStyle.transform = transform;
+  }
+  return nextStyle;
+};
+
 ;// ./src/presets/media/VideoClip.tsx
+
 
 
 
@@ -5909,12 +6004,7 @@ const VideoClip = ({
   style
 }) => {
   const { fps: _fps } = (0,esm.useVideoConfig)();
-  const videoStyle = {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    ...style
-  };
+  const videoStyle = normalizeMediaStyle(style, "cover");
   return /* @__PURE__ */ (0,jsx_runtime.jsx)(
     Video,
     {
@@ -5934,13 +6024,9 @@ const VideoClip = ({
 
 
 
+
 const ImageLayer = ({ src, style }) => {
-  const imgStyle = {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    ...style
-  };
+  const imgStyle = normalizeMediaStyle(style, "cover");
   return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.Img, { src, style: imgStyle });
 };
 
@@ -7231,12 +7317,16 @@ const presetToPosition = (preset, isLandscape) => {
     case "hero_lower":
       return { x: "center", y: isLandscape ? "66%" : "60%" };
     case "left_focus":
-      return { x: "left", y: isLandscape ? "40%" : "34%" };
+      return { x: isLandscape ? "18%" : "16%", y: isLandscape ? "40%" : "34%" };
     case "right_focus":
-      return { x: "right", y: isLandscape ? "40%" : "34%" };
+      return { x: isLandscape ? "82%" : "84%", y: isLandscape ? "40%" : "34%" };
     default:
       return { x: "center", y: isLandscape ? "48%" : "42%" };
   }
+};
+const layout_appendTranslate = (current, segment) => {
+  const normalized = (current ?? "").trim();
+  return normalized ? `${normalized} ${segment}` : segment;
 };
 const resolveTextLayout = ({
   width,
@@ -7251,23 +7341,43 @@ const resolveTextLayout = ({
 }) => {
   const isLandscape = layoutMode === "landscape" || layoutMode === "auto" && width > height;
   const resolvedPosition = position ?? (positionPreset ? presetToPosition(positionPreset, isLandscape) : { x: "center", y: isLandscape ? landscapeDefaultY : portraitDefaultY });
-  const justifyContent = resolvedPosition.x === "center" ? "center" : resolvedPosition.x === "right" ? "flex-end" : "flex-start";
-  const alignItems = resolvedPosition.y === "50%" || resolvedPosition.y === "center" ? "center" : "flex-start";
-  const paddingTop = typeof resolvedPosition.y === "string" && resolvedPosition.y !== "50%" && resolvedPosition.y !== "center" ? resolvedPosition.y : void 0;
-  const paddingLeft = resolvedPosition.x === "left" ? "8%" : void 0;
-  const paddingRight = resolvedPosition.x === "right" ? "8%" : void 0;
+  const wrapperStyle = {
+    position: "absolute",
+    maxWidth: isLandscape ? landscapeMaxWidth : portraitMaxWidth
+  };
+  let transform = typeof wrapperStyle.transform === "string" ? wrapperStyle.transform : void 0;
+  const x = resolvedPosition.x;
+  const y = resolvedPosition.y;
+  if (x === "center") {
+    wrapperStyle.left = "50%";
+    transform = layout_appendTranslate(transform, "translateX(-50%)");
+  } else if (x === "left") {
+    wrapperStyle.left = "8%";
+  } else if (x === "right") {
+    wrapperStyle.right = "8%";
+  } else {
+    wrapperStyle.left = x;
+    transform = layout_appendTranslate(transform, "translateX(-50%)");
+  }
+  if (y === "center") {
+    wrapperStyle.top = "50%";
+    transform = layout_appendTranslate(transform, "translateY(-50%)");
+  } else if (y != null) {
+    wrapperStyle.top = y;
+    transform = layout_appendTranslate(transform, "translateY(-50%)");
+  }
+  if (transform) {
+    wrapperStyle.transform = transform;
+  }
+  const textAlign = positionPreset === "right_focus" || resolvedPosition.x === "right" ? "right" : positionPreset === "left_focus" || resolvedPosition.x === "left" ? "left" : "center";
+  const contentJustify = textAlign === "right" ? "flex-end" : textAlign === "left" ? "flex-start" : "center";
   return {
     isLandscape,
     position: resolvedPosition,
     maxWidth: isLandscape ? landscapeMaxWidth : portraitMaxWidth,
-    containerStyle: {
-      display: "flex",
-      justifyContent,
-      alignItems,
-      paddingTop,
-      paddingLeft,
-      paddingRight
-    }
+    wrapperStyle,
+    textAlign,
+    contentJustify
   };
 };
 
@@ -7320,18 +7430,19 @@ const FadeTitle = ({
     extrapolateRight: "clamp"
   });
   const opacity = Math.min(enterOpacity, exitOpacity);
-  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { style: layout.containerStyle, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
     "div",
     {
       style: {
+        ...layout.wrapperStyle,
         fontFamily: FadeTitle_fontFamily,
         fontSize,
         fontWeight,
         color,
         textShadow,
         opacity,
-        transform: `translateY(${enterY}px)`,
-        textAlign: "center",
+        transform: `${layout.wrapperStyle.transform ?? ""} translateY(${enterY}px)`.trim(),
+        textAlign: layout.textAlign,
         padding: "0 40px",
         maxWidth: layout.maxWidth,
         lineHeight: 1.4
@@ -7364,7 +7475,7 @@ const KineticPopText = ({
   settleFrames = 24,
   textShadow = "0 10px 34px rgba(0,0,0,0.35)",
   letterSpacing = 0,
-  textAlign = "center",
+  textAlign,
   maxWidth = "86%"
 }) => {
   const frame = (0,esm.useCurrentFrame)();
@@ -7412,10 +7523,11 @@ const KineticPopText = ({
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp"
   });
-  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { style: layout.containerStyle, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
     "div",
     {
       style: {
+        ...layout.wrapperStyle,
         maxWidth: layout.maxWidth,
         fontFamily: KineticPopText_fontFamily,
         fontSize,
@@ -7423,10 +7535,10 @@ const KineticPopText = ({
         color,
         lineHeight: 1.1,
         letterSpacing,
-        textAlign,
+        textAlign: textAlign ?? layout.textAlign,
         textShadow,
         opacity,
-        transform: `translateY(${yOffset}px) rotate(${rotation}deg) scale(${scale})`,
+        transform: `${layout.wrapperStyle.transform ?? ""} translateY(${yOffset}px) rotate(${rotation}deg) scale(${scale})`.trim(),
         transformOrigin: "center center",
         whiteSpace: "pre-wrap",
         wordBreak: "break-word"
@@ -7434,6 +7546,236 @@ const KineticPopText = ({
       children: text
     }
   ) });
+};
+
+;// ./src/presets/text/HeroBillboardText.tsx
+
+
+
+
+const { fontFamily: HeroBillboardText_fontFamily } = loadFont();
+const buildPositions = (pattern, itemCount, isLandscape) => {
+  if (pattern === "four_corners") {
+    const presets = isLandscape ? [
+      { x: "14%", y: "18%", align: "left" },
+      { x: "86%", y: "18%", align: "right" },
+      { x: "14%", y: "74%", align: "left" },
+      { x: "86%", y: "74%", align: "right" }
+    ] : [
+      { x: "14%", y: "22%", align: "left" },
+      { x: "86%", y: "22%", align: "right" },
+      { x: "14%", y: "72%", align: "left" },
+      { x: "86%", y: "72%", align: "right" }
+    ];
+    return presets.slice(0, Math.max(1, Math.min(itemCount, presets.length)));
+  }
+  if (pattern === "triangle_stack") {
+    const presets = isLandscape ? [
+      { x: "30%", y: "28%", align: "center", maxWidth: "30%" },
+      { x: "70%", y: "28%", align: "center", maxWidth: "30%" },
+      { x: "50%", y: "64%", align: "center", maxWidth: "42%" }
+    ] : [
+      { x: "28%", y: "28%", align: "center", maxWidth: "34%" },
+      { x: "72%", y: "28%", align: "center", maxWidth: "34%" },
+      { x: "50%", y: "62%", align: "center", maxWidth: "52%" }
+    ];
+    return presets.slice(0, Math.max(1, Math.min(itemCount, presets.length)));
+  }
+  if (pattern === "top_bottom_split") {
+    const presets = isLandscape ? [
+      { x: "50%", y: "26%", align: "center", maxWidth: "68%" },
+      { x: "50%", y: "68%", align: "center", maxWidth: "72%" }
+    ] : [
+      { x: "50%", y: "24%", align: "center", maxWidth: "82%" },
+      { x: "50%", y: "70%", align: "center", maxWidth: "84%" }
+    ];
+    return presets.slice(0, Math.max(1, Math.min(itemCount, presets.length)));
+  }
+  if (pattern === "left_right_balance") {
+    const presets = isLandscape ? [
+      { x: "12%", y: "46%", align: "left", maxWidth: "32%" },
+      { x: "88%", y: "46%", align: "right", maxWidth: "32%" }
+    ] : [
+      { x: "10%", y: "40%", align: "left", maxWidth: "34%" },
+      { x: "90%", y: "62%", align: "right", maxWidth: "34%" }
+    ];
+    return presets.slice(0, Math.max(1, Math.min(itemCount, presets.length)));
+  }
+  if (itemCount <= 1) {
+    return [{ x: "50%", y: isLandscape ? "48%" : "44%", align: "center" }];
+  }
+  const startY = isLandscape ? 40 : 34;
+  const gap = isLandscape ? 14 : 12;
+  return Array.from({ length: itemCount }, (_, index) => ({
+    x: "50%",
+    y: `${startY + index * gap}%`,
+    align: "center"
+  }));
+};
+const getEasing = (preset) => {
+  switch (preset) {
+    case "expo_out":
+      return esm.Easing.out(esm.Easing.exp);
+    case "linear_fade":
+      return esm.Easing.linear;
+    case "spring_bounce":
+    default:
+      return esm.Easing.out(esm.Easing.back(1.4));
+  }
+};
+const withAlpha = (color, opacity) => {
+  const normalized = color.trim();
+  const clamped = Math.max(0, Math.min(1, opacity));
+  if (/^#([0-9a-fA-F]{6})$/.test(normalized)) {
+    return `${normalized}${Math.round(clamped * 255).toString(16).padStart(2, "0")}`;
+  }
+  if (/^#([0-9a-fA-F]{3})$/.test(normalized)) {
+    const expanded = normalized.slice(1).split("").map((ch) => ch + ch).join("");
+    return `#${expanded}${Math.round(clamped * 255).toString(16).padStart(2, "0")}`;
+  }
+  return normalized;
+};
+const renderAnimatedText = ({
+  text,
+  frame,
+  animationMode,
+  charIntervalFrames,
+  color,
+  accentColor
+}) => {
+  if (animationMode === "type_reveal") {
+    const visible = Math.min(text.length, Math.floor(frame / Math.max(1, charIntervalFrames)));
+    return /* @__PURE__ */ (0,jsx_runtime.jsxs)(jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { children: text.slice(0, visible) }),
+      visible < text.length ? /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: accentColor, marginLeft: 2, opacity: 0.8 }, children: "|" }) : null
+    ] });
+  }
+  if (animationMode === "char_stagger") {
+    return /* @__PURE__ */ (0,jsx_runtime.jsx)(jsx_runtime.Fragment, { children: Array.from(text).map((char, index) => {
+      const charStart = index * Math.max(1, Math.floor(charIntervalFrames / 2));
+      const charOpacity = (0,esm.interpolate)(frame, [charStart, charStart + 6], [0, 1], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp"
+      });
+      const charY = (0,esm.interpolate)(frame, [charStart, charStart + 8], [12, 0], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp"
+      });
+      return /* @__PURE__ */ (0,jsx_runtime.jsx)(
+        "span",
+        {
+          style: {
+            display: "inline-block",
+            opacity: charOpacity,
+            transform: `translateY(${charY}px)`,
+            color: index % 2 === 1 ? accentColor : color
+          },
+          children: char
+        },
+        `${char}_${index}`
+      );
+    }) });
+  }
+  return text;
+};
+const HeroBillboardText = ({
+  text,
+  texts,
+  layoutPattern = "center_focus",
+  animationMode = "whole_pop",
+  easingPreset = "spring_bounce",
+  layoutMode = "auto",
+  fontSize = 108,
+  color = "#FFFFFF",
+  accentColor = "#7DD3FC",
+  fontWeight = 900,
+  letterSpacing = "0.18em",
+  textShadow = "0 0 18px rgba(255,255,255,0.18), 0 6px 28px rgba(0,0,0,0.45)",
+  strokeEnabled = false,
+  strokeColor = "#0B1120",
+  strokeWidth = 2.2,
+  glowColor = "#7DD3FC",
+  glowBlur = 26,
+  glowOpacity = 0.28,
+  maxWidth = "88%",
+  charIntervalFrames = 2,
+  staggerFrames = 8,
+  lineGap = 18
+}) => {
+  const frame = (0,esm.useCurrentFrame)();
+  const { width, height } = (0,esm.useVideoConfig)();
+  const isLandscape = layoutMode === "landscape" || layoutMode === "auto" && width > height;
+  const normalizedTexts = (texts && texts.length > 0 ? texts : text ? [text] : []).map((item) => item.trim()).filter(Boolean).slice(
+    0,
+    layoutPattern === "four_corners" ? 4 : layoutPattern === "triangle_stack" ? 3 : layoutPattern === "top_bottom_split" || layoutPattern === "left_right_balance" ? 2 : 4
+  );
+  if (normalizedTexts.length === 0) {
+    return null;
+  }
+  const positions = buildPositions(layoutPattern, normalizedTexts.length, isLandscape);
+  const easing = getEasing(easingPreset);
+  const resolvedFontSize = isLandscape ? Math.round(fontSize * 0.92) : fontSize;
+  const resolvedLineGap = isLandscape ? Math.max(12, lineGap - 4) : lineGap;
+  const effectiveStrokeWidth = strokeEnabled ? Math.max(0.8, strokeWidth) : 0;
+  const resolvedTextShadow = `${textShadow}, 0 0 ${glowBlur}px ${withAlpha(glowColor, glowOpacity)}`;
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { children: normalizedTexts.map((item, index) => {
+    const pos = positions[Math.min(index, positions.length - 1)];
+    const layerStart = index * Math.max(4, staggerFrames);
+    const opacity = (0,esm.interpolate)(frame, [layerStart, layerStart + 8], [0, 1], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing
+    });
+    const scale = animationMode === "whole_pop" ? (0,esm.interpolate)(frame, [layerStart, layerStart + 14], [1.18, 1], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing
+    }) : 1;
+    const translateY = (0,esm.interpolate)(frame, [layerStart, layerStart + 12], [18, 0], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing
+    });
+    return /* @__PURE__ */ (0,jsx_runtime.jsx)(
+      "div",
+      {
+        style: {
+          position: "absolute",
+          left: pos.align === "left" || pos.align === "center" ? pos.x : void 0,
+          right: pos.align === "right" ? `${100 - Number.parseFloat(pos.x)}%` : void 0,
+          top: pos.y,
+          transform: pos.align === "center" ? `translate(-50%, 0) translateY(${translateY}px) scale(${scale})` : `translateY(${translateY}px) scale(${scale})`,
+          transformOrigin: "center center",
+          maxWidth: pos.maxWidth ?? maxWidth,
+          textAlign: pos.align,
+          opacity,
+          lineHeight: 1.08,
+          letterSpacing,
+          fontFamily: HeroBillboardText_fontFamily,
+          fontSize: resolvedFontSize,
+          fontWeight,
+          color,
+          textShadow: resolvedTextShadow,
+          WebkitTextStroke: effectiveStrokeWidth > 0 ? `${effectiveStrokeWidth}px ${strokeColor}` : void 0,
+          paintOrder: effectiveStrokeWidth > 0 ? "stroke fill" : void 0,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          display: "flex",
+          flexDirection: "column",
+          gap: resolvedLineGap
+        },
+        children: /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { children: renderAnimatedText({
+          text: item,
+          frame: Math.max(0, frame - layerStart),
+          animationMode,
+          charIntervalFrames,
+          color,
+          accentColor
+        }) })
+      },
+      `${item}_${index}`
+    );
+  }) });
 };
 
 ;// ./src/presets/text/TypewriterTitle.tsx
@@ -7458,7 +7800,7 @@ const TypewriterTitle = ({
   textShadow = "0 2px 10px rgba(0,0,0,0.45)",
   maxWidth = "82%",
   letterSpacing = 0,
-  textAlign = "center"
+  textAlign
 }) => {
   const frame = (0,esm.useCurrentFrame)();
   const { durationInFrames, width, height } = (0,esm.useVideoConfig)();
@@ -7487,10 +7829,11 @@ const TypewriterTitle = ({
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp"
   }) : 0;
-  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { style: layout.containerStyle, children: /* @__PURE__ */ (0,jsx_runtime.jsxs)(
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { children: /* @__PURE__ */ (0,jsx_runtime.jsxs)(
     "div",
     {
       style: {
+        ...layout.wrapperStyle,
         display: "inline-flex",
         alignItems: "baseline",
         maxWidth: layout.maxWidth,
@@ -7500,7 +7843,7 @@ const TypewriterTitle = ({
         color,
         letterSpacing,
         lineHeight: 1.25,
-        textAlign,
+        textAlign: textAlign ?? layout.textAlign,
         textShadow,
         opacity: enterOpacity,
         whiteSpace: "pre-wrap",
@@ -7546,7 +7889,7 @@ const MaskRevealText = ({
   revealFrames = 22,
   textShadow = "0 4px 16px rgba(0,0,0,0.3)",
   letterSpacing = 0,
-  textAlign = "center",
+  textAlign,
   maxWidth = "88%",
   maskPadding = 16
 }) => {
@@ -7587,20 +7930,23 @@ const MaskRevealText = ({
         return `inset(${(1 - progress) * 100}% -${maskPadding}px -${maskPadding}px -${maskPadding}px)`;
       case "top_to_bottom":
         return `inset(-${maskPadding}px -${maskPadding}px ${(1 - progress) * 100}% -${maskPadding}px)`;
+      case "right_to_left":
+        return `inset(-${maskPadding}px -${maskPadding}px -${maskPadding}px ${(1 - progress) * 100}%)`;
       case "left_to_right":
       default:
         return `inset(-${maskPadding}px ${(1 - progress) * 100}% -${maskPadding}px -${maskPadding}px)`;
     }
   })();
-  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { style: layout.containerStyle, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
     "div",
     {
       style: {
+        ...layout.wrapperStyle,
         maxWidth: layout.maxWidth,
         overflow: "hidden",
         clipPath,
         opacity,
-        transform: `translateY(${offsetY}px)`
+        transform: `${layout.wrapperStyle.transform ?? ""} translateY(${offsetY}px)`.trim()
       },
       children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
         "div",
@@ -7612,7 +7958,7 @@ const MaskRevealText = ({
             color,
             lineHeight: 1.18,
             letterSpacing,
-            textAlign,
+            textAlign: textAlign ?? layout.textAlign,
             textShadow,
             whiteSpace: "pre-wrap",
             wordBreak: "break-word"
@@ -7647,7 +7993,7 @@ const WordHighlightText = ({
   wordDurationInFrames = 10,
   textShadow = "0 2px 10px rgba(0,0,0,0.4)",
   gap = 10,
-  textAlign = "center",
+  textAlign,
   highlightScale = 1.08
 }) => {
   const frame = (0,esm.useCurrentFrame)();
@@ -7675,17 +8021,18 @@ const WordHighlightText = ({
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp"
   });
-  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { style: layout.containerStyle, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
     "div",
     {
       style: {
+        ...layout.wrapperStyle,
         display: "flex",
         flexWrap: "wrap",
-        justifyContent: layout.position.x === "center" ? "center" : layout.position.x === "right" ? "flex-end" : "flex-start",
+        justifyContent: layout.contentJustify,
         gap,
         maxWidth: layout.maxWidth,
         opacity: enterOpacity,
-        textAlign
+        textAlign: textAlign ?? layout.textAlign
       },
       children: derivedTokens.map((token, index) => {
         const isActive = index === activeHighlightIndex;
@@ -8508,6 +8855,7 @@ const GlowFrameOverlay = ({
 
 
 
+
 let _registered = false;
 function registerAllPresets() {
   if (_registered) return;
@@ -8521,6 +8869,7 @@ function registerAllPresets() {
   registerPreset({ id: "motion.ken_burns", component: KenBurns });
   registerPreset({ id: "text.fade_title", component: FadeTitle });
   registerPreset({ id: "text.kinetic_pop", component: KineticPopText });
+  registerPreset({ id: "text.hero_billboard", component: HeroBillboardText });
   registerPreset({ id: "text.typewriter", component: TypewriterTitle });
   registerPreset({ id: "text.mask_reveal", component: MaskRevealText });
   registerPreset({ id: "text.word_highlight", component: WordHighlightText });
@@ -10041,16 +10390,123 @@ var useTransitionProgress = () => {
 
 
 
+
+const AUDIO_PROTOCOL_FIELDS = /* @__PURE__ */ new Set([
+  "audioRole",
+  "cueType",
+  "syncWithLayerId",
+  "syncMode",
+  "offsetFrames"
+]);
+const toSafePositiveInt = (value) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  const rounded = Math.round(value);
+  return rounded > 0 ? rounded : null;
+};
+const toSafeInt = (value, fallback = 0) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.round(value);
+};
+const deriveTypewriterDuration = (targetLayer, fallbackDuration) => {
+  if (targetLayer.preset !== "text.typewriter") {
+    return fallbackDuration;
+  }
+  const params = targetLayer.params ?? {};
+  const text = typeof params.text === "string" ? params.text : "";
+  const charCount = Math.max(1, Array.from(text).length);
+  const charIntervalFrames = toSafePositiveInt(params.charIntervalFrames) ?? 2;
+  return Math.min(fallbackDuration, Math.max(1, charCount * charIntervalFrames));
+};
+const stripAudioProtocolParams = (params) => Object.fromEntries(Object.entries(params).filter(([key]) => !AUDIO_PROTOCOL_FIELDS.has(key)));
+const resolveAudioLayerTiming = (scene, layer) => {
+  const params = layer.params ?? {};
+  const sceneDuration = scene.durationInFrames;
+  const ownDuration = layer.durationInFrames ?? toSafePositiveInt(params.totalDurationFrames) ?? sceneDuration;
+  const defaultFrom = Math.max(0, layer.enterAtFrame ?? 0);
+  if (layer.preset !== "media.audio" || !params.syncWithLayerId) {
+    const durationInFrames2 = Math.max(1, Math.min(sceneDuration, ownDuration));
+    return {
+      from: defaultFrom,
+      durationInFrames: durationInFrames2,
+      params: {
+        ...stripAudioProtocolParams(params),
+        totalDurationFrames: durationInFrames2
+      }
+    };
+  }
+  const targetLayer = scene.layers.find((candidate) => candidate.layerId === params.syncWithLayerId);
+  if (!targetLayer) {
+    const durationInFrames2 = Math.max(1, Math.min(sceneDuration, ownDuration));
+    return {
+      from: defaultFrom,
+      durationInFrames: durationInFrames2,
+      params: {
+        ...stripAudioProtocolParams(params),
+        totalDurationFrames: durationInFrames2
+      }
+    };
+  }
+  const targetFrom = Math.max(0, targetLayer.enterAtFrame ?? 0);
+  const targetDuration = Math.max(1, targetLayer.durationInFrames ?? sceneDuration);
+  const typingDuration = deriveTypewriterDuration(targetLayer, targetDuration);
+  const syncMode = params.syncMode ?? "match_layer";
+  const offsetFrames = toSafeInt(params.offsetFrames, 0);
+  let from = defaultFrom;
+  let durationInFrames = ownDuration;
+  switch (syncMode) {
+    case "match_typing":
+      from = targetFrom + offsetFrames;
+      durationInFrames = typingDuration;
+      break;
+    case "trigger_on_start":
+      from = targetFrom + offsetFrames;
+      durationInFrames = ownDuration;
+      break;
+    case "trigger_on_end":
+      from = targetFrom + targetDuration + offsetFrames;
+      durationInFrames = ownDuration;
+      break;
+    case "trigger_on_typing_end":
+      from = targetFrom + typingDuration + offsetFrames;
+      durationInFrames = ownDuration;
+      break;
+    case "match_layer":
+    default:
+      from = targetFrom + offsetFrames;
+      durationInFrames = targetDuration;
+      break;
+  }
+  const clampedFrom = Math.max(0, Math.min(sceneDuration - 1, from));
+  const maxDuration = Math.max(1, sceneDuration - clampedFrom);
+  const finalDuration = Math.max(1, Math.min(maxDuration, durationInFrames));
+  return {
+    from: clampedFrom,
+    durationInFrames: finalDuration,
+    params: {
+      ...stripAudioProtocolParams(params),
+      totalDurationFrames: finalDuration
+    }
+  };
+};
 const SceneRenderer = ({ scene }) => {
+  registerAllPresets();
   return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { children: scene.layers.map((layer) => {
     const { component: PresetComponent } = getPreset(layer.preset);
+    const resolvedAudio = resolveAudioLayerTiming(scene, layer);
+    const sequenceFrom = layer.preset === "media.audio" ? resolvedAudio.from : layer.enterAtFrame ?? 0;
+    const sequenceDuration = layer.preset === "media.audio" ? resolvedAudio.durationInFrames : layer.durationInFrames ?? scene.durationInFrames;
+    const renderParams = layer.preset === "media.audio" ? resolvedAudio.params : layer.params;
     return /* @__PURE__ */ (0,jsx_runtime.jsx)(
       esm.Sequence,
       {
-        from: layer.enterAtFrame ?? 0,
-        durationInFrames: layer.durationInFrames ?? scene.durationInFrames,
+        from: sequenceFrom,
+        durationInFrames: sequenceDuration,
         layout: "none",
-        children: /* @__PURE__ */ (0,jsx_runtime.jsx)(PresetComponent, { ...layer.params })
+        children: /* @__PURE__ */ (0,jsx_runtime.jsx)(PresetComponent, { ...renderParams })
       },
       layer.layerId
     );
@@ -10525,7 +10981,7 @@ const showcaseScript = {
       ]
     },
     {
-      sceneId: "scene_2_product_card",
+      sceneId: "scene_2_billboard_layouts",
       sceneIndex: 1,
       role: "body",
       durationInFrames: 120,
@@ -10552,19 +11008,26 @@ const showcaseScript = {
           }
         },
         {
-          layerId: "title_2",
-          preset: "text.word_highlight",
+          layerId: "title_2_billboard",
+          preset: "text.hero_billboard",
           enterAtFrame: 20,
           durationInFrames: 100,
           params: {
-            tokens: ["Ken", "Burns", "\u8FD0\u955C", "\u6F14\u793A"],
-            highlightWords: ["\u8FD0\u955C", "\u6F14\u793A"],
-            fontSize: 58,
-            color: "#FFFFFF",
-            highlightColor: "#111111",
-            highlightBackground: "#F8C630",
-            position: { x: "center", y: "45%" },
-            wordDurationInFrames: 12
+            texts: ["\u62C9\u65B0\u4FC3\u6D3B\u66F4\u76F4\u63A5", "\u8F6C\u5316\u590D\u8D2D\u66F4\u81EA\u52A8"],
+            layoutPattern: "top_bottom_split",
+            animationMode: "whole_pop",
+            easingPreset: "expo_out",
+            fontSize: 66,
+            color: "#F8FAFC",
+            accentColor: "#67E8F9",
+            layoutMode: "portrait",
+            letterSpacing: "0.1em",
+            strokeEnabled: true,
+            strokeColor: "#06111F",
+            strokeWidth: 2.4,
+            glowColor: "#22D3EE",
+            glowBlur: 28,
+            glowOpacity: 0.32
           }
         }
       ]
@@ -10749,20 +11212,26 @@ const showcaseLandscapeScript = {
           }
         },
         {
-          layerId: "landscape_words",
-          preset: "text.word_highlight",
+          layerId: "landscape_billboard",
+          preset: "text.hero_billboard",
           enterAtFrame: 14,
           durationInFrames: 80,
           params: {
-            tokens: ["mesh", "gradient", "tech", "grid", "noise"],
-            highlightWords: ["tech", "grid"],
-            fontSize: 64,
+            texts: ["\u7EAF\u4EE3\u7801\u80CC\u666F", "\u6A2A\u5C4F\u4E5F\u80FD\u6253"],
+            layoutPattern: "left_right_balance",
+            animationMode: "char_stagger",
+            easingPreset: "spring_bounce",
+            fontSize: 70,
             color: "#E2E8F0",
-            highlightColor: "#111111",
-            highlightBackground: "#F8C630",
+            accentColor: "#F8C630",
             layoutMode: "landscape",
-            positionPreset: "hero_center",
-            wordDurationInFrames: 12
+            letterSpacing: "0.08em",
+            strokeEnabled: true,
+            strokeColor: "#08111F",
+            strokeWidth: 2.2,
+            glowColor: "#67E8F9",
+            glowBlur: 26,
+            glowOpacity: 0.28
           }
         },
         {
@@ -84580,7 +85049,7 @@ config(en());
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
 /******/ 	__webpack_require__(6507);
-/******/ 	__webpack_require__(2734);
+/******/ 	__webpack_require__(2342);
 /******/ 	__webpack_require__(3610);
 /******/ 	var __webpack_exports__ = __webpack_require__(3482);
 /******/ 	

@@ -35,6 +35,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -53,6 +54,23 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
     private static final String MATCH_STATUS_MISSING = "MISSING";
     private static final String MATERIAL_TYPE_VIDEO = "VIDEO";
     private static final String MATERIAL_TYPE_IMAGE = "IMAGE";
+    private static final Set<String> PROTECTED_VISUAL_KEYWORDS = Set.of(
+            "logo",
+            "brand_logo",
+            "brandmark",
+            "wordmark",
+            "icon",
+            "sticker",
+            "badge",
+            "illustration",
+            "mascot",
+            "挂件",
+            "插图",
+            "图标",
+            "角标",
+            "徽标",
+            "徽章"
+    );
 
     private final CreationProjectService creationProjectService;
     private final CreativeMaterialService creativeMaterialService;
@@ -158,10 +176,14 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
         Path outputDir = Paths.get("storage", "creation-adapt", projectId, versionId).toAbsolutePath();
         Files.createDirectories(outputDir);
 
+        if (isProtectedVisualAsset(material)) {
+            log.info("skip ffmpeg adaptation for protected visual asset: projectId={}, versionId={}, segmentIndex={}, materialBizId={}",
+                    projectId, versionId, row.getSegmentIndex(), material.getBizId());
+            return copySourceAsset(sourcePath, outputDir, row, material);
+        }
+
         if (!strategyChain.isArray() || strategyChain.isEmpty()) {
-            Path copied = outputDir.resolve("seg_" + row.getSegmentIndex() + "_" + row.getSegmentRole() + "_source." + extensionFromPathOrFormat(sourcePath, material.getFormat()));
-            Files.copy(sourcePath, copied, StandardCopyOption.REPLACE_EXISTING);
-            return copied.toString();
+            return copySourceAsset(sourcePath, outputDir, row, material);
         }
 
         Path currentInput = sourcePath;
@@ -603,6 +625,81 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
             return false;
         }
         return currentHasAudio && fragment.isPreserveAudio();
+    }
+
+    private String copySourceAsset(Path sourcePath, Path outputDir, SlotMatchResultEntity row, CreativeMaterialEntity material) throws IOException {
+        Path copied = outputDir.resolve("seg_" + row.getSegmentIndex() + "_" + row.getSegmentRole() + "_source." + extensionFromPathOrFormat(sourcePath, material.getFormat()));
+        Files.copy(sourcePath, copied, StandardCopyOption.REPLACE_EXISTING);
+        return copied.toString();
+    }
+
+    private boolean isProtectedVisualAsset(CreativeMaterialEntity material) {
+        if (material == null || !MATERIAL_TYPE_IMAGE.equalsIgnoreCase(material.getMaterialType())) {
+            return false;
+        }
+        if (containsProtectedKeyword(material.getOriginalFileName())
+                || containsProtectedKeyword(material.getDescription())
+                || containsProtectedKeyword(material.getTags())
+                || containsProtectedKeyword(material.getTextContent())) {
+            return true;
+        }
+        String profileJson = material.getProfileJson();
+        if (profileJson == null || profileJson.isBlank()) {
+            return false;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(profileJson);
+            if (nodeContainsProtectedKeyword(root.path("semanticTags").path("mainEntities"))
+                    || nodeContainsProtectedKeyword(root.path("semanticTags").path("mainKeywords"))
+                    || nodeContainsProtectedKeyword(root.path("semanticTags").path("overallStyle"))
+                    || nodeContainsProtectedKeyword(root.path("highlights"))
+                    || nodeContainsProtectedKeyword(root.path("semanticTags"))) {
+                return true;
+            }
+        } catch (Exception ex) {
+            return containsProtectedKeyword(profileJson);
+        }
+        return containsProtectedKeyword(profileJson);
+    }
+
+    private boolean nodeContainsProtectedKeyword(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return false;
+        }
+        if (node.isTextual()) {
+            return containsProtectedKeyword(node.asText(""));
+        }
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                if (nodeContainsProtectedKeyword(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (node.isObject()) {
+            var fields = node.fields();
+            while (fields.hasNext()) {
+                var entry = fields.next();
+                if (containsProtectedKeyword(entry.getKey()) || nodeContainsProtectedKeyword(entry.getValue())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean containsProtectedKeyword(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        for (String keyword : PROTECTED_VISUAL_KEYWORDS) {
+            if (normalized.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String toCommandText(List<String> command) {

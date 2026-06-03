@@ -23,7 +23,9 @@ export interface TextLayoutOptions {
 export interface ResolvedTextLayout {
   isLandscape: boolean;
   position: { x: string | number; y: string | number };
-  containerStyle: React.CSSProperties;
+  wrapperStyle: React.CSSProperties;
+  textAlign: 'left' | 'center' | 'right';
+  contentJustify: 'flex-start' | 'center' | 'flex-end';
   maxWidth?: string | number;
 }
 
@@ -39,12 +41,17 @@ const presetToPosition = (
     case 'hero_lower':
       return { x: 'center', y: isLandscape ? '66%' : '60%' };
     case 'left_focus':
-      return { x: 'left', y: isLandscape ? '40%' : '34%' };
+      return { x: isLandscape ? '18%' : '16%', y: isLandscape ? '40%' : '34%' };
     case 'right_focus':
-      return { x: 'right', y: isLandscape ? '40%' : '34%' };
+      return { x: isLandscape ? '82%' : '84%', y: isLandscape ? '40%' : '34%' };
     default:
       return { x: 'center', y: isLandscape ? '48%' : '42%' };
   }
+};
+
+const appendTranslate = (current: string | undefined, segment: string): string => {
+  const normalized = (current ?? '').trim();
+  return normalized ? `${normalized} ${segment}` : segment;
 };
 
 export const resolveTextLayout = ({
@@ -65,34 +72,54 @@ export const resolveTextLayout = ({
       ? presetToPosition(positionPreset, isLandscape)
       : { x: 'center', y: isLandscape ? landscapeDefaultY : portraitDefaultY });
 
-  const justifyContent =
-    resolvedPosition.x === 'center'
-      ? 'center'
-      : resolvedPosition.x === 'right'
-        ? 'flex-end'
-        : 'flex-start';
-  const alignItems =
-    resolvedPosition.y === '50%' || resolvedPosition.y === 'center' ? 'center' : 'flex-start';
-  const paddingTop =
-    typeof resolvedPosition.y === 'string' &&
-    resolvedPosition.y !== '50%' &&
-    resolvedPosition.y !== 'center'
-      ? resolvedPosition.y
-      : undefined;
-  const paddingLeft = resolvedPosition.x === 'left' ? '8%' : undefined;
-  const paddingRight = resolvedPosition.x === 'right' ? '8%' : undefined;
+  const wrapperStyle: React.CSSProperties = {
+    position: 'absolute',
+    maxWidth: isLandscape ? landscapeMaxWidth : portraitMaxWidth,
+  };
+  let transform = typeof wrapperStyle.transform === 'string' ? wrapperStyle.transform : undefined;
+
+  const x = resolvedPosition.x;
+  const y = resolvedPosition.y;
+
+  if (x === 'center') {
+    wrapperStyle.left = '50%';
+    transform = appendTranslate(transform, 'translateX(-50%)');
+  } else if (x === 'left') {
+    wrapperStyle.left = '8%';
+  } else if (x === 'right') {
+    wrapperStyle.right = '8%';
+  } else {
+    wrapperStyle.left = x as React.CSSProperties['left'];
+    transform = appendTranslate(transform, 'translateX(-50%)');
+  }
+
+  if (y === 'center') {
+    wrapperStyle.top = '50%';
+    transform = appendTranslate(transform, 'translateY(-50%)');
+  } else if (y != null) {
+    wrapperStyle.top = y as React.CSSProperties['top'];
+    transform = appendTranslate(transform, 'translateY(-50%)');
+  }
+
+  if (transform) {
+    wrapperStyle.transform = transform;
+  }
+
+  const textAlign =
+    positionPreset === 'right_focus' || resolvedPosition.x === 'right'
+      ? 'right'
+      : positionPreset === 'left_focus' || resolvedPosition.x === 'left'
+        ? 'left'
+        : 'center';
+  const contentJustify =
+    textAlign === 'right' ? 'flex-end' : textAlign === 'left' ? 'flex-start' : 'center';
 
   return {
     isLandscape,
     position: resolvedPosition,
     maxWidth: isLandscape ? landscapeMaxWidth : portraitMaxWidth,
-    containerStyle: {
-      display: 'flex',
-      justifyContent,
-      alignItems,
-      paddingTop,
-      paddingLeft,
-      paddingRight,
-    },
+    wrapperStyle,
+    textAlign,
+    contentJustify,
   };
 };

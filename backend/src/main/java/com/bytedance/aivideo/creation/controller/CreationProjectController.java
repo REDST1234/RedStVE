@@ -15,6 +15,7 @@ import com.bytedance.aivideo.creation.dto.CreativeAssetGridItemResponse;
 import com.bytedance.aivideo.creation.dto.CreationProjectListItemResponse;
 import com.bytedance.aivideo.creation.dto.CreationProjectListResponse;
 import com.bytedance.aivideo.creation.dto.CreativeAssetItemResponse;
+import com.bytedance.aivideo.creation.dto.GenerateVideoRequest;
 import com.bytedance.aivideo.creation.dto.MatchResultItemResponse;
 import com.bytedance.aivideo.creation.dto.MatchResultResponse;
 import com.bytedance.aivideo.creation.dto.MatchTriggerRequest;
@@ -343,14 +344,20 @@ public class CreationProjectController {
     }
 
     @PostMapping("/{projectId}/generate")
-    public ApiResponse<Boolean> generateVideo(@PathVariable("projectId") String projectId) {
-        creationProjectService.generateVideo(projectId);
+    public ApiResponse<Boolean> generateVideo(
+            @PathVariable("projectId") String projectId,
+            @RequestBody(required = false) GenerateVideoRequest request
+    ) {
+        creationProjectService.generateVideo(projectId, request == null ? null : request.getAspectRatio());
         return ApiResponse.success(Boolean.TRUE);
     }
 
     @PostMapping("/{projectId}/regenerate")
-    public ApiResponse<Boolean> regenerateVideo(@PathVariable("projectId") String projectId) {
-        creationProjectService.regenerateVideo(projectId);
+    public ApiResponse<Boolean> regenerateVideo(
+            @PathVariable("projectId") String projectId,
+            @RequestBody(required = false) GenerateVideoRequest request
+    ) {
+        creationProjectService.regenerateVideo(projectId, request == null ? null : request.getAspectRatio());
         return ApiResponse.success(Boolean.TRUE);
     }
 
@@ -403,6 +410,7 @@ public class CreationProjectController {
         response.setStatus(entity.getStatus());
         response.setTemplateId(entity.getTemplateId());
         response.setTemplateSnapshotId(entity.getTemplateSnapshotId());
+        response.setAspectRatio(entity.getRenderAspectRatio());
         response.setCreatedAt(toUtc(entity.getCreatedAt()));
         response.setUpdatedAt(toUtc(entity.getUpdatedAt()));
         return response;

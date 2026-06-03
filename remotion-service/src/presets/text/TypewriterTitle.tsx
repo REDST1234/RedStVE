@@ -42,7 +42,7 @@ export const TypewriterTitle: React.FC<TypewriterTitleProps> = ({
   textShadow = '0 2px 10px rgba(0,0,0,0.45)',
   maxWidth = '82%',
   letterSpacing = 0,
-  textAlign = 'center',
+  textAlign,
 }) => {
   const frame = useCurrentFrame();
   const { durationInFrames, width, height } = useVideoConfig();
@@ -76,9 +76,10 @@ export const TypewriterTitle: React.FC<TypewriterTitleProps> = ({
     : 0;
 
   return (
-    <AbsoluteFill style={layout.containerStyle}>
+    <AbsoluteFill>
       <div
         style={{
+          ...layout.wrapperStyle,
           display: 'inline-flex',
           alignItems: 'baseline',
           maxWidth: layout.maxWidth,
@@ -88,7 +89,7 @@ export const TypewriterTitle: React.FC<TypewriterTitleProps> = ({
           color,
           letterSpacing,
           lineHeight: 1.25,
-          textAlign,
+          textAlign: textAlign ?? layout.textAlign,
           textShadow,
           opacity: enterOpacity,
           whiteSpace: 'pre-wrap',

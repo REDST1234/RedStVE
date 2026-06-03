@@ -1,6 +1,7 @@
 package com.bytedance.aivideo.creation.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.bytedance.aivideo.common.error.ErrorCode;
 import com.bytedance.aivideo.common.exception.BizException;
@@ -190,9 +191,20 @@ public class CreativeMaterialServiceImpl extends ServiceImpl<CreativeMaterialMap
             throw new BizException(ErrorCode.MATERIAL_NOT_FOUND, "素材不存在或已删除: " + materialBizId);
         }
 
-        material.setStatus(MATERIAL_STATUS_DELETED);
-        material.setDeletedAt(LocalDateTime.now());
-        this.baseMapper.updateById(material);
+        this.baseMapper.update(
+                null,
+                new LambdaUpdateWrapper<CreativeMaterialEntity>()
+                        .eq(CreativeMaterialEntity::getId, material.getId())
+                        .eq(CreativeMaterialEntity::getProjectId, projectId.trim())
+                        .isNull(CreativeMaterialEntity::getDeletedAt)
+                        .set(CreativeMaterialEntity::getStatus, MATERIAL_STATUS_DELETED)
+        );
+        this.baseMapper.delete(
+                new LambdaQueryWrapper<CreativeMaterialEntity>()
+                        .eq(CreativeMaterialEntity::getId, material.getId())
+                        .eq(CreativeMaterialEntity::getProjectId, projectId.trim())
+                        .isNull(CreativeMaterialEntity::getDeletedAt)
+        );
 
         deletePhysicalAssetFiles(material);
         log.info("creative asset deleted: projectId={}, materialBizId={}", projectId, materialBizIdLong);
@@ -216,6 +228,7 @@ public class CreativeMaterialServiceImpl extends ServiceImpl<CreativeMaterialMap
                 new LambdaQueryWrapper<CreativeMaterialEntity>()
                         .eq(CreativeMaterialEntity::getProjectId, projectId)
                         .eq(CreativeMaterialEntity::getMaterialType, materialType)
+                        .ne(CreativeMaterialEntity::getStatus, MATERIAL_STATUS_DELETED)
                         .isNull(CreativeMaterialEntity::getDeletedAt)
         );
 

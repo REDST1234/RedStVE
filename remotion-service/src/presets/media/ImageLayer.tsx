@@ -3,19 +3,15 @@
  */
 import React from 'react';
 import { Img } from 'remotion';
+import { normalizeMediaStyle } from './normalizeMediaStyle';
 
 interface ImageLayerProps {
   src: string;
-  style?: React.CSSProperties;
+  style?: React.CSSProperties | Record<string, unknown>;
 }
 
 export const ImageLayer: React.FC<ImageLayerProps> = ({ src, style }) => {
-  const imgStyle: React.CSSProperties = {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover' as const,
-    ...style,
-  };
+  const imgStyle = normalizeMediaStyle(style, 'cover');
 
   return <Img src={src} style={imgStyle} />;
 };

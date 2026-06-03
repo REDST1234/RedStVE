@@ -165,14 +165,16 @@ export const creationApi = {
       query: versionId ? { versionId } : undefined
     }),
 
-  generateVideo: (projectId: string) =>
+  generateVideo: (projectId: string, payload?: { aspectRatio?: string }) =>
     request<ApiResponse<boolean>>(`/v1/creation/projects/${projectId}/generate`, {
-      method: 'POST'
+      method: 'POST',
+      body: payload ?? {}
     }),
 
-  regenerateVideo: (projectId: string) =>
+  regenerateVideo: (projectId: string, payload?: { aspectRatio?: string }) =>
     request<ApiResponse<boolean>>(`/v1/creation/projects/${projectId}/regenerate`, {
-      method: 'POST'
+      method: 'POST',
+      body: payload ?? {}
     }),
 
   getRenderStatus: (projectId: string) =>

@@ -45,7 +45,7 @@ export const KineticPopText: React.FC<KineticPopTextProps> = ({
   settleFrames = 24,
   textShadow = '0 10px 34px rgba(0,0,0,0.35)',
   letterSpacing = 0,
-  textAlign = 'center',
+  textAlign,
   maxWidth = '86%',
 }) => {
   const frame = useCurrentFrame();
@@ -97,9 +97,10 @@ export const KineticPopText: React.FC<KineticPopTextProps> = ({
   });
 
   return (
-    <AbsoluteFill style={layout.containerStyle}>
+    <AbsoluteFill>
       <div
         style={{
+          ...layout.wrapperStyle,
           maxWidth: layout.maxWidth,
           fontFamily,
           fontSize,
@@ -107,10 +108,10 @@ export const KineticPopText: React.FC<KineticPopTextProps> = ({
           color,
           lineHeight: 1.1,
           letterSpacing,
-          textAlign,
+          textAlign: textAlign ?? layout.textAlign,
           textShadow,
           opacity,
-          transform: `translateY(${yOffset}px) rotate(${rotation}deg) scale(${scale})`,
+          transform: `${layout.wrapperStyle.transform ?? ''} translateY(${yOffset}px) rotate(${rotation}deg) scale(${scale})`.trim(),
           transformOrigin: 'center center',
           whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',

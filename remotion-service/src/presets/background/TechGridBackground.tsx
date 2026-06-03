@@ -11,16 +11,23 @@ interface TechGridBackgroundProps {
   accentColor?: string;
   gridSize?: number;
   lineOpacity?: number;
+  lineWidth?: number;
   driftSpeed?: number;
   layoutMode?: 'auto' | 'portrait' | 'landscape';
 }
 
-const gridSvg = (gridSize: number, lineColor: string, accentColor: string, lineOpacity: number): string => {
+const gridSvg = (
+  gridSize: number,
+  lineColor: string,
+  accentColor: string,
+  lineOpacity: number,
+  lineWidth: number,
+): string => {
   const encoded = encodeURIComponent(`
     <svg xmlns="http://www.w3.org/2000/svg" width="${gridSize}" height="${gridSize}" viewBox="0 0 ${gridSize} ${gridSize}">
       <rect width="${gridSize}" height="${gridSize}" fill="none"/>
-      <path d="M ${gridSize} 0 L 0 0 0 ${gridSize}" fill="none" stroke="${lineColor}" stroke-opacity="${lineOpacity}" stroke-width="1"/>
-      <circle cx="${gridSize / 2}" cy="${gridSize / 2}" r="1.6" fill="${accentColor}" fill-opacity="0.55"/>
+      <path d="M ${gridSize} 0 L 0 0 0 ${gridSize}" fill="none" stroke="${lineColor}" stroke-opacity="${lineOpacity}" stroke-width="${lineWidth}"/>
+      <circle cx="${gridSize / 2}" cy="${gridSize / 2}" r="${Math.max(2.2, lineWidth * 1.85)}" fill="${accentColor}" fill-opacity="0.75"/>
     </svg>
   `);
   return `url("data:image/svg+xml;utf8,${encoded}")`;
@@ -32,6 +39,7 @@ export const TechGridBackground: React.FC<TechGridBackgroundProps> = ({
   accentColor = '#22D3EE',
   gridSize = 76,
   lineOpacity = 0.26,
+  lineWidth = 1.45,
   driftSpeed = 18,
   layoutMode = 'auto',
 }) => {
@@ -43,6 +51,8 @@ export const TechGridBackground: React.FC<TechGridBackgroundProps> = ({
     extrapolateRight: 'clamp',
   });
   const resolvedGridSize = isLandscape ? Math.max(60, gridSize - 10) : gridSize;
+  const resolvedLineOpacity = Math.max(0.24, lineOpacity);
+  const resolvedLineWidth = isLandscape ? Math.max(1.55, lineWidth + 0.15) : Math.max(1.35, lineWidth);
   const rotateX = isLandscape ? 64 : 72;
   const scale = isLandscape ? 1.35 : 1.55;
   const transformOrigin = isLandscape ? 'center 78%' : 'center 72%';
@@ -50,18 +60,32 @@ export const TechGridBackground: React.FC<TechGridBackgroundProps> = ({
   return (
     <AbsoluteFill
       style={{
-        background: `linear-gradient(180deg, ${backgroundColor} 0%, #0f1f3a 55%, #102d56 100%)`,
+        background: `linear-gradient(180deg, ${backgroundColor} 0%, #10274b 58%, #14376a 100%)`,
         overflow: 'hidden',
       }}
     >
       <AbsoluteFill
         style={{
-          backgroundImage: gridSvg(resolvedGridSize, lineColor, accentColor, lineOpacity),
+          backgroundImage: gridSvg(
+            resolvedGridSize,
+            lineColor,
+            accentColor,
+            resolvedLineOpacity,
+            resolvedLineWidth,
+          ),
           backgroundRepeat: 'repeat',
           backgroundSize: `${resolvedGridSize}px ${resolvedGridSize}px`,
           transform: `translateY(${yOffset}px) perspective(${isLandscape ? 1500 : 1200}px) rotateX(${rotateX}deg) scale(${scale})`,
           transformOrigin,
-          opacity: 0.92,
+          opacity: 0.98,
+        }}
+      />
+      <AbsoluteFill
+        style={{
+          background:
+            `radial-gradient(circle at 50% 42%, ${accentColor}22 0%, transparent 38%), radial-gradient(circle at 50% 60%, ${lineColor}14 0%, transparent 46%)`,
+          mixBlendMode: 'screen',
+          opacity: 0.9,
         }}
       />
       <AbsoluteFill
