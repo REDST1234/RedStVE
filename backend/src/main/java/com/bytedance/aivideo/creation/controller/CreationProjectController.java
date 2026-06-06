@@ -22,9 +22,11 @@ import com.bytedance.aivideo.creation.dto.MatchTriggerRequest;
 import com.bytedance.aivideo.creation.dto.MatchTriggerResponse;
 import com.bytedance.aivideo.creation.dto.ProjectBgmBindingResponse;
 import com.bytedance.aivideo.creation.dto.ProjectBgmSelectRequest;
+import com.bytedance.aivideo.creation.dto.RenderFromJsonResponse;
 import com.bytedance.aivideo.creation.dto.TimelineSegmentResponse;
 import com.bytedance.aivideo.creation.dto.UpdateProjectRequest;
 import com.bytedance.aivideo.creation.dto.UploadCreativeAssetResponse;
+import com.bytedance.aivideo.creation.dto.remotion.CompositionScript;
 import com.bytedance.aivideo.creation.entity.CreationProjectEntity;
 import com.bytedance.aivideo.creation.entity.CreativeMaterialEntity;
 import com.bytedance.aivideo.creation.entity.CreativeMaterialGridEntity;
@@ -200,8 +202,9 @@ public class CreationProjectController {
         if (request == null) {
             request = new com.bytedance.aivideo.creation.dto.TemplateRecommendRequest();
         }
+        boolean forceRefresh = request.getForceRefresh() != null && request.getForceRefresh();
         com.bytedance.aivideo.creation.dto.TemplateRecommendResponse response = templateRecommendService.recommend(
-                projectId, request.getW1(), request.getW2(), request.getTopN());
+                projectId, request.getW1(), request.getW2(), request.getTopN(), forceRefresh);
         return ApiResponse.success(response);
     }
 
@@ -213,7 +216,8 @@ public class CreationProjectController {
             request = new com.bytedance.aivideo.creation.dto.BgmRecommendRequest();
         }
         com.bytedance.aivideo.creation.dto.BgmRecommendResponse response = bgmRecommendService.recommend(
-                projectId, request.getW1(), request.getW2(), request.getW3(), request.getTopN());
+                projectId, request.getW1(), request.getW2(), request.getW3(), request.getTopN(),
+                request.getForceRefresh() != null && request.getForceRefresh());
         return ApiResponse.success(response);
     }
 
@@ -367,6 +371,39 @@ public class CreationProjectController {
         return ApiResponse.success(status);
     }
 
+    @GetMapping("/{projectId}/render-history")
+    public ApiResponse<java.util.List<com.bytedance.aivideo.creation.entity.RenderRecordEntity>> getRenderHistory(@PathVariable("projectId") String projectId) {
+        java.util.List<com.bytedance.aivideo.creation.entity.RenderRecordEntity> history = creationProjectService.getRenderHistory(projectId);
+        return ApiResponse.success(history);
+    }
+
+    /**
+     * [实验性] 直接提交 CompositionScript JSON 进行视频渲染。
+     * 跳过 LLM 编排步骤，直接校验 → sanitize → 投递 Remotion。
+     * 用于测试外部大模型输出的编排 JSON 效果。
+     */
+    @PostMapping("/render-from-json")
+    public ApiResponse<RenderFromJsonResponse> renderFromJson(@RequestBody CompositionScript script) {
+        RenderFromJsonResponse response = creationProjectService.renderFromJson(script);
+        if ("FAILED".equals(response.getStatus())) {
+            return ApiResponse.success(response); // 前端自行判断 error 字段
+        }
+        return ApiResponse.success(response);
+    }
+
+    /**
+     * [实验性] 查询 JSON 直投渲染任务的状态。
+     */
+    @GetMapping("/render-from-json/{renderId}/status")
+    public ApiResponse<com.bytedance.aivideo.engine.remotion.dto.RenderResponse> getJsonRenderStatus(
+            @PathVariable("renderId") String renderId) {
+        // renderFromJson 是 default 方法，需要通过 impl 实例调用
+        com.bytedance.aivideo.creation.service.impl.CreationProjectServiceImpl impl =
+                (com.bytedance.aivideo.creation.service.impl.CreationProjectServiceImpl) creationProjectService;
+        com.bytedance.aivideo.engine.remotion.dto.RenderResponse status = impl.getJsonRenderStatus(renderId);
+        return ApiResponse.success(status);
+    }
+
     private List<SlotMatchResultEntity> listMatchResults(String projectId, String versionId) {
         return slotMatchResultMapper.selectList(
                 new LambdaQueryWrapper<SlotMatchResultEntity>()
@@ -484,7 +521,31 @@ public class CreationProjectController {
         item.setVetoReason(row.getVetoReason());
         item.setAdaptationPlanJson(row.getAdaptationPlanJson());
         item.setAdaptedFilePath(row.getAdaptedFilePath());
+        item.setAdaptedFileUrl(toStorageUrl(row.getAdaptedFilePath()));
+        item.setImageGenEligible(row.getImageGenEligible());
+        item.setImageGenCategory(row.getImageGenCategory());
+        item.setImageGenDescription(row.getImageGenDescription());
+        item.setImageGenStatus(row.getImageGenStatus());
+        item.setImageGenUrl(row.getImageGenUrl());
+        item.setImageGenErrorMessage(row.getImageGenErrorMessage());
         return item;
+    }
+
+    /**
+     * 将服务端绝对文件路径转为前端可访问的相对 URL。
+     * d:\...\storage\creation-adapt\{projId}\{verId}\img_gen_seg_002.png
+     * → /api/storage/creation-adapt/{projId}/{verId}/img_gen_seg_002.png
+     */
+    private String toStorageUrl(String absolutePath) {
+        if (absolutePath == null || absolutePath.isBlank()) {
+            return null;
+        }
+        String normalized = absolutePath.replace('\\', '/');
+        int idx = normalized.lastIndexOf("/storage/");
+        if (idx >= 0) {
+            return "/api/storage/" + normalized.substring(idx + "/storage/".length());
+        }
+        return normalized;
     }
 
     private OffsetDateTime toUtc(java.time.LocalDateTime value) {

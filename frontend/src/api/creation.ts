@@ -94,16 +94,16 @@ export const creationApi = {
       body: { templateId, templateVersion }
     }),
 
-  recommendTemplates: (projectId: string, w1: number = 0.6, w2: number = 0.4, topN: number = 10) =>
+  recommendTemplates: (projectId: string, w1: number = 0.6, w2: number = 0.4, topN: number = 10, forceRefresh: boolean = false) =>
     request<ApiResponse<TemplateRecommendData>>(`/v1/creation/projects/${projectId}/recommend-templates`, {
       method: 'POST',
-      body: { w1, w2, topN }
+      body: { w1, w2, topN, forceRefresh }
     }),
 
-  recommendBgm: (projectId: string, w1: number = 0.35, w2: number = 0.5, w3: number = 0.15, topN: number = 5) =>
+  recommendBgm: (projectId: string, w1: number = 0.35, w2: number = 0.5, w3: number = 0.15, topN: number = 5, forceRefresh: boolean = false) =>
     request<ApiResponse<BgmRecommendData>>(`/v1/creation/projects/${projectId}/recommend-bgm`, {
       method: 'POST',
-      body: { w1, w2, w3, topN }
+      body: { w1, w2, w3, topN, forceRefresh }
     }),
 
   selectBgm: (

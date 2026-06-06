@@ -309,12 +309,30 @@ public class AssetProfilerServiceImpl implements AssetProfilerService {
             logPhysicalAttributes(material.getBizId(), material.getMaterialType(), profileJson, luminanceResultForLog, physical);
             material.setStatus(MATERIAL_STATUS_PROFILED);
             materialMapper.updateById(material);
+            clearRecommendationCache(material.getProjectId());
 
         } catch (Exception e) {
             log.error("Failed to profile asset: {}", assetId, e);
             cleanupExistingGridAssets(material.getBizId());
             material.setStatus(MATERIAL_STATUS_FAILED);
             materialMapper.updateById(material);
+            clearRecommendationCache(material.getProjectId());
+        }
+    }
+
+    private void clearRecommendationCache(String projectId) {
+        if (projectId != null && !projectId.isBlank()) {
+            String pId = projectId.trim();
+            // 缓存 key 包含 topN 后缀，需用模式匹配删除所有 topN 变体
+            var templateKeys = redisTemplate.keys("aivideo:recommend:template:" + pId + ":*");
+            if (templateKeys != null && !templateKeys.isEmpty()) {
+                redisTemplate.delete(templateKeys);
+            }
+            var bgmKeys = redisTemplate.keys("aivideo:recommend:bgm:" + pId + ":*");
+            if (bgmKeys != null && !bgmKeys.isEmpty()) {
+                redisTemplate.delete(bgmKeys);
+            }
+            log.info("Cleared recommendation cache for project: {}", pId);
         }
     }
 

@@ -16,6 +16,7 @@ import com.bytedance.aivideo.creation.service.CreativeMaterialService;
 import com.bytedance.aivideo.engine.ffmpeg.api.MediaProbeEngine;
 import com.bytedance.aivideo.engine.ffmpeg.model.MediaProbeResult;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -30,6 +31,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -53,19 +55,22 @@ public class CreativeMaterialServiceImpl extends ServiceImpl<CreativeMaterialMap
     private final CreativeMaterialGridMapper creativeMaterialGridMapper;
     private final MediaProbeEngine mediaProbeEngine;
     private final MediaUploadProperties mediaUploadProperties;
+    private final StringRedisTemplate stringRedisTemplate;
 
     public CreativeMaterialServiceImpl(
             CreationProjectService creationProjectService,
             AssetProfilerService assetProfilerService,
             CreativeMaterialGridMapper creativeMaterialGridMapper,
             MediaProbeEngine mediaProbeEngine,
-            MediaUploadProperties mediaUploadProperties
+            MediaUploadProperties mediaUploadProperties,
+            StringRedisTemplate stringRedisTemplate
     ) {
         this.creationProjectService = creationProjectService;
         this.assetProfilerService = assetProfilerService;
         this.creativeMaterialGridMapper = creativeMaterialGridMapper;
         this.mediaProbeEngine = mediaProbeEngine;
         this.mediaUploadProperties = mediaUploadProperties;
+        this.stringRedisTemplate = stringRedisTemplate;
     }
 
     @Override
@@ -116,6 +121,9 @@ public class CreativeMaterialServiceImpl extends ServiceImpl<CreativeMaterialMap
         this.baseMapper.insert(entity);
         log.info("creative asset upload persisted: projectId={}, materialType={}, materialBizId={}",
                 projectId, normalizedType, entity.getBizId());
+
+        clearRecommendationCache(projectId);
+
         return entity;
     }
 
@@ -208,6 +216,24 @@ public class CreativeMaterialServiceImpl extends ServiceImpl<CreativeMaterialMap
 
         deletePhysicalAssetFiles(material);
         log.info("creative asset deleted: projectId={}, materialBizId={}", projectId, materialBizIdLong);
+        
+        clearRecommendationCache(projectId);
+    }
+
+    private void clearRecommendationCache(String projectId) {
+        if (projectId != null && !projectId.isBlank()) {
+            String pId = projectId.trim();
+            // 缓存 key 包含 topN 后缀，需用模式匹配删除所有 topN 变体
+            var templateKeys = stringRedisTemplate.keys("aivideo:recommend:template:" + pId + ":*");
+            if (templateKeys != null && !templateKeys.isEmpty()) {
+                stringRedisTemplate.delete(templateKeys);
+            }
+            var bgmKeys = stringRedisTemplate.keys("aivideo:recommend:bgm:" + pId + ":*");
+            if (bgmKeys != null && !bgmKeys.isEmpty()) {
+                stringRedisTemplate.delete(bgmKeys);
+            }
+            log.info("Cleared recommendation cache for project: {}", pId);
+        }
     }
 
     private String normalizeMaterialType(String materialType) {

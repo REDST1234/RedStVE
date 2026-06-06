@@ -63,12 +63,13 @@ export const CapsuleBacking: React.FC<CapsuleBackingProps> = ({
   const frame = useCurrentFrame();
   const resolvedPosition = resolveBackingPosition(position);
 
-  const progress = interpolate(frame, [0, enterFrames], [0, 1], {
+  const effectiveEnter = Math.max(1, enterFrames);
+  const progress = interpolate(frame, [0, effectiveEnter], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
     easing: Easing.out(Easing.back(1.2)),
   });
-  const fadeInOpacity = interpolate(frame, [0, Math.max(4, enterFrames * 0.4)], [0, 1], {
+  const fadeInOpacity = interpolate(frame, [0, Math.max(4, effectiveEnter * 0.4)], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });

@@ -55,6 +55,9 @@ public class SlotMatchLlmServiceImpl implements SlotMatchLlmService {
             "KEN_BURNS_MOTION",
             "AUDIO_DUCKING"
     );
+    private static final Set<String> ALLOWED_IMAGE_GEN_CATEGORIES = Set.of(
+            "UI_ELEMENT", "STICKER", "LOGO", "ILLUSTRATION", "BACKGROUND", "NONE"
+    );
 
     private final ArkPayloadFactory arkPayloadFactory;
     private final ArkResponsesClient arkResponsesClient;
@@ -176,6 +179,24 @@ public class SlotMatchLlmServiceImpl implements SlotMatchLlmService {
                     decision.setAdaptationPlan(emptyPlan);
                 }
 
+                // ---- Parse image generation eligibility (MISSING slots only) ----
+                decision.setImageGenEligible(
+                        decisionNode.has("imageGenEligible") && !decisionNode.path("imageGenEligible").isNull()
+                                ? decisionNode.path("imageGenEligible").asBoolean(false) : false);
+                if (Boolean.TRUE.equals(decision.getImageGenEligible())
+                        && "MISSING".equals(decision.getMatchStatus())) {
+                    decision.setImageGenCategory(
+                            validateImageGenCategory(decisionNode.path("imageGenCategory").asText("NONE")));
+                    decision.setImageGenPrompt(decisionNode.path("imageGenPrompt").asText(""));
+                    decision.setImageGenDescription(decisionNode.path("imageGenDescription").asText(""));
+                    if (decision.getImageGenPrompt().isBlank()) {
+                        log.warn("imageGenEligible=true but imageGenPrompt is blank for segmentIndex={}",
+                                decision.getSegmentIndex());
+                        decision.setImageGenEligible(false);
+                        decision.setImageGenCategory("NONE");
+                    }
+                }
+
                 if (("MATCHED".equals(decision.getMatchStatus()) || "PARTIAL".equals(decision.getMatchStatus()))
                         && !materialIds.contains(decision.getMatchedAssetId())) {
                     throw new BizException(ErrorCode.INVALID_REQUEST, "槽位匹配返回了不存在的素材ID: " + decision.getMatchedAssetId());
@@ -189,6 +210,14 @@ public class SlotMatchLlmServiceImpl implements SlotMatchLlmService {
         } catch (Exception ex) {
             throw new BizException(ErrorCode.INVALID_REQUEST, "槽位匹配 LLM JSON 解析失败: " + ex.getMessage());
         }
+    }
+
+    private String validateImageGenCategory(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "NONE";
+        }
+        String normalized = raw.trim().toUpperCase(Locale.ROOT);
+        return ALLOWED_IMAGE_GEN_CATEGORIES.contains(normalized) ? normalized : "NONE";
     }
 
     private void validateStrategyChain(SlotMatchLlmResult.Decision decision, CreativeMaterialEntity matchedMaterial) {

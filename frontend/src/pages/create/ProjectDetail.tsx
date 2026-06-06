@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { creationApi } from '../../api/creation';
 import { useToast } from '../../contexts/ToastContext';
 import { TemplateSummaryData } from '../../types';
+import { ProjectCreationTabs } from '../../components/ProjectCreationTabs';
 
 type TemplateOption = {
   templateId: string;
@@ -186,7 +187,7 @@ export default function CreateProjectDetail() {
 
   return (
     <div className="detail-page fade-in" style={{ borderColor: '#e0e7ff' }}>
-      <div className="detail-header" style={{ background: '#f8fafc', justifyContent: 'space-between' }}>
+      <div className="detail-header" style={{ background: '#f8fafc', justifyContent: 'space-between', borderBottom: 'none', paddingBottom: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button className="back-btn" onClick={() => navigate('/create')} title="返回">
             <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -208,6 +209,7 @@ export default function CreateProjectDetail() {
           </button>
         </div>
       </div>
+      <ProjectCreationTabs projectId={projectId} activeTab="detail" />
 
       <div className="detail-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
         <div className="result-card">

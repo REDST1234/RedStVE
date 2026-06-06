@@ -49,7 +49,7 @@ mybatis-plus:
       id-type: auto
       logic-delete-field: deletedAt
       logic-delete-value: now(3)
-      logic-not-delete-value: 'null'
+      logic-not-delete-value: "null"
 
 logging:
   level:
@@ -61,3 +61,15 @@ creation:
   bgm-vector:
     collection-name: ${CREATION_BGM_COLLECTION:creation_bgm}
     audio-database-dir: ${AUDIO_DATABASE_DIR:storage/audio-database}
+
+comfyui:
+  base-url: ${COMFYUI_BASE_URL:http://localhost:8001}
+  workflow-path: ${COMFYUI_WORKFLOW_PATH:config/comfyui_bg_removal_workflow.json}
+  poll-timeout-seconds: ${COMFYUI_POLL_TIMEOUT:120}
+  timeout-seconds: ${COMFYUI_TIMEOUT:60}
+
+seedream:
+  api-key: ${SEEDREAM_API_KEY:}
+  model: ${SEEDREAM_MODEL:doubao-seedream-4-0-250828}
+  size: ${SEEDREAM_SIZE:2K}
+  watermark: ${SEEDREAM_WATERMARK:true}

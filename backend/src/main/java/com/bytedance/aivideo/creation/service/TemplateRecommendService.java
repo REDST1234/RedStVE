@@ -9,7 +9,8 @@ public interface TemplateRecommendService {
      * @param w1 语义权重
      * @param w2 结构权重
      * @param topN 返回数量
+     * @param forceRefresh 强制刷新 — true 时跳过缓存重新计算
      * @return 推荐结果
      */
-    TemplateRecommendResponse recommend(String projectId, double w1, double w2, int topN);
+    TemplateRecommendResponse recommend(String projectId, double w1, double w2, int topN, boolean forceRefresh);
 }

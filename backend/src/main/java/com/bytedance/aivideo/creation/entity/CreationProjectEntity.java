@@ -26,6 +26,8 @@ public class CreationProjectEntity {
     private String status; // DRAFT/MATCHING/ADAPTING/COMPOSED/EXPORTED
 
     private String renderAspectRatio;
+
+    private String latestRenderId;
     
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

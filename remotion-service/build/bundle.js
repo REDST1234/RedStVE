@@ -1,7 +1,7 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 2342
+/***/ 3041
 (__unused_webpack_module, __unused_webpack___webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -6111,6 +6111,188 @@ const KenBurns = ({
   ) });
 };
 
+;// ./src/presets/motion/Float2d5.tsx
+
+
+
+const Float2d5 = ({
+  src,
+  floatAmplitude = 12,
+  floatSpeed = 0.7,
+  swayAmount = 2,
+  scaleBreath = 0.03,
+  perspective = 800,
+  shadowEnabled = true,
+  shadowColor = "rgba(0,0,0,0.25)",
+  objectFit = "contain",
+  scale = 0.9
+}) => {
+  const frame = (0,esm.useCurrentFrame)();
+  const { fps } = (0,esm.useVideoConfig)();
+  const basePeriodFrames = fps * 3.5;
+  const adjustedPeriod = basePeriodFrames / Math.max(0.3, Math.min(2, floatSpeed));
+  const t = frame / adjustedPeriod * Math.PI * 2;
+  const translateY = (0,esm.interpolate)(Math.sin(t), [-1, 1], [-floatAmplitude, floatAmplitude]);
+  const swayPhase = t + Math.PI / 3;
+  const rotateZ = (0,esm.interpolate)(Math.sin(swayPhase), [-1, 1], [-swayAmount, swayAmount]);
+  const breathPhase = t + Math.PI / 2;
+  const breathScale = 1 + (0,esm.interpolate)(Math.sin(breathPhase), [-1, 1], [-scaleBreath, scaleBreath]);
+  const shadowOffsetY = (0,esm.interpolate)(Math.sin(t), [-1, 1], [8, 28]);
+  const shadowBlur = (0,esm.interpolate)(Math.sin(t), [-1, 1], [24, 48]);
+  const shadowAlpha = (0,esm.interpolate)(Math.sin(t), [-1, 1], [0.15, 0.35]);
+  const finalScale = scale * breathScale;
+  const containerStyle = {
+    width: "100%",
+    height: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    perspective: `${perspective}px`,
+    transformStyle: "preserve-3d"
+  };
+  const cardStyle = {
+    transform: `rotateX(4deg) translateY(${translateY}px) rotateZ(${rotateZ}deg) scale(${finalScale})`,
+    transformStyle: "preserve-3d",
+    position: "relative"
+  };
+  const imgStyle = {
+    width: "100%",
+    height: "100%",
+    objectFit,
+    display: "block"
+  };
+  const shadowFilter = shadowEnabled ? `drop-shadow(0 ${shadowOffsetY}px ${shadowBlur}px ${shadowColor.replace(/[\d.]+\)$/, `${shadowAlpha.toFixed(2)})`)})` : "none";
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { style: containerStyle, children: /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: cardStyle, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+    esm.Img,
+    {
+      src,
+      style: {
+        ...imgStyle,
+        filter: shadowFilter
+      }
+    }
+  ) }) });
+};
+
+;// ./src/presets/motion/ParallaxDrift.tsx
+
+
+
+const ParallaxDrift = ({
+  src,
+  driftRangeX = 30,
+  driftRangeY = 20,
+  driftSpeedX = 0.5,
+  driftSpeedY = 0.7,
+  scaleRange = 0.05,
+  rotationRange = 1.5,
+  objectFit = "cover"
+}) => {
+  const frame = (0,esm.useCurrentFrame)();
+  const { fps } = (0,esm.useVideoConfig)();
+  const basePeriod = fps * 4;
+  const periodX = basePeriod / Math.max(0.3, Math.min(2, driftSpeedX));
+  const periodY = basePeriod / Math.max(0.3, Math.min(2, driftSpeedY));
+  const periodScale = basePeriod * 1.3;
+  const periodRotation = basePeriod * 1.1;
+  const tx = frame / periodX * Math.PI * 2;
+  const ty = frame / periodY * Math.PI * 2;
+  const ts = frame / periodScale * Math.PI * 2;
+  const tr = frame / periodRotation * Math.PI * 2;
+  const translateX = (0,esm.interpolate)(Math.sin(tx), [-1, 1], [-driftRangeX, driftRangeX]);
+  const translateY = (0,esm.interpolate)(Math.cos(ty), [-1, 1], [-driftRangeY, driftRangeY]);
+  const driftScale = 1 + (0,esm.interpolate)(Math.sin(ts), [-1, 1], [-scaleRange, scaleRange]);
+  const rotate = (0,esm.interpolate)(Math.cos(tr), [-1, 1], [-rotationRange, rotationRange]);
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { style: { overflow: "hidden" }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+    "div",
+    {
+      style: {
+        width: "110%",
+        height: "110%",
+        position: "absolute",
+        top: "-5%",
+        left: "-5%",
+        transform: `translateX(${translateX}px) translateY(${translateY}px) scale(${driftScale}) rotate(${rotate}deg)`,
+        transformOrigin: "center center"
+      },
+      children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+        esm.Img,
+        {
+          src,
+          style: {
+            width: "100%",
+            height: "100%",
+            objectFit
+          }
+        }
+      )
+    }
+  ) });
+};
+
+;// ./src/presets/motion/PerspectiveTilt.tsx
+
+
+
+const PerspectiveTilt = ({
+  src,
+  rotateX = -5,
+  rotateY = 3,
+  perspective = 1e3,
+  scale = 0.85,
+  dynamicEnabled = true,
+  dynamicRange = 2,
+  shadowEnabled = true,
+  shadowColor = "rgba(0,0,0,0.3)",
+  objectFit = "contain"
+}) => {
+  const frame = (0,esm.useCurrentFrame)();
+  const { fps } = (0,esm.useVideoConfig)();
+  let dynamicX = 0;
+  let dynamicY = 0;
+  if (dynamicEnabled) {
+    const period = fps * 5;
+    const tx = frame / period * Math.PI * 2;
+    const ty = frame / (period * 1.3) * Math.PI * 2;
+    dynamicX = (0,esm.interpolate)(Math.sin(tx), [-1, 1], [-dynamicRange, dynamicRange]);
+    dynamicY = (0,esm.interpolate)(Math.cos(ty), [-1, 1], [-dynamicRange, dynamicRange]);
+  }
+  const finalRotateX = rotateX + dynamicX;
+  const finalRotateY = rotateY + dynamicY;
+  const containerStyle = {
+    width: "100%",
+    height: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    perspective: `${perspective}px`,
+    transformStyle: "preserve-3d"
+  };
+  const cardStyle = {
+    transform: `rotateX(${finalRotateX}deg) rotateY(${finalRotateY}deg) scale(${scale})`,
+    transformStyle: "preserve-3d",
+    position: "relative"
+  };
+  const imgStyle = {
+    width: "100%",
+    height: "100%",
+    objectFit,
+    display: "block",
+    borderRadius: "12px"
+  };
+  const boxShadow = shadowEnabled ? `0 20px 60px ${shadowColor}, 0 8px 24px ${shadowColor.replace(/[\d.]+\)$/, "0.15)")}` : "none";
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { style: containerStyle, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+    "div",
+    {
+      style: {
+        ...cardStyle,
+        boxShadow
+      },
+      children: /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.Img, { src, style: imgStyle })
+    }
+  ) });
+};
+
 // EXTERNAL MODULE: ./node_modules/remotion/dist/esm/no-react.mjs
 var no_react = __webpack_require__(9382);
 ;// ./node_modules/@remotion/google-fonts/dist/esm/NotoSansSC.mjs
@@ -8066,6 +8248,324 @@ const WordHighlightText = ({
   ) });
 };
 
+;// ./src/presets/text/CounterNumber.tsx
+
+
+
+
+
+const { fontFamily: CounterNumber_fontFamily } = loadFont();
+const RollingDigit = ({ digit, frame, scrollFrames, cascadeDelay, digitIndexFromRight, color }) => {
+  const localFrame = Math.max(0, frame - cascadeDelay);
+  const progress = (0,esm.interpolate)(localFrame, [0, scrollFrames], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: esm.Easing.out(esm.Easing.cubic)
+  });
+  const currentY = (0,esm.interpolate)(progress, [0, 1], [0, -56], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const currentOpacity = (0,esm.interpolate)(localFrame, [0, scrollFrames * 0.45], [1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const nextY = (0,esm.interpolate)(progress, [0, 1], [56, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const nextOpacity = (0,esm.interpolate)(localFrame, [scrollFrames * 0.55, scrollFrames], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  return /* @__PURE__ */ (0,jsx_runtime.jsxs)(
+    "span",
+    {
+      style: {
+        display: "inline-block",
+        position: "relative",
+        width: "0.72em",
+        height: "1.28em",
+        overflow: "hidden",
+        verticalAlign: "baseline"
+      },
+      children: [
+        /* @__PURE__ */ (0,jsx_runtime.jsx)(
+          "span",
+          {
+            style: {
+              position: "absolute",
+              left: 0,
+              top: "0.12em",
+              width: "100%",
+              textAlign: "center",
+              lineHeight: 1,
+              color,
+              opacity: currentOpacity,
+              transform: `translateY(${currentY}px)`
+            },
+            children: digit
+          }
+        ),
+        /* @__PURE__ */ (0,jsx_runtime.jsx)(
+          "span",
+          {
+            style: {
+              position: "absolute",
+              left: 0,
+              top: "0.12em",
+              width: "100%",
+              textAlign: "center",
+              lineHeight: 1,
+              color,
+              opacity: nextOpacity,
+              transform: `translateY(${nextY}px)`
+            },
+            children: digit
+          }
+        )
+      ]
+    }
+  );
+};
+const CounterNumber = ({
+  value,
+  prefix = "",
+  suffix = "",
+  decimals = 0,
+  fontSize = 72,
+  color = "#FFFFFF",
+  fontWeight = 900,
+  scrollFrames = 30,
+  digitGap = 4,
+  position,
+  layoutMode = "auto",
+  textShadow = "0 4px 20px rgba(0,0,0,0.35)",
+  letterSpacing = "0.04em"
+}) => {
+  const frame = (0,esm.useCurrentFrame)();
+  const { width, height } = (0,esm.useVideoConfig)();
+  const layout = resolveTextLayout({
+    width,
+    height,
+    positionPreset: "hero_center",
+    position,
+    portraitDefaultY: "42%",
+    landscapeDefaultY: "48%",
+    layoutMode
+  });
+  const formatted = value.toFixed(Math.max(0, Math.min(4, decimals)));
+  const digits = Array.from(formatted);
+  const cascadeInterval = Math.max(2, Math.floor(scrollFrames / (Math.max(1, digits.length) * 2.5)));
+  const enterOpacity = (0,esm.interpolate)(frame, [0, Math.min(16, scrollFrames)], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  return /* @__PURE__ */ (0,jsx_runtime.jsxs)(
+    "div",
+    {
+      style: {
+        ...layout.wrapperStyle,
+        fontFamily: CounterNumber_fontFamily,
+        fontSize,
+        fontWeight,
+        textShadow,
+        letterSpacing,
+        opacity: enterOpacity,
+        display: "flex",
+        alignItems: "baseline",
+        justifyContent: "center",
+        gap: digitGap
+      },
+      children: [
+        prefix ? /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color, opacity: 0.85, fontSize: "0.65em", marginRight: digitGap > 4 ? 0 : -2 }, children: prefix }) : null,
+        digits.map((char, index) => {
+          const isFromRight = digits.length - 1 - index;
+          if (char === ".") {
+            return /* @__PURE__ */ (0,jsx_runtime.jsx)(
+              "span",
+              {
+                style: {
+                  display: "inline-block",
+                  width: "0.38em",
+                  textAlign: "center",
+                  color,
+                  opacity: enterOpacity
+                },
+                children: "."
+              },
+              `dot_${index}`
+            );
+          }
+          const cascadeDelay = (digits.length - 1 - isFromRight) * cascadeInterval;
+          return /* @__PURE__ */ (0,jsx_runtime.jsx)(
+            RollingDigit,
+            {
+              digit: char,
+              frame,
+              scrollFrames,
+              cascadeDelay,
+              digitIndexFromRight: isFromRight,
+              color
+            },
+            `${index}_${char}`
+          );
+        }),
+        suffix ? /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color, opacity: 0.85, fontSize: "0.65em", marginLeft: digitGap > 4 ? 0 : -2 }, children: suffix }) : null
+      ]
+    }
+  );
+};
+
+;// ./src/presets/text/LabelChip.tsx
+
+
+
+
+const { fontFamily: LabelChip_fontFamily } = loadFont();
+const LabelChip_withAlpha = (color, opacity) => {
+  const clamped = Math.max(0, Math.min(1, opacity));
+  const normalized = color.trim();
+  if (/^#([0-9a-fA-F]{6})$/.test(normalized)) {
+    return `${normalized}${Math.round(clamped * 255).toString(16).padStart(2, "0")}`;
+  }
+  if (/^#([0-9a-fA-F]{3})$/.test(normalized)) {
+    const expanded = normalized.slice(1).split("").map((ch) => ch + ch).join("");
+    return `#${expanded}${Math.round(clamped * 255).toString(16).padStart(2, "0")}`;
+  }
+  return normalized;
+};
+const resolveChipStyles = (variant, color, bgColor, borderColor) => {
+  switch (variant) {
+    case "outlined":
+      return {
+        background: "transparent",
+        border: `1.5px solid ${borderColor || color}`,
+        textColor: color
+      };
+    case "soft":
+      return {
+        background: LabelChip_withAlpha(bgColor, 0.18),
+        border: "none",
+        textColor: color
+      };
+    case "filled":
+    default:
+      return {
+        background: bgColor,
+        border: "none",
+        textColor: "#FFFFFF"
+      };
+  }
+};
+const resolveChipPosition = (position) => {
+  if (!position) {
+    return {
+      position: "absolute",
+      left: "50%",
+      top: "50%",
+      transform: "translate(-50%, -50%)"
+    };
+  }
+  const style = { position: "absolute" };
+  let transform = "";
+  if (position.x === "center") {
+    style.left = "50%";
+    transform += "translateX(-50%)";
+  } else if (position.x != null) {
+    style.left = position.x;
+    if (typeof position.x === "string" && position.x.trim().endsWith("%")) {
+      transform += "translateX(-50%)";
+    }
+  }
+  transform += " ";
+  if (position.y === "center") {
+    style.top = "50%";
+    transform += "translateY(-50%)";
+  } else if (position.y != null) {
+    style.top = position.y;
+    if (typeof position.y === "string" && position.y.trim().endsWith("%")) {
+      transform += "translateY(-50%)";
+    }
+  }
+  transform = transform.trim();
+  if (transform) {
+    style.transform = transform;
+  }
+  return style;
+};
+const LabelChip = ({
+  text,
+  variant = "filled",
+  color = "#FFFFFF",
+  bgColor = "#3B82F6",
+  borderColor = "rgba(255,255,255,0.35)",
+  fontSize = 28,
+  fontWeight = 700,
+  paddingX = 16,
+  paddingY = 8,
+  borderRadius = 999,
+  position,
+  icon,
+  enterFrames = 14,
+  textShadow = "0 1px 6px rgba(0,0,0,0.18)"
+}) => {
+  const frame = (0,esm.useCurrentFrame)();
+  const popProgress = (0,esm.interpolate)(frame, [0, enterFrames], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: esm.Easing.out(esm.Easing.cubic)
+  });
+  const scale = (0,esm.interpolate)(popProgress, [0, 1], [0.85, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const opacity = (0,esm.interpolate)(frame, [0, Math.max(4, enterFrames * 0.35)], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const floatY = (0,esm.interpolate)(popProgress, [0, 1], [8, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const positionStyle = resolveChipPosition(position);
+  const { background, border, textColor } = resolveChipStyles(
+    variant,
+    color,
+    bgColor,
+    borderColor
+  );
+  return /* @__PURE__ */ (0,jsx_runtime.jsxs)(
+    "div",
+    {
+      style: {
+        ...positionStyle,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: icon ? "6px" : "0",
+        fontFamily: LabelChip_fontFamily,
+        fontSize,
+        fontWeight,
+        color: textColor,
+        background,
+        border,
+        padding: `${paddingY}px ${paddingX}px`,
+        borderRadius,
+        opacity,
+        transform: positionStyle.transform ? `${positionStyle.transform} translateY(${floatY}px) scale(${scale})` : `translateY(${floatY}px) scale(${scale})`,
+        transformOrigin: "center center",
+        textShadow: variant !== "outlined" ? textShadow : void 0,
+        whiteSpace: "nowrap",
+        userSelect: "none"
+      },
+      children: [
+        icon ? /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { fontSize: "1.1em" }, children: icon }) : null,
+        text
+      ]
+    }
+  );
+};
+
 ;// ./src/presets/caption/Subtitle.tsx
 
 
@@ -8835,7 +9335,341 @@ const GlowFrameOverlay = ({
   ) });
 };
 
+;// ./src/presets/backing/normalizeBackingPosition.ts
+
+const normalizeBackingPosition_appendTranslate = (current, segment) => {
+  const normalized = (current ?? "").trim();
+  return normalized ? `${normalized} ${segment}` : segment;
+};
+const resolveBackingPosition = (position) => {
+  const style = {
+    position: "absolute"
+  };
+  if (!position) {
+    style.left = "50%";
+    style.top = "50%";
+    style.transform = "translate(-50%, -50%)";
+    return { style };
+  }
+  let transform;
+  const { x, y } = position;
+  if (x === "center") {
+    style.left = "50%";
+    transform = normalizeBackingPosition_appendTranslate(transform, "translateX(-50%)");
+  } else if (x != null) {
+    style.left = x;
+    if (typeof x === "string" && x.trim().endsWith("%")) {
+      transform = normalizeBackingPosition_appendTranslate(transform, "translateX(-50%)");
+    }
+  } else {
+    style.left = "50%";
+    transform = normalizeBackingPosition_appendTranslate(transform, "translateX(-50%)");
+  }
+  if (y === "center") {
+    style.top = "50%";
+    transform = normalizeBackingPosition_appendTranslate(transform, "translateY(-50%)");
+  } else if (y != null) {
+    style.top = y;
+    if (typeof y === "string" && y.trim().endsWith("%")) {
+      transform = normalizeBackingPosition_appendTranslate(transform, "translateY(-50%)");
+    }
+  } else {
+    style.top = "50%";
+    transform = normalizeBackingPosition_appendTranslate(transform, "translateY(-50%)");
+  }
+  if (transform) {
+    style.transform = transform;
+  }
+  return { style };
+};
+
+;// ./src/presets/backing/SolidPlate.tsx
+
+
+
+
+const SolidPlate_withAlpha = (color, opacity) => {
+  const clamped = Math.max(0, Math.min(1, opacity));
+  const normalized = color.trim();
+  if (/^#([0-9a-fA-F]{6})$/.test(normalized)) {
+    return `${normalized}${Math.round(clamped * 255).toString(16).padStart(2, "0")}`;
+  }
+  if (/^#([0-9a-fA-F]{3})$/.test(normalized)) {
+    const expanded = normalized.slice(1).split("").map((ch) => ch + ch).join("");
+    return `#${expanded}${Math.round(clamped * 255).toString(16).padStart(2, "0")}`;
+  }
+  return normalized;
+};
+const SolidPlate = ({
+  width = "auto",
+  height = "auto",
+  color = "#0B1120",
+  opacity = 0.72,
+  borderRadius = 20,
+  padding = 32,
+  position,
+  borderColor,
+  borderWidth = 0,
+  shadowEnabled = true,
+  shadowColor = "rgba(0,0,0,0.22)",
+  enterFrames = 12
+}) => {
+  const frame = (0,esm.useCurrentFrame)();
+  const resolvedPosition = resolveBackingPosition(position);
+  const effectiveEnter = Math.max(1, enterFrames);
+  const fadeInOpacity = (0,esm.interpolate)(frame, [0, effectiveEnter], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const scale = (0,esm.interpolate)(frame, [0, effectiveEnter], [0.96, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const isAutoWidth = width === "auto";
+  const isAutoHeight = height === "auto";
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(
+    "div",
+    {
+      style: {
+        ...resolvedPosition.style,
+        width: isAutoWidth ? void 0 : width,
+        height: isAutoHeight ? void 0 : height,
+        padding: isAutoWidth || isAutoHeight ? padding : void 0,
+        backgroundColor: SolidPlate_withAlpha(color, opacity),
+        borderRadius,
+        border: borderWidth > 0 ? `${borderWidth}px solid ${borderColor ?? "transparent"}` : void 0,
+        boxShadow: shadowEnabled ? `0 24px 64px ${shadowColor}, 0 8px 24px ${shadowColor}` : void 0,
+        opacity: fadeInOpacity,
+        transform: resolvedPosition.style.transform ? `${resolvedPosition.style.transform} scale(${scale})` : `scale(${scale})`,
+        transformOrigin: "center center",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        boxSizing: "border-box"
+      }
+    }
+  );
+};
+
+;// ./src/presets/backing/CapsuleBacking.tsx
+
+
+
+
+const CapsuleBacking_withAlpha = (color, opacity) => {
+  const clamped = Math.max(0, Math.min(1, opacity));
+  const normalized = color.trim();
+  if (/^#([0-9a-fA-F]{6})$/.test(normalized)) {
+    return `${normalized}${Math.round(clamped * 255).toString(16).padStart(2, "0")}`;
+  }
+  if (/^#([0-9a-fA-F]{3})$/.test(normalized)) {
+    const expanded = normalized.slice(1).split("").map((ch) => ch + ch).join("");
+    return `#${expanded}${Math.round(clamped * 255).toString(16).padStart(2, "0")}`;
+  }
+  return normalized;
+};
+const CapsuleBacking = ({
+  width = "auto",
+  height = "auto",
+  color = "#3B82F6",
+  opacity = 0.82,
+  borderRadius = 999,
+  paddingX = 28,
+  paddingY = 14,
+  position,
+  borderColor,
+  borderWidth = 0,
+  shadowEnabled = true,
+  shadowColor = "rgba(0,0,0,0.18)",
+  enterFrames = 12,
+  scaleFrom = 0.92
+}) => {
+  const frame = (0,esm.useCurrentFrame)();
+  const resolvedPosition = resolveBackingPosition(position);
+  const effectiveEnter = Math.max(1, enterFrames);
+  const progress = (0,esm.interpolate)(frame, [0, effectiveEnter], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: esm.Easing.out(esm.Easing.back(1.2))
+  });
+  const fadeInOpacity = (0,esm.interpolate)(frame, [0, Math.max(4, effectiveEnter * 0.4)], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const scale = (0,esm.interpolate)(progress, [0, 1], [scaleFrom, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const isAutoWidth = width === "auto";
+  const isAutoHeight = height === "auto";
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(
+    "div",
+    {
+      style: {
+        ...resolvedPosition.style,
+        width: isAutoWidth ? void 0 : width,
+        height: isAutoHeight ? void 0 : height,
+        paddingLeft: isAutoWidth ? paddingX : void 0,
+        paddingRight: isAutoWidth ? paddingX : void 0,
+        paddingTop: isAutoHeight ? paddingY : void 0,
+        paddingBottom: isAutoHeight ? paddingY : void 0,
+        backgroundColor: CapsuleBacking_withAlpha(color, opacity),
+        borderRadius,
+        border: borderWidth > 0 ? `${borderWidth}px solid ${borderColor ?? "transparent"}` : void 0,
+        boxShadow: shadowEnabled ? `0 18px 48px ${shadowColor}, 0 4px 14px ${shadowColor}` : void 0,
+        opacity: fadeInOpacity,
+        transform: resolvedPosition.style.transform ? `${resolvedPosition.style.transform} scale(${scale})` : `scale(${scale})`,
+        transformOrigin: "center center",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxSizing: "border-box",
+        whiteSpace: "nowrap"
+      }
+    }
+  );
+};
+
+;// ./src/presets/backing/GlassPlate.tsx
+
+
+
+
+
+const GlassNoiseTexture = ({
+  blurAmount,
+  seed = 42
+}) => {
+  const noiseId = (0,react.useId)();
+  const baseFreq = Math.max(0.6, Math.min(2.8, 20 / Math.max(8, blurAmount)));
+  const numOctaves = Math.max(2, Math.min(5, Math.round(blurAmount / 6)));
+  const freqX = (baseFreq * (0.92 + seed % 10 * 0.016)).toFixed(3);
+  const freqY = (baseFreq * (0.88 + seed * 7 % 10 * 0.018)).toFixed(3);
+  return /* @__PURE__ */ (0,jsx_runtime.jsxs)(
+    "svg",
+    {
+      style: {
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        opacity: 0.1,
+        pointerEvents: "none"
+      },
+      "aria-hidden": "true",
+      children: [
+        /* @__PURE__ */ (0,jsx_runtime.jsxs)("filter", { id: `glass-noise-${noiseId}`, children: [
+          /* @__PURE__ */ (0,jsx_runtime.jsx)(
+            "feTurbulence",
+            {
+              type: "fractalNoise",
+              baseFrequency: `${freqX} ${freqY}`,
+              numOctaves,
+              seed,
+              result: "noise"
+            }
+          ),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)(
+            "feColorMatrix",
+            {
+              type: "saturate",
+              values: "0",
+              in: "noise",
+              result: "grayNoise"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0,jsx_runtime.jsx)(
+          "rect",
+          {
+            width: "100%",
+            height: "100%",
+            filter: `url(#glass-noise-${noiseId})`,
+            opacity: "0.7"
+          }
+        )
+      ]
+    }
+  );
+};
+const GlassPlate = ({
+  width = "auto",
+  height = "auto",
+  blurAmount = 20,
+  tintColor = "rgba(255,255,255,0.12)",
+  borderRadius = 24,
+  borderColor = "rgba(255,255,255,0.18)",
+  borderWidth = 1,
+  padding = 36,
+  position,
+  shadowEnabled = true,
+  shadowColor = "rgba(0,0,0,0.18)",
+  enterFrames = 14
+}) => {
+  const frame = (0,esm.useCurrentFrame)();
+  const resolvedPosition = resolveBackingPosition(position);
+  const effectiveEnter = Math.max(1, enterFrames);
+  const fadeInOpacity = (0,esm.interpolate)(frame, [0, effectiveEnter], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const scale = (0,esm.interpolate)(frame, [0, effectiveEnter], [0.97, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const isAutoWidth = width === "auto";
+  const isAutoHeight = height === "auto";
+  return /* @__PURE__ */ (0,jsx_runtime.jsxs)(
+    "div",
+    {
+      style: {
+        ...resolvedPosition.style,
+        width: isAutoWidth ? void 0 : width,
+        height: isAutoHeight ? void 0 : height,
+        padding: isAutoWidth || isAutoHeight ? padding : void 0,
+        background: `linear-gradient(135deg, ${tintColor}, rgba(255,255,255,0.02))`,
+        borderRadius,
+        border: borderWidth > 0 ? `${borderWidth}px solid ${borderColor}` : void 0,
+        boxShadow: shadowEnabled ? `0 24px 64px ${shadowColor}, inset 0 1px 0 rgba(255,255,255,0.08)` : `inset 0 1px 0 rgba(255,255,255,0.08)`,
+        opacity: fadeInOpacity,
+        transform: resolvedPosition.style.transform ? `${resolvedPosition.style.transform} scale(${scale})` : `scale(${scale})`,
+        transformOrigin: "center center",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        boxSizing: "border-box",
+        overflow: "hidden"
+      },
+      children: [
+        /* @__PURE__ */ (0,jsx_runtime.jsx)(GlassNoiseTexture, { blurAmount, seed: 42 }),
+        /* @__PURE__ */ (0,jsx_runtime.jsx)(
+          "div",
+          {
+            style: {
+              position: "absolute",
+              inset: 0,
+              background: `radial-gradient(circle at 40% 30%, rgba(255,255,255,0.08) 0%, transparent 55%)`,
+              pointerEvents: "none",
+              borderRadius
+            }
+          }
+        )
+      ]
+    }
+  );
+};
+
 ;// ./src/presets/registerAll.ts
+
+
+
+
+
+
+
+
 
 
 
@@ -8867,17 +9701,25 @@ function registerAllPresets() {
   registerPreset({ id: "media.image", component: ImageLayer });
   registerPreset({ id: "media.audio", component: AudioTrack });
   registerPreset({ id: "motion.ken_burns", component: KenBurns });
+  registerPreset({ id: "motion.float_2d5", component: Float2d5 });
+  registerPreset({ id: "motion.parallax_drift", component: ParallaxDrift });
+  registerPreset({ id: "motion.perspective_tilt", component: PerspectiveTilt });
   registerPreset({ id: "text.fade_title", component: FadeTitle });
   registerPreset({ id: "text.kinetic_pop", component: KineticPopText });
   registerPreset({ id: "text.hero_billboard", component: HeroBillboardText });
   registerPreset({ id: "text.typewriter", component: TypewriterTitle });
   registerPreset({ id: "text.mask_reveal", component: MaskRevealText });
   registerPreset({ id: "text.word_highlight", component: WordHighlightText });
+  registerPreset({ id: "text.counter_number", component: CounterNumber });
+  registerPreset({ id: "text.label_chip", component: LabelChip });
   registerPreset({ id: "caption.subtitle", component: Subtitle });
   registerPreset({ id: "overlay.light_leak", component: LightLeakWrapper });
   registerPreset({ id: "overlay.flash", component: FlashOverlay });
   registerPreset({ id: "overlay.badge_pop", component: BadgePopOverlay });
   registerPreset({ id: "overlay.glow_frame", component: GlowFrameOverlay });
+  registerPreset({ id: "backing.solid_plate", component: SolidPlate });
+  registerPreset({ id: "backing.capsule", component: CapsuleBacking });
+  registerPreset({ id: "backing.glass_plate", component: GlassPlate });
 }
 
 ;// ./node_modules/@remotion/transitions/dist/esm/index.mjs
@@ -10422,13 +11264,15 @@ const deriveTypewriterDuration = (targetLayer, fallbackDuration) => {
   return Math.min(fallbackDuration, Math.max(1, charCount * charIntervalFrames));
 };
 const stripAudioProtocolParams = (params) => Object.fromEntries(Object.entries(params).filter(([key]) => !AUDIO_PROTOCOL_FIELDS.has(key)));
-const resolveAudioLayerTiming = (scene, layer) => {
+const resolveAudioLayerTiming = (scene, layer, sceneEndExtension = 0) => {
   const params = layer.params ?? {};
   const sceneDuration = scene.durationInFrames;
+  const effectiveSceneEnd = sceneDuration + sceneEndExtension;
   const ownDuration = layer.durationInFrames ?? toSafePositiveInt(params.totalDurationFrames) ?? sceneDuration;
   const defaultFrom = Math.max(0, layer.enterAtFrame ?? 0);
   if (layer.preset !== "media.audio" || !params.syncWithLayerId) {
-    const durationInFrames2 = Math.max(1, Math.min(sceneDuration, ownDuration));
+    const maxDur = Math.max(sceneDuration, effectiveSceneEnd);
+    const durationInFrames2 = Math.max(1, Math.min(maxDur, ownDuration));
     return {
       from: defaultFrom,
       durationInFrames: durationInFrames2,
@@ -10440,7 +11284,8 @@ const resolveAudioLayerTiming = (scene, layer) => {
   }
   const targetLayer = scene.layers.find((candidate) => candidate.layerId === params.syncWithLayerId);
   if (!targetLayer) {
-    const durationInFrames2 = Math.max(1, Math.min(sceneDuration, ownDuration));
+    const maxDur = Math.max(sceneDuration, effectiveSceneEnd);
+    const durationInFrames2 = Math.max(1, Math.min(maxDur, ownDuration));
     return {
       from: defaultFrom,
       durationInFrames: durationInFrames2,
@@ -10481,7 +11326,7 @@ const resolveAudioLayerTiming = (scene, layer) => {
       break;
   }
   const clampedFrom = Math.max(0, Math.min(sceneDuration - 1, from));
-  const maxDuration = Math.max(1, sceneDuration - clampedFrom);
+  const maxDuration = Math.max(1, effectiveSceneEnd - clampedFrom);
   const finalDuration = Math.max(1, Math.min(maxDuration, durationInFrames));
   return {
     from: clampedFrom,
@@ -10492,11 +11337,11 @@ const resolveAudioLayerTiming = (scene, layer) => {
     }
   };
 };
-const SceneRenderer = ({ scene }) => {
+const SceneRenderer = ({ scene, sceneEndExtension = 0 }) => {
   registerAllPresets();
   return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { children: scene.layers.map((layer) => {
     const { component: PresetComponent } = getPreset(layer.preset);
-    const resolvedAudio = resolveAudioLayerTiming(scene, layer);
+    const resolvedAudio = resolveAudioLayerTiming(scene, layer, sceneEndExtension);
     const sequenceFrom = layer.preset === "media.audio" ? resolvedAudio.from : layer.enterAtFrame ?? 0;
     const sequenceDuration = layer.preset === "media.audio" ? resolvedAudio.durationInFrames : layer.durationInFrames ?? scene.durationInFrames;
     const renderParams = layer.preset === "media.audio" ? resolvedAudio.params : layer.params;
@@ -10754,15 +11599,52 @@ function resolveTiming(trans) {
 
 
 
+const MAX_TRAILING_FRAMES = 90;
+const computeAudioOverflow = (scene) => {
+  let maxEnd = scene.durationInFrames;
+  for (const layer of scene.layers) {
+    if (layer.preset !== "media.audio") continue;
+    const params = layer.params;
+    const ownDur = layer.durationInFrames ?? (typeof (params == null ? void 0 : params.totalDurationFrames) === "number" ? Math.round(params.totalDurationFrames) : 0) ?? scene.durationInFrames;
+    const from = layer.enterAtFrame ?? 0;
+    let effectiveFrom = from;
+    if (params == null ? void 0 : params.syncWithLayerId) {
+      const syncMode = params.syncMode ?? "match_layer";
+      const targetLayer = scene.layers.find((c) => c.layerId === params.syncWithLayerId);
+      if (targetLayer) {
+        const targetDur = targetLayer.durationInFrames ?? scene.durationInFrames;
+        const targetFrom = targetLayer.enterAtFrame ?? 0;
+        if (syncMode === "trigger_on_end" || syncMode === "trigger_on_typing_end") {
+          effectiveFrom = targetFrom + targetDur;
+        } else {
+          effectiveFrom = targetFrom;
+        }
+      }
+    }
+    const end = effectiveFrom + ownDur;
+    if (end > maxEnd) maxEnd = end;
+  }
+  return Math.max(0, Math.min(MAX_TRAILING_FRAMES, maxEnd - scene.durationInFrames));
+};
 const DynamicVideoRenderer = (script) => {
   var _a;
   const bgColor = ((_a = script.globalStyle) == null ? void 0 : _a.backgroundColor) ?? "#000000";
+  const lastScene = script.scenes[script.scenes.length - 1];
+  const audioOverflow = computeAudioOverflow(lastScene);
   return /* @__PURE__ */ (0,jsx_runtime.jsxs)(esm.AbsoluteFill, { style: { backgroundColor: bgColor }, children: [
     script.bgm && /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.Sequence, { from: 0, layout: "none", children: /* @__PURE__ */ (0,jsx_runtime.jsx)(BgmLayer, { bgm: script.bgm }) }),
     /* @__PURE__ */ (0,jsx_runtime.jsx)(TransitionSeries, { children: script.scenes.map((scene, i) => {
       const trans = script.transitions.find((t) => t.fromSceneIndex === i);
+      const isLast = i === script.scenes.length - 1;
+      const effectiveDuration = isLast ? scene.durationInFrames + audioOverflow : scene.durationInFrames;
       return /* @__PURE__ */ (0,jsx_runtime.jsxs)(react.Fragment, { children: [
-        /* @__PURE__ */ (0,jsx_runtime.jsx)(TransitionSeries.Sequence, { durationInFrames: scene.durationInFrames, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(SceneRenderer, { scene }) }),
+        /* @__PURE__ */ (0,jsx_runtime.jsx)(TransitionSeries.Sequence, { durationInFrames: effectiveDuration, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+          SceneRenderer,
+          {
+            scene,
+            sceneEndExtension: isLast ? audioOverflow : 0
+          }
+        ) }),
         trans && /* @__PURE__ */ (0,jsx_runtime.jsx)(
           TransitionSeries.Transition,
           {
@@ -10775,12 +11657,20 @@ const DynamicVideoRenderer = (script) => {
   ] });
 };
 const BgmLayer = ({ bgm }) => {
+  const { durationInFrames: totalDuration } = (0,esm.useVideoConfig)();
   const fadeIn = bgm.fadeInFrames ?? 0;
+  const fadeOut = bgm.fadeOutFrames ?? 0;
   const baseVolume = bgm.volume ?? 0.3;
   const volumeFn = (frame) => {
     let v = baseVolume;
     if (fadeIn > 0 && frame < fadeIn) {
       v *= (0,esm.interpolate)(frame, [0, fadeIn], [0, 1], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp"
+      });
+    }
+    if (fadeOut > 0 && frame > totalDuration - fadeOut) {
+      v *= (0,esm.interpolate)(frame, [totalDuration - fadeOut, totalDuration], [1, 0], {
         extrapolateLeft: "clamp",
         extrapolateRight: "clamp"
       });
@@ -10888,14 +11778,43 @@ const CompositionScriptSchema = external.object({
 
 
 registerAllPresets();
+const Root_MAX_TRAILING_FRAMES = 90;
 const calculateMetadata = async ({ props }) => {
   const totalSceneFrames = props.scenes.reduce((sum, s) => sum + s.durationInFrames, 0);
   const transitionOverlap = props.transitions.reduce(
     (sum, t) => sum + (t.params.durationInFrames || 0),
     0
   );
+  const baseDuration = Math.max(1, totalSceneFrames - transitionOverlap);
+  let audioOverflow = 0;
+  const lastScene = props.scenes[props.scenes.length - 1];
+  if (lastScene) {
+    let maxEnd = lastScene.durationInFrames;
+    for (const layer of lastScene.layers) {
+      if (layer.preset !== "media.audio") continue;
+      const params = layer.params;
+      const ownDur = layer.durationInFrames ?? (typeof (params == null ? void 0 : params.totalDurationFrames) === "number" ? Math.round(params.totalDurationFrames) : 0) ?? lastScene.durationInFrames;
+      let effectiveFrom = layer.enterAtFrame ?? 0;
+      if (params == null ? void 0 : params.syncWithLayerId) {
+        const syncMode = params.syncMode ?? "match_layer";
+        const targetLayer = lastScene.layers.find((c) => c.layerId === params.syncWithLayerId);
+        if (targetLayer) {
+          const targetDur = targetLayer.durationInFrames ?? lastScene.durationInFrames;
+          const targetFrom = targetLayer.enterAtFrame ?? 0;
+          if (syncMode === "trigger_on_end" || syncMode === "trigger_on_typing_end") {
+            effectiveFrom = targetFrom + targetDur;
+          } else {
+            effectiveFrom = targetFrom;
+          }
+        }
+      }
+      const end = effectiveFrom + ownDur;
+      if (end > maxEnd) maxEnd = end;
+    }
+    audioOverflow = Math.max(0, Math.min(Root_MAX_TRAILING_FRAMES, maxEnd - lastScene.durationInFrames));
+  }
   return {
-    durationInFrames: Math.max(1, totalSceneFrames - transitionOverlap),
+    durationInFrames: baseDuration + audioOverflow,
     width: props.canvas.width,
     height: props.canvas.height,
     fps: props.canvas.fps
@@ -11121,6 +12040,705 @@ const showcaseScript = {
     }
   ]
 };
+const newComponentsShowcaseScript = {
+  canvas: { width: 1080, height: 1920, fps: 30 },
+  globalStyle: { fontFamily: "Noto Sans SC", backgroundColor: "#0B1120" },
+  scenes: [
+    // ═══ Scene 1: 数据看板 — glass_plate + counter_number + label_chip ═══
+    {
+      sceneId: "scene_1_data_dashboard",
+      sceneIndex: 0,
+      role: "hook",
+      durationInFrames: 96,
+      layers: [
+        // 背景
+        {
+          layerId: "bg_mesh",
+          preset: "bg.mesh_gradient",
+          params: {
+            colors: ["#0A1628", "#0F2B4C", "#112240", "#3B82F6"],
+            intensity: 0.9
+          }
+        },
+        {
+          layerId: "bg_noise",
+          preset: "bg.noise_grain",
+          params: {
+            backgroundColor: "transparent",
+            grainOpacity: 0.09,
+            scale: 1
+          }
+        },
+        // 玻璃底板
+        {
+          layerId: "dashboard_glass",
+          preset: "backing.glass_plate",
+          enterAtFrame: 8,
+          durationInFrames: 84,
+          params: {
+            width: "84%",
+            height: "58%",
+            blurAmount: 22,
+            tintColor: "rgba(255,255,255,0.10)",
+            borderRadius: 32,
+            borderColor: "rgba(255,255,255,0.15)",
+            borderWidth: 1,
+            position: { x: "center", y: "center" },
+            shadowEnabled: true,
+            shadowColor: "rgba(0,0,0,0.25)"
+          }
+        },
+        // 标题 chip
+        {
+          layerId: "label_dashboard_title",
+          preset: "text.label_chip",
+          enterAtFrame: 14,
+          durationInFrames: 74,
+          params: {
+            text: "\u{1F4CA} \u5B9E\u65F6\u6570\u636E",
+            variant: "filled",
+            bgColor: "#3B82F6",
+            color: "#FFFFFF",
+            fontSize: 26,
+            fontWeight: 700,
+            position: { x: "center", y: "24%" },
+            icon: "\u{1F4CA}"
+          }
+        },
+        // 数字计数器 - GMV
+        {
+          layerId: "counter_gmv",
+          preset: "text.counter_number",
+          enterAtFrame: 22,
+          durationInFrames: 66,
+          params: {
+            value: 1280,
+            prefix: "\xA5",
+            suffix: "\u4E07",
+            decimals: 0,
+            fontSize: 84,
+            color: "#F8FAFC",
+            fontWeight: 900,
+            scrollFrames: 34,
+            digitGap: 4,
+            position: { x: "center", y: "38%" }
+          }
+        },
+        // 数字计数器 - 增长
+        {
+          layerId: "counter_growth",
+          preset: "text.counter_number",
+          enterAtFrame: 28,
+          durationInFrames: 60,
+          params: {
+            value: 34.8,
+            suffix: "%",
+            decimals: 1,
+            fontSize: 64,
+            color: "#67E8F9",
+            fontWeight: 800,
+            scrollFrames: 28,
+            digitGap: 2,
+            position: { x: "center", y: "56%" }
+          }
+        },
+        // 底部标签
+        {
+          layerId: "label_outlined",
+          preset: "text.label_chip",
+          enterAtFrame: 38,
+          durationInFrames: 50,
+          params: {
+            text: "GMV \u73AF\u6BD4\u589E\u957F",
+            variant: "outlined",
+            color: "#94A3B8",
+            borderColor: "rgba(148,163,184,0.5)",
+            fontSize: 22,
+            position: { x: "center", y: "70%" }
+          }
+        }
+      ]
+    },
+    // ═══ Scene 2: 信息卡片 — solid_plate + capsule + text ═══
+    {
+      sceneId: "scene_2_info_cards",
+      sceneIndex: 1,
+      role: "body",
+      durationInFrames: 90,
+      layers: [
+        {
+          layerId: "bg_tech",
+          preset: "bg.tech_grid",
+          params: {
+            backgroundColor: "#06111F",
+            lineColor: "#475569",
+            accentColor: "#F8C630",
+            gridSize: 68,
+            lineOpacity: 0.18,
+            driftSpeed: 14
+          }
+        },
+        {
+          layerId: "bg_noise",
+          preset: "bg.noise_grain",
+          params: {
+            backgroundColor: "transparent",
+            grainOpacity: 0.07,
+            scale: 0.9
+          }
+        },
+        // 实色底板 - 上方卡片
+        {
+          layerId: "solid_plate_top",
+          preset: "backing.solid_plate",
+          enterAtFrame: 6,
+          durationInFrames: 78,
+          params: {
+            width: "78%",
+            height: "auto",
+            color: "#1E293B",
+            opacity: 0.8,
+            borderRadius: 24,
+            padding: 36,
+            position: { x: "center", y: "32%" },
+            shadowEnabled: true,
+            shadowColor: "rgba(0,0,0,0.35)"
+          }
+        },
+        // 胶囊底板 + 文字 — 衬在关键词后面
+        {
+          layerId: "capsule_keyword",
+          preset: "backing.capsule",
+          enterAtFrame: 10,
+          durationInFrames: 72,
+          params: {
+            color: "#F8C630",
+            opacity: 0.78,
+            borderRadius: 999,
+            paddingX: 32,
+            paddingY: 16,
+            position: { x: "center", y: "28%" },
+            shadowEnabled: true,
+            shadowColor: "rgba(248,198,48,0.28)"
+          }
+        },
+        {
+          layerId: "text_on_capsule",
+          preset: "text.kinetic_pop",
+          enterAtFrame: 12,
+          durationInFrames: 72,
+          params: {
+            text: "\u9AD8\u8F6C\u5316",
+            fontSize: 56,
+            color: "#0F172A",
+            fontWeight: 900,
+            position: { x: "center", y: "28%" },
+            scaleFrom: 1.2,
+            rotationFrom: 0,
+            enterFrames: 12,
+            settleFrames: 14
+          }
+        },
+        // 实色底板 - 下方卡片
+        {
+          layerId: "solid_plate_bottom",
+          preset: "backing.solid_plate",
+          enterAtFrame: 22,
+          durationInFrames: 62,
+          params: {
+            width: "72%",
+            height: "auto",
+            color: "#312E81",
+            opacity: 0.7,
+            borderRadius: 20,
+            padding: 30,
+            position: { x: "center", y: "58%" },
+            borderColor: "rgba(99,102,241,0.35)",
+            borderWidth: 1.5,
+            shadowEnabled: true,
+            shadowColor: "rgba(49,46,129,0.25)"
+          }
+        },
+        {
+          layerId: "text_reveal_on_plate",
+          preset: "text.mask_reveal",
+          enterAtFrame: 26,
+          durationInFrames: 56,
+          params: {
+            text: "AI \u7F16\u6392\xB7\u81EA\u52A8\u6210\u7247",
+            fontSize: 52,
+            color: "#E0E7FF",
+            fontWeight: 800,
+            position: { x: "center", y: "58%" },
+            revealDirection: "left_to_right",
+            revealFrames: 22,
+            textShadow: "0 2px 12px rgba(0,0,0,0.4)"
+          }
+        },
+        // soft 变体 chip
+        {
+          layerId: "label_soft",
+          preset: "text.label_chip",
+          enterAtFrame: 40,
+          durationInFrames: 44,
+          params: {
+            text: "\u2728 Beta",
+            variant: "soft",
+            color: "#C7D2FE",
+            bgColor: "#6366F1",
+            fontSize: 22,
+            position: { x: "center", y: "68%" }
+          }
+        }
+      ]
+    },
+    // ═══ Scene 3: Outro — glass_plate + counter + chips 收尾 ═══
+    {
+      sceneId: "scene_3_outro_new",
+      sceneIndex: 2,
+      role: "outro",
+      durationInFrames: 72,
+      layers: [
+        {
+          layerId: "bg_gradient_outro",
+          preset: "bg.mesh_gradient",
+          params: {
+            colors: ["#171347", "#312E81", "#4F46E5", "#22D3EE"],
+            intensity: 0.92
+          }
+        },
+        {
+          layerId: "bg_noise_outro",
+          preset: "bg.noise_grain",
+          params: {
+            backgroundColor: "transparent",
+            grainOpacity: 0.08,
+            scale: 1.1
+          }
+        },
+        // 玻璃底板
+        {
+          layerId: "outro_glass",
+          preset: "backing.glass_plate",
+          enterAtFrame: 6,
+          durationInFrames: 62,
+          params: {
+            width: "82%",
+            height: "48%",
+            blurAmount: 18,
+            tintColor: "rgba(255,255,255,0.08)",
+            borderRadius: 30,
+            borderColor: "rgba(255,255,255,0.14)",
+            borderWidth: 1,
+            position: { x: "center", y: "center" },
+            shadowEnabled: true,
+            shadowColor: "rgba(0,0,0,0.22)"
+          }
+        },
+        // 计数器 — 处理量
+        {
+          layerId: "counter_total",
+          preset: "text.counter_number",
+          enterAtFrame: 12,
+          durationInFrames: 52,
+          params: {
+            value: 9999,
+            prefix: "#",
+            decimals: 0,
+            fontSize: 78,
+            color: "#FFFFFF",
+            fontWeight: 900,
+            scrollFrames: 38,
+            position: { x: "center", y: "36%" }
+          }
+        },
+        // filled chip
+        {
+          layerId: "label_total",
+          preset: "text.label_chip",
+          enterAtFrame: 18,
+          durationInFrames: 46,
+          params: {
+            text: "\u{1F3C6} \u7D2F\u8BA1\u670D\u52A1\u4F01\u4E1A",
+            variant: "filled",
+            bgColor: "#0284C7",
+            color: "#FFFFFF",
+            fontSize: 22,
+            position: { x: "center", y: "54%" }
+          }
+        },
+        // outlined chip
+        {
+          layerId: "label_sub",
+          preset: "text.label_chip",
+          enterAtFrame: 24,
+          durationInFrames: 40,
+          params: {
+            text: "Powered by AI Video",
+            variant: "outlined",
+            color: "#94A3B8",
+            borderColor: "rgba(148,163,184,0.45)",
+            fontSize: 18,
+            position: { x: "center", y: "64%" }
+          }
+        },
+        // glow frame 收尾
+        {
+          layerId: "outro_glow",
+          preset: "overlay.glow_frame",
+          enterAtFrame: 8,
+          durationInFrames: 56,
+          params: {
+            color: "#22D3EE",
+            thickness: 8,
+            glowBlur: 20,
+            opacity: 0.55,
+            borderRadius: 30,
+            inset: 22
+          }
+        }
+      ]
+    }
+  ],
+  transitions: [
+    {
+      fromSceneIndex: 0,
+      toSceneIndex: 1,
+      preset: "transition.fade",
+      params: {
+        durationInFrames: 16,
+        timing: "linear"
+      },
+      overlay: {
+        preset: "overlay.flash",
+        params: { color: "#FFFFFF", maxOpacity: 0.5, enterFrames: 2, holdFrames: 1, exitFrames: 8 }
+      }
+    },
+    {
+      fromSceneIndex: 1,
+      toSceneIndex: 2,
+      preset: "transition.slide",
+      params: {
+        direction: "from-bottom",
+        durationInFrames: 14,
+        timing: "spring"
+      }
+    }
+  ]
+};
+const motionShowcaseScript = {
+  canvas: { width: 1080, height: 1920, fps: 30 },
+  globalStyle: { fontFamily: "Noto Sans SC", backgroundColor: "#0A0A0F" },
+  scenes: [
+    // ═══ Scene 1: 2.5D 漂浮卡片 — motion.float_2d5 ═══
+    {
+      sceneId: "scene_1_float_card",
+      sceneIndex: 0,
+      role: "hook",
+      durationInFrames: 90,
+      layers: [
+        {
+          layerId: "bg_mesh",
+          preset: "bg.mesh_gradient",
+          params: {
+            colors: ["#0F0F23", "#1A1A3E", "#2D1B69", "#4F46E5"],
+            intensity: 1
+          }
+        },
+        {
+          layerId: "bg_noise",
+          preset: "bg.noise_grain",
+          params: {
+            backgroundColor: "transparent",
+            grainOpacity: 0.08,
+            scale: 1
+          }
+        },
+        {
+          layerId: "glass_backing",
+          preset: "backing.glass_plate",
+          enterAtFrame: 4,
+          durationInFrames: 82,
+          params: {
+            width: "78%",
+            height: "62%",
+            blurAmount: 20,
+            tintColor: "rgba(255,255,255,0.08)",
+            borderRadius: 28,
+            borderColor: "rgba(255,255,255,0.12)",
+            borderWidth: 1,
+            position: { x: "center", y: "center" },
+            shadowEnabled: true,
+            shadowColor: "rgba(0,0,0,0.3)"
+          }
+        },
+        {
+          layerId: "float_product",
+          preset: "motion.float_2d5",
+          enterAtFrame: 6,
+          durationInFrames: 78,
+          params: {
+            src: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80",
+            floatAmplitude: 10,
+            floatSpeed: 0.7,
+            swayAmount: 2.5,
+            scaleBreath: 0.025,
+            perspective: 800,
+            shadowEnabled: true,
+            shadowColor: "rgba(0,0,0,0.3)",
+            objectFit: "contain",
+            scale: 0.75
+          }
+        },
+        {
+          layerId: "label_tag",
+          preset: "text.label_chip",
+          enterAtFrame: 12,
+          durationInFrames: 68,
+          params: {
+            text: "\u{1FAA9} 2.5D Float",
+            variant: "filled",
+            bgColor: "#7C3AED",
+            color: "#FFFFFF",
+            fontSize: 24,
+            fontWeight: 700,
+            position: { x: "center", y: "80%" }
+          }
+        },
+        {
+          layerId: "title_float",
+          preset: "text.kinetic_pop",
+          enterAtFrame: 18,
+          durationInFrames: 60,
+          params: {
+            text: "\u6F02\u6D6E\u5361\u7247",
+            fontSize: 72,
+            color: "#F5F3FF",
+            fontWeight: 900,
+            position: { x: "center", y: "16%" },
+            scaleFrom: 1.4,
+            rotationFrom: 0,
+            enterFrames: 14,
+            settleFrames: 18,
+            textShadow: "0 8px 32px rgba(124,58,237,0.4)"
+          }
+        },
+        {
+          layerId: "desc_float",
+          preset: "text.typewriter",
+          enterAtFrame: 36,
+          durationInFrames: 42,
+          params: {
+            text: "\u4E0A\u4E0B\u6D6E\u52A8 \xB7 \u6447\u6446 \xB7 \u52A8\u6001\u9634\u5F71",
+            fontSize: 34,
+            color: "#A5B4FC",
+            fontWeight: 600,
+            position: { x: "center", y: "88%" },
+            charIntervalFrames: 2,
+            cursor: ""
+          }
+        }
+      ]
+    },
+    // ═══ Scene 2: 视差漂移 — motion.parallax_drift ═══
+    {
+      sceneId: "scene_2_parallax",
+      sceneIndex: 1,
+      role: "body",
+      durationInFrames: 100,
+      layers: [
+        {
+          layerId: "parallax_bg",
+          preset: "motion.parallax_drift",
+          params: {
+            src: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1080&q=80",
+            driftRangeX: 28,
+            driftRangeY: 18,
+            driftSpeedX: 0.5,
+            driftSpeedY: 0.7,
+            scaleRange: 0.04,
+            rotationRange: 1.2,
+            objectFit: "cover"
+          }
+        },
+        {
+          layerId: "dark_overlay",
+          preset: "backing.solid_plate",
+          params: {
+            width: "100%",
+            height: "100%",
+            color: "#000000",
+            opacity: 0.35,
+            borderRadius: 0,
+            padding: 0,
+            position: { x: "center", y: "center" },
+            shadowEnabled: false,
+            enterFrames: 0
+          }
+        },
+        {
+          layerId: "title_parallax",
+          preset: "text.mask_reveal",
+          enterAtFrame: 14,
+          durationInFrames: 72,
+          params: {
+            text: "\u89C6\u5DEE\u6F02\u79FB",
+            fontSize: 76,
+            color: "#FFFFFF",
+            fontWeight: 900,
+            position: { x: "center", y: "36%" },
+            revealDirection: "bottom_to_top",
+            revealFrames: 24,
+            textShadow: "0 6px 28px rgba(0,0,0,0.6)"
+          }
+        },
+        {
+          layerId: "label_parallax",
+          preset: "text.label_chip",
+          enterAtFrame: 22,
+          durationInFrames: 62,
+          params: {
+            text: "\u{1F30A} \u674E\u8428\u5982\u8F68\u8FF9",
+            variant: "soft",
+            color: "#E0E7FF",
+            bgColor: "#4F46E5",
+            fontSize: 22,
+            position: { x: "center", y: "54%" }
+          }
+        },
+        {
+          layerId: "desc_parallax",
+          preset: "text.fade_title",
+          enterAtFrame: 36,
+          durationInFrames: 50,
+          params: {
+            text: "XY \u5F02\u6B65\u6B63\u5F26\u6F02\u79FB\n\u6DF1\u5EA6\u79FB\u52A8\u611F",
+            fontSize: 36,
+            color: "#CBD5E1",
+            fontWeight: 600,
+            position: { x: "center", y: "70%" },
+            textShadow: "0 2px 12px rgba(0,0,0,0.5)"
+          }
+        }
+      ]
+    },
+    // ═══ Scene 3: 透视倾斜 — motion.perspective_tilt ═══
+    {
+      sceneId: "scene_3_tilt",
+      sceneIndex: 2,
+      role: "outro",
+      durationInFrames: 90,
+      layers: [
+        {
+          layerId: "bg_mesh_tilt",
+          preset: "bg.mesh_gradient",
+          params: {
+            colors: ["#171347", "#1E1B4B", "#312E81", "#22D3EE"],
+            intensity: 0.95
+          }
+        },
+        {
+          layerId: "bg_noise_tilt",
+          preset: "bg.noise_grain",
+          params: {
+            backgroundColor: "transparent",
+            grainOpacity: 0.07,
+            scale: 1.1
+          }
+        },
+        {
+          layerId: "tilt_card",
+          preset: "motion.perspective_tilt",
+          enterAtFrame: 6,
+          durationInFrames: 78,
+          params: {
+            src: "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=800&q=80",
+            rotateX: -5,
+            rotateY: 3,
+            perspective: 1e3,
+            scale: 0.78,
+            dynamicEnabled: true,
+            dynamicRange: 2,
+            shadowEnabled: true,
+            shadowColor: "rgba(0,0,0,0.35)",
+            objectFit: "contain"
+          }
+        },
+        {
+          layerId: "title_tilt",
+          preset: "text.kinetic_pop",
+          enterAtFrame: 14,
+          durationInFrames: 62,
+          params: {
+            text: "\u900F\u89C6\u503E\u659C",
+            fontSize: 74,
+            color: "#F8FAFC",
+            fontWeight: 900,
+            position: { x: "center", y: "18%" },
+            scaleFrom: 1.5,
+            rotationFrom: 0,
+            enterFrames: 14,
+            settleFrames: 18,
+            textShadow: "0 8px 32px rgba(34,211,238,0.35)"
+          }
+        },
+        {
+          layerId: "label_tilt",
+          preset: "text.label_chip",
+          enterAtFrame: 22,
+          durationInFrames: 52,
+          params: {
+            text: "\u{1F0CF} CSS 3D Perspective",
+            variant: "outlined",
+            color: "#22D3EE",
+            borderColor: "rgba(34,211,238,0.6)",
+            fontSize: 22,
+            position: { x: "center", y: "82%" }
+          }
+        },
+        {
+          layerId: "glow_frame",
+          preset: "overlay.glow_frame",
+          enterAtFrame: 4,
+          durationInFrames: 80,
+          params: {
+            color: "#22D3EE",
+            thickness: 8,
+            glowBlur: 22,
+            opacity: 0.5,
+            borderRadius: 28,
+            inset: 20
+          }
+        }
+      ]
+    }
+  ],
+  transitions: [
+    {
+      fromSceneIndex: 0,
+      toSceneIndex: 1,
+      preset: "transition.fade",
+      params: {
+        durationInFrames: 18,
+        timing: "linear"
+      },
+      overlay: {
+        preset: "overlay.flash",
+        params: { color: "#FFFFFF", maxOpacity: 0.5, enterFrames: 2, holdFrames: 1, exitFrames: 8 }
+      }
+    },
+    {
+      fromSceneIndex: 1,
+      toSceneIndex: 2,
+      preset: "transition.slide",
+      params: {
+        direction: "from-bottom",
+        durationInFrames: 16,
+        timing: "spring"
+      }
+    }
+  ]
+};
 const showcaseLandscapeScript = {
   canvas: { width: 1920, height: 1080, fps: 30 },
   globalStyle: { fontFamily: "Noto Sans SC", backgroundColor: "#0B1120" },
@@ -11291,6 +12909,34 @@ const RemotionRoot = () => {
         width: 1920,
         height: 1080,
         defaultProps: showcaseLandscapeScript,
+        schema: CompositionScriptSchema,
+        calculateMetadata
+      }
+    ),
+    /* @__PURE__ */ (0,jsx_runtime.jsx)(
+      esm.Composition,
+      {
+        id: "NewComponentsShowcase",
+        component: DynamicVideoRenderer,
+        durationInFrames: 226,
+        fps: 30,
+        width: 1080,
+        height: 1920,
+        defaultProps: newComponentsShowcaseScript,
+        schema: CompositionScriptSchema,
+        calculateMetadata
+      }
+    ),
+    /* @__PURE__ */ (0,jsx_runtime.jsx)(
+      esm.Composition,
+      {
+        id: "MotionShowcase",
+        component: DynamicVideoRenderer,
+        durationInFrames: 244,
+        fps: 30,
+        width: 1080,
+        height: 1920,
+        defaultProps: motionShowcaseScript,
         schema: CompositionScriptSchema,
         calculateMetadata
       }
@@ -85049,7 +86695,7 @@ config(en());
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
 /******/ 	__webpack_require__(6507);
-/******/ 	__webpack_require__(2342);
+/******/ 	__webpack_require__(3041);
 /******/ 	__webpack_require__(3610);
 /******/ 	var __webpack_exports__ = __webpack_require__(3482);
 /******/ 	

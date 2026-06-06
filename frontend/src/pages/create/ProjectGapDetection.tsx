@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { creationApi } from '../../api/creation';
 import { useToast } from '../../contexts/ToastContext';
 import { CreationAssetData, CreationMatchResultData, CreationMatchResultItem } from '../../types';
+import { ProjectCreationTabs } from '../../components/ProjectCreationTabs';
 
 type StrategyCard = {
   strategyType: string;
@@ -18,6 +19,13 @@ const STATUS_META: Record<string, { label: string; color: string; soft: string; 
   PARTIAL: { label: '部分覆盖', color: '#b45309', soft: 'rgba(245, 158, 11, 0.14)', border: 'rgba(245, 158, 11, 0.28)' },
   MISSING: { label: '素材缺失', color: '#dc2626', soft: 'rgba(239, 68, 68, 0.12)', border: 'rgba(239, 68, 68, 0.24)' },
   VETOED: { label: '被否决', color: '#7c2d12', soft: 'rgba(249, 115, 22, 0.14)', border: 'rgba(249, 115, 22, 0.24)' }
+};
+
+const IMAGE_GEN_STATUS_META: Record<string, { label: string; color: string; soft: string; border: string }> = {
+  PENDING: { label: 'AI 生图待处理', color: '#6366f1', soft: 'rgba(99, 102, 241, 0.08)', border: 'rgba(99, 102, 241, 0.2)' },
+  PROCESSING: { label: 'AI 生图中...', color: '#2563eb', soft: 'rgba(37, 99, 235, 0.08)', border: 'rgba(37, 99, 235, 0.2)' },
+  COMPLETED: { label: 'AI 生图已完成', color: '#047857', soft: 'rgba(16, 185, 129, 0.08)', border: 'rgba(16, 185, 129, 0.2)' },
+  FAILED: { label: 'AI 生图失败', color: '#dc2626', soft: 'rgba(239, 68, 68, 0.08)', border: 'rgba(239, 68, 68, 0.2)' }
 };
 
 const CARD_SURFACE: CSSProperties = {
@@ -68,7 +76,8 @@ export default function CreateProjectGapDetection() {
         partial: 0,
         missing: 0,
         vetoed: 0,
-        executableStrategies: 0
+        executableStrategies: 0,
+        imageGenEligible: 0
       };
     }
     return matchResult.items.reduce((acc, item) => {
@@ -78,6 +87,7 @@ export default function CreateProjectGapDetection() {
       if (status === 'PARTIAL') acc.partial += 1;
       if (status === 'MISSING') acc.missing += 1;
       if (status === 'VETOED') acc.vetoed += 1;
+      if (status === 'MISSING' && item.imageGenEligible) acc.imageGenEligible += 1;
       acc.executableStrategies += chain.length;
       return acc;
     }, {
@@ -85,7 +95,8 @@ export default function CreateProjectGapDetection() {
       partial: 0,
       missing: 0,
       vetoed: 0,
-      executableStrategies: 0
+      executableStrategies: 0,
+      imageGenEligible: 0
     });
   }, [matchResult]);
 
@@ -171,7 +182,7 @@ export default function CreateProjectGapDetection() {
 
   return (
     <div className="detail-page fade-in" style={{ borderColor: '#dbeafe', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)' }}>
-      <div className="detail-header" style={{ background: 'rgba(248, 250, 252, 0.86)', justifyContent: 'space-between', backdropFilter: 'blur(18px)' }}>
+      <div className="detail-header" style={{ background: 'rgba(248, 250, 252, 0.86)', justifyContent: 'space-between', backdropFilter: 'blur(18px)', borderBottom: 'none', paddingBottom: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button className="back-btn" onClick={() => navigate(`/create/detail/${projectId}/workflow`)} title="返回素材阶段">
             <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -203,22 +214,15 @@ export default function CreateProjectGapDetection() {
           >
             {loadingAssets || loadingMatch ? '刷新中...' : '刷新结果'}
           </button>
-          <button
-            onClick={() => navigate(`/create/detail/${projectId}/template-debug`)}
-            className="action-btn secondary"
-            style={{ padding: '6px 12px', fontSize: '0.85rem' }}
-          >
-            去往模板推荐 Debug
-          </button>
-          <button
-            onClick={() => navigate(`/create/detail/${projectId}/bgm-debug`)}
-            className="action-btn secondary"
-            style={{ padding: '6px 12px', fontSize: '0.85rem', marginLeft: '6px' }}
-          >
-            去往 BGM 推荐 Debug
-          </button>
+          {matchResult && (
+            <button className="btn-outline" onClick={confirmAdaptation} disabled={adaptingSlots}>
+              {adaptingSlots ? '适配中...' : '确认并执行适配'}
+            </button>
+          )}
+
         </div>
       </div>
+      <ProjectCreationTabs projectId={projectId} activeTab="gap-detection" />
 
       <div style={{ padding: '18px 32px 0', color: '#64748b', fontSize: '0.9rem' }}>
         项目：<strong style={{ color: '#0f172a' }}>{projectTitle || '未命名项目'}</strong> · 状态：{projectStatus}
@@ -249,6 +253,7 @@ export default function CreateProjectGapDetection() {
               <MetricTile label="已匹配段落" value={String(matchOverview.matched)} tone="good" />
               <MetricTile label="部分覆盖" value={String(matchOverview.partial)} tone="warn" />
               <MetricTile label="缺失段落" value={String(matchOverview.missing)} tone="bad" />
+              <MetricTile label="可AI补位" value={String(matchOverview.imageGenEligible)} tone="good" />
               <MetricTile label="可执行策略数" value={String(matchOverview.executableStrategies)} />
             </div>
             {matchResult && (
@@ -278,25 +283,18 @@ export default function CreateProjectGapDetection() {
                   : '当前还没有可展示的匹配结果'}
               </div>
             </div>
-            {matchResult && (
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="btn-outline" onClick={confirmAdaptation} disabled={adaptingSlots}>
-                  {adaptingSlots ? '适配中...' : '确认并重新执行适配'}
-                </button>
-                <button
-                  className="btn-primary"
-                  onClick={() => navigate(`/create/detail/${projectId}/generation`)}
-                >
-                  去往视频生成 (P3)
-                </button>
-              </div>
-            )}
+
           </div>
 
           {matchResult ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {matchResult.items.map((item) => (
-                <SegmentMatchCard key={`${item.segmentIndex}-${item.segmentRole}`} item={item} />
+                <SegmentMatchCard
+                  key={`${item.segmentIndex}-${item.segmentRole}`}
+                  item={item}
+                  onRetry={confirmAdaptation}
+                  adapting={adaptingSlots}
+                />
               ))}
             </div>
           ) : (
@@ -317,7 +315,11 @@ export default function CreateProjectGapDetection() {
   );
 }
 
-function SegmentMatchCard({ item }: { item: CreationMatchResultItem }) {
+function SegmentMatchCard({ item, onRetry, adapting }: {
+  item: CreationMatchResultItem;
+  onRetry: () => void;
+  adapting: boolean;
+}) {
   const status = (item.matchStatus || 'MISSING').toUpperCase();
   const meta = STATUS_META[status] || STATUS_META.MISSING;
   const plan = parseAdaptationPlan(item.adaptationPlanJson);
@@ -388,6 +390,14 @@ function SegmentMatchCard({ item }: { item: CreationMatchResultItem }) {
         ) : (
           <EmptyStrategyState item={item} />
         )}
+
+        {status === 'MISSING' && item.imageGenEligible && (
+          <ImageGenStatusPanel
+            item={item}
+            onRetry={onRetry}
+            adapting={adapting}
+          />
+        )}
       </div>
     </div>
   );
@@ -446,6 +456,79 @@ function EmptyStrategyState({ item }: { item: CreationMatchResultItem }) {
     }}>
       <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: '6px' }}>{copy.title}</div>
       <div style={{ fontSize: '0.82rem', lineHeight: 1.7 }}>{copy.desc}</div>
+    </div>
+  );
+}
+
+function ImageGenStatusPanel({ item, onRetry, adapting }: {
+  item: CreationMatchResultItem;
+  onRetry: () => void;
+  adapting: boolean;
+}) {
+  const genStatus = item.imageGenStatus || 'PENDING';
+  const genMeta = IMAGE_GEN_STATUS_META[genStatus] || IMAGE_GEN_STATUS_META.PENDING;
+
+  return (
+    <div style={{
+      marginTop: '14px',
+      borderRadius: '14px',
+      padding: '14px 16px',
+      background: genMeta.soft,
+      border: `1px solid ${genMeta.border}`
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <StatusChip label={genMeta.label} color={genMeta.color} soft={genMeta.soft} border={genMeta.border} />
+        {item.imageGenCategory && (
+          <InfoPill label={item.imageGenCategory} />
+        )}
+      </div>
+      {item.imageGenDescription && (
+        <div style={{ fontSize: '0.83rem', color: '#334155', lineHeight: 1.7, marginBottom: '8px' }}>
+          {item.imageGenDescription}
+        </div>
+      )}
+      {(genStatus === 'COMPLETED' && item.adaptedFileUrl) && (
+        <div style={{ marginBottom: '8px' }}>
+          <img
+            src={item.adaptedFileUrl}
+            alt={item.imageGenDescription || 'AI 生成素材'}
+            style={{
+              width: '100%',
+              maxHeight: '260px',
+              objectFit: 'contain',
+              borderRadius: '10px',
+              background: '#f1f5f9',
+              border: '1px solid #e2e8f0'
+            }}
+          />
+        </div>
+      )}
+      {item.imageGenErrorMessage && (
+        <div style={{
+          fontSize: '0.76rem', color: '#dc2626', marginTop: '6px',
+          background: 'rgba(239, 68, 68, 0.06)', borderRadius: '8px',
+          padding: '8px 10px', lineHeight: 1.6
+        }}>
+          错误: {item.imageGenErrorMessage}
+        </div>
+      )}
+      {genStatus === 'PENDING' && (
+        <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '8px' }}>
+          点击下方「重试生图」或页面顶部「确认并重新执行适配」将异步触发 AI 图片生成。
+        </div>
+      )}
+      {(genStatus === 'PENDING' || genStatus === 'FAILED') && (
+        <div style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
+          <button
+            className="btn-outline"
+            onClick={onRetry}
+            disabled={adapting}
+            style={{ fontSize: '0.78rem', padding: '5px 14px' }}
+          >
+            {adapting ? '处理中...' : '重试生图'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { creationApi } from '../../api/creation';
 import { useToast } from '../../contexts/ToastContext';
+import { ProjectCreationTabs } from '../../components/ProjectCreationTabs';
 
 type AspectRatioOption = '9:16' | '16:9' | '1:1' | '4:5';
 
@@ -134,7 +135,7 @@ export default function CreateProjectGeneration() {
     }, 1500);
   };
 
-  const handleStatusResponse = (data: { status: string; progress: number; outputPath?: string; error?: string }) => {
+  const handleStatusResponse = (data: { status: string; progress: number; outputPath?: string; error?: string; renderId?: string }) => {
     if (data.status === 'RENDERING') {
       setIsGenerating(true);
       setProgress(data.progress || 0.1);
@@ -142,8 +143,9 @@ export default function CreateProjectGeneration() {
       setIsGenerating(false);
       setProgress(1);
       if (timerRef.current) clearInterval(timerRef.current);
-      // Construct local URL using remotion-service's output
-      setVideoUrl(`http://localhost:3001/out/${projectId}.mp4`);
+      // 使用 renderId 构造版本化视频 URL
+      const rid = data.renderId || projectId;
+      setVideoUrl(`http://localhost:3001/out/${rid}.mp4`);
       setProjectStatus('DONE');
       showToast('视频渲染完成！', 'success');
     } else if (data.status === 'FAILED') {
@@ -161,7 +163,7 @@ export default function CreateProjectGeneration() {
 
   return (
     <div className="detail-page fade-in" style={{ borderColor: '#e0e7ff' }}>
-      <div className="detail-header" style={{ background: '#f8fafc', justifyContent: 'space-between' }}>
+      <div className="detail-header" style={{ background: '#f8fafc', justifyContent: 'space-between', borderBottom: 'none', paddingBottom: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button className="back-btn" onClick={() => navigate(`/create/detail/${projectId}/gap-detection`)} title="返回适配阶段">
             <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -171,6 +173,7 @@ export default function CreateProjectGeneration() {
           <h2 className="detail-title">创作工作流 · 智能生成 (P3)</h2>
         </div>
       </div>
+      <ProjectCreationTabs projectId={projectId} activeTab="generation" />
 
       <div style={{ padding: '14px 32px 0', color: '#64748b', fontSize: '0.9rem' }}>
         项目：<strong style={{ color: '#0f172a' }}>{projectTitle || '未命名项目'}</strong> · 状态：{projectStatus}

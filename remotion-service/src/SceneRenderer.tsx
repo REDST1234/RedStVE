@@ -10,6 +10,8 @@ import type { Scene } from './schemas/CompositionScript';
 
 interface SceneRendererProps {
   scene: Scene;
+  /** 允许音效层超出场景视觉边界的额外帧数（用于尾音效不截断） */
+  sceneEndExtension?: number;
 }
 
 type AudioSyncMode =
@@ -66,9 +68,11 @@ const stripAudioProtocolParams = (params: Record<string, unknown>): Record<strin
 const resolveAudioLayerTiming = (
   scene: Scene,
   layer: Scene['layers'][number],
+  sceneEndExtension: number = 0,
 ): { from: number; durationInFrames: number; params: Record<string, unknown> } => {
   const params = ((layer.params ?? {}) as AudioLayerParams);
   const sceneDuration = scene.durationInFrames;
+  const effectiveSceneEnd = sceneDuration + sceneEndExtension;
   const ownDuration =
     layer.durationInFrames
     ?? toSafePositiveInt(params.totalDurationFrames)
@@ -76,7 +80,9 @@ const resolveAudioLayerTiming = (
   const defaultFrom = Math.max(0, layer.enterAtFrame ?? 0);
 
   if (layer.preset !== 'media.audio' || !params.syncWithLayerId) {
-    const durationInFrames = Math.max(1, Math.min(sceneDuration, ownDuration));
+    // 音效层允许超出场景视觉边界，视觉层仍受 sceneDuration 限制
+    const maxDur = Math.max(sceneDuration, effectiveSceneEnd);
+    const durationInFrames = Math.max(1, Math.min(maxDur, ownDuration));
     return {
       from: defaultFrom,
       durationInFrames,
@@ -89,7 +95,8 @@ const resolveAudioLayerTiming = (
 
   const targetLayer = scene.layers.find((candidate) => candidate.layerId === params.syncWithLayerId);
   if (!targetLayer) {
-    const durationInFrames = Math.max(1, Math.min(sceneDuration, ownDuration));
+    const maxDur = Math.max(sceneDuration, effectiveSceneEnd);
+    const durationInFrames = Math.max(1, Math.min(maxDur, ownDuration));
     return {
       from: defaultFrom,
       durationInFrames,
@@ -134,7 +141,7 @@ const resolveAudioLayerTiming = (
   }
 
   const clampedFrom = Math.max(0, Math.min(sceneDuration - 1, from));
-  const maxDuration = Math.max(1, sceneDuration - clampedFrom);
+  const maxDuration = Math.max(1, effectiveSceneEnd - clampedFrom);
 
   const finalDuration = Math.max(1, Math.min(maxDuration, durationInFrames));
   return {
@@ -147,7 +154,7 @@ const resolveAudioLayerTiming = (
   };
 };
 
-export const SceneRenderer: React.FC<SceneRendererProps> = ({ scene }) => {
+export const SceneRenderer: React.FC<SceneRendererProps> = ({ scene, sceneEndExtension = 0 }) => {
   // 防止服务端渲染链路遗漏入口副作用，渲染前兜底注册全部预设。
   registerAllPresets();
 
@@ -155,7 +162,7 @@ export const SceneRenderer: React.FC<SceneRendererProps> = ({ scene }) => {
     <AbsoluteFill>
       {scene.layers.map((layer) => {
         const { component: PresetComponent } = getPreset(layer.preset);
-        const resolvedAudio = resolveAudioLayerTiming(scene, layer);
+        const resolvedAudio = resolveAudioLayerTiming(scene, layer, sceneEndExtension);
         const sequenceFrom = layer.preset === 'media.audio'
           ? resolvedAudio.from
           : (layer.enterAtFrame ?? 0);

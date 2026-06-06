@@ -104,6 +104,14 @@ public class SlotMatcherServiceImpl implements SlotMatcherService {
             row.setVetoReason(decision.getVetoReason());
             row.setVersionId(resolvedVersionId);
             row.setAdaptationPlanJson(decision.getAdaptationPlan() == null ? "{}" : decision.getAdaptationPlan().toString());
+            // Persist image generation fields
+            row.setImageGenEligible(decision.getImageGenEligible() != null && decision.getImageGenEligible());
+            if (Boolean.TRUE.equals(decision.getImageGenEligible())) {
+                row.setImageGenCategory(decision.getImageGenCategory());
+                row.setImageGenPrompt(decision.getImageGenPrompt());
+                row.setImageGenDescription(decision.getImageGenDescription());
+                row.setImageGenStatus("PENDING");
+            }
             if (MATCH_STATUS_MISSING.equals(decision.getMatchStatus()) || MATCH_STATUS_VETOED.equals(decision.getMatchStatus())) {
                 missingOrVetoedCount++;
             }

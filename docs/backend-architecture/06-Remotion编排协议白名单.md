@@ -12,7 +12,7 @@
 
 1. 视频结构拆解协议
 2. 素材画像协议
-3. 槽位匹配协议
+3. 槽位匹配协议（含 AI 生图补位判定 — 见 [04-创作链路与素材适配模块 §4.6.1](04-创作链路与素材适配模块.md#461-l4-seedream-40-ai-生图补位已实现)）
 
 ---
 
@@ -161,6 +161,9 @@
 ### 6.3 运镜
 
 1. `motion.ken_burns`
+2. `motion.float_2d5`
+3. `motion.parallax_drift`
+4. `motion.perspective_tilt`
 
 ### 6.4 文本
 
@@ -419,7 +422,113 @@
 | `endPosition` | `object` | 否 | `{ x:number, y:number }` |
 | `easing` | `number[4]` | 否 | 三次贝塞尔控制点数组 |
 
-## 8.8 `text.fade_title`
+## 8.8 `motion.float_2d5`
+
+### 定位
+
+2.5D 悬浮卡片。通过正弦振荡实现上下浮动、左右摇摆和动态深度阴影变化，模拟图片悬浮在 3D 空间中的视觉效果。适合 UI 元素、贴纸、LOGO、插图等需要「漂浮在空中」视觉感受的静态图片。配合 `backing.glass_plate` 使用层次感更佳。
+
+### 字段白名单
+
+| 字段 | 类型 | 必填 | 约束 |
+|---|---|---:|---|
+| `src` | `string` | 是 | 图片 URL |
+| `floatAmplitude` | `number` | 否 | Y 轴浮动幅度 (px)，默认 `12`，建议 6~20 |
+| `floatSpeed` | `number` | 否 | 浮动速度倍率，默认 `0.7`，范围 0.3~2.0 |
+| `swayAmount` | `number` | 否 | 左右摇摆角度 (deg)，默认 `2`，建议 1~5 |
+| `scaleBreath` | `number` | 否 | 缩放呼吸幅度，默认 `0.03`，0=关闭 |
+| `perspective` | `number` | 否 | CSS perspective (px)，默认 `800` |
+| `shadowEnabled` | `boolean` | 否 | 是否启用动态深度阴影，默认 `true` |
+| `shadowColor` | `string` | 否 | 阴影颜色，默认 `rgba(0,0,0,0.25)` |
+| `objectFit` | `string` | 否 | `cover` / `contain` / `fill` / `none`，默认 `contain` |
+| `scale` | `number` | 否 | 图片相对于画布的缩放，默认 `0.9` |
+
+### 动画行为
+
+1. `translateY` 正弦振荡 (频率由 `floatSpeed` 控制)：模拟上下浮动
+2. `rotateZ` 正弦振荡 (相位偏移 π/3)：模拟左右摇摆，不与浮动同步
+3. `scale` 正弦振荡 (相位偏移 π/2)：模拟呼吸感
+4. `filter: drop-shadow` 动态偏移 + 模糊：浮动越高阴影越远越淡
+5. `rotateX(4deg)` + `perspective`：微妙的 3D 远近感
+
+### LLM 使用规则
+
+- 适合静态图片需要动感但不适合 ken_burns 推拉的场景
+- UI_ELEMENT / STICKER / LOGO 类素材优先使用
+- 配合 `backing.glass_plate` 或 `backing.solid_plate` 做背景衬底，层次感更强
+- 若需要更强的漂浮感，可适当增大 `floatAmplitude` 和 `swayAmount`
+- 若素材是 LOGO / 图标 / 挂件图，优先 `objectFit: contain`
+
+## 8.9 `motion.parallax_drift`
+
+### 定位
+
+视差漂移。图片沿 X/Y 轴以不同频率正弦漂移，产生李萨如轨迹式的深度移动感。适合背景图或大面积插图需要「缓慢移动的深度感」的场景。与 `motion.ken_burns` 的区别：parallax_drift 是连续循环漂移，没有明确的起始/结束状态，更适合作为氛围背景。
+
+### 字段白名单
+
+| 字段 | 类型 | 必填 | 约束 |
+|---|---|---:|---|
+| `src` | `string` | 是 | 图片 URL |
+| `driftRangeX` | `number` | 否 | X 轴漂移范围 (px)，默认 `30`，建议 10~60 |
+| `driftRangeY` | `number` | 否 | Y 轴漂移范围 (px)，默认 `20`，建议 8~40 |
+| `driftSpeedX` | `number` | 否 | X 方向速度倍率，默认 `0.5`，范围 0.3~2.0 |
+| `driftSpeedY` | `number` | 否 | Y 方向速度倍率，默认 `0.7`，范围 0.3~2.0 |
+| `scaleRange` | `number` | 否 | 缩放波动幅度，默认 `0.05`，0=关闭 |
+| `rotationRange` | `number` | 否 | 旋转波动幅度 (deg)，默认 `1.5`，0=关闭 |
+| `objectFit` | `string` | 否 | `cover` / `contain` / `fill` / `none`，默认 `cover` |
+
+### 动画行为
+
+1. X 和 Y 使用不同基础周期 (速度不同)，产生非同步正弦漂移
+2. 使用比画布大 10% 的容器避免漂移时露出边缘
+3. 缩放和旋转使用各自的周期叠加，进一步增强不规则运动感
+
+### LLM 使用规则
+
+- 适合 BACKGROUND / ILLUSTRATION 类素材
+- 作为场景底层的氛围动效，文字层可叠在上方
+- `driftSpeedX` 和 `driftSpeedY` 建议取不同值 (如 0.5/0.7)，避免对角线直线运动
+- 若需要更明显或更微妙的漂移，调整 `driftRangeX`/`driftRangeY` 而非 speed
+- 不适合需要精确构图对齐的场景（素材会持续移动）
+
+## 8.10 `motion.perspective_tilt`
+
+### 定位
+
+CSS 3D 透视倾斜。通过 `perspective` + `rotateX` + `rotateY` 实现卡片式 3D 透视倾斜效果，类似 Apple TV 卡片悬停或 iOS App Store 卡片风格。适合需要「高端质感」「3D 卡片」视觉的品牌展示、产品图、封面图场景。
+
+### 字段白名单
+
+| 字段 | 类型 | 必填 | 约束 |
+|---|---|---:|---|
+| `src` | `string` | 是 | 图片 URL |
+| `rotateX` | `number` | 否 | X 轴旋转角度 (deg)，默认 `-5`，建议 -15~15 |
+| `rotateY` | `number` | 否 | Y 轴旋转角度 (deg)，默认 `3`，建议 -15~15 |
+| `perspective` | `number` | 否 | CSS perspective (px)，默认 `1000`，建议 600~2000 |
+| `scale` | `number` | 否 | 缩放比例，默认 `0.85` |
+| `dynamicEnabled` | `boolean` | 否 | 是否缓慢微动，默认 `true` |
+| `dynamicRange` | `number` | 否 | 微动幅度 (deg)，默认 `2`，建议 1~5 |
+| `shadowEnabled` | `boolean` | 否 | 投影开关，默认 `true` |
+| `shadowColor` | `string` | 否 | 投影颜色，默认 `rgba(0,0,0,0.3)` |
+| `objectFit` | `string` | 否 | `cover` / `contain` / `fill` / `none`，默认 `contain` |
+
+### 动画行为
+
+1. 静态倾斜：`rotateX` + `rotateY` 恒定角度
+2. 动态微动（`dynamicEnabled: true`）：X/Y 角度叠加缓慢正弦振荡（不同周期），产生呼吸式微动
+3. 深度阴影：`boxShadow` 多层叠加增强 3D 纵深感
+4. 图片带 `borderRadius: 12px` 圆角柔和边缘
+
+### LLM 使用规则
+
+- 适合高端品牌展示、产品图、封面图
+- `rotateX` 负值 = 顶部后倾（常见透视），正值 = 顶部前倾
+- `rotateY` 正值 = 右侧微转，负值 = 左侧微转
+- 配合 `backing.glass_plate` 做背景，层次感更突出
+- 不适合需要正视/平视的 UI 元素或文字类素材
+
+## 8.11 `text.fade_title`
 
 ### 字段白名单
 
@@ -436,7 +545,7 @@
 | `textShadow` | `string` | 否 | CSS 文本阴影字符串 |
 | `maxWidth` | `string/number` | 否 | 最大宽度 |
 
-## 8.9 `text.kinetic_pop`
+## 8.12 `text.kinetic_pop`
 
 ### 字段白名单
 
@@ -460,7 +569,7 @@
 | `textAlign` | `string` | 否 | `left` / `center` / `right` |
 | `maxWidth` | `string/number` | 否 | 最大宽度 |
 
-## 8.10 `text.hero_billboard`
+## 8.13 `text.hero_billboard`
 
 ### 字段白名单
 
@@ -509,7 +618,7 @@
 2. `expo_out`
 3. `linear_fade`
 
-## 8.11 `text.typewriter`
+## 8.14 `text.typewriter`
 
 ### 字段白名单
 
@@ -531,7 +640,7 @@
 | `letterSpacing` | `string/number` | 否 | 字距 |
 | `textAlign` | `string` | 否 | `left` / `center` / `right` |
 
-## 8.12 `text.mask_reveal`
+## 8.15 `text.mask_reveal`
 
 ### 字段白名单
 
@@ -559,7 +668,7 @@
 3. `bottom_to_top`
 4. `top_to_bottom`
 
-## 8.13 `text.word_highlight`
+## 8.16 `text.word_highlight`
 
 ### 字段白名单
 
@@ -582,7 +691,7 @@
 | `textAlign` | `string` | 否 | `left` / `center` / `right` |
 | `highlightScale` | `number` | 否 | 正数 |
 
-## 8.14 `caption.subtitle`
+## 8.17 `caption.subtitle`
 
 ### 字段白名单
 
@@ -594,7 +703,7 @@
 | `bgColor` | `string` | 否 | 允许 hex 或 rgba |
 | `position` | `string` | 否 | `bottom_center` / `top_center` / `center` |
 
-## 8.15 `overlay.light_leak`
+## 8.18 `overlay.light_leak`
 
 ### 字段白名单
 
@@ -604,7 +713,7 @@
 | `hueShift` | `number` | 否 | 数值 |
 | `durationInFrames` | `integer` | 否 | 正整数 |
 
-## 8.16 `overlay.flash`
+## 8.19 `overlay.flash`
 
 ### 字段白名单
 
@@ -616,7 +725,7 @@
 | `holdFrames` | `integer` | 否 | 非负整数 |
 | `exitFrames` | `integer` | 否 | 正整数 |
 
-## 8.17 `overlay.badge_pop`
+## 8.20 `overlay.badge_pop`
 
 ### 字段白名单
 
@@ -637,7 +746,7 @@
 | `shadowColor` | `string` | 否 | 建议 rgba |
 | `borderColor` | `string` | 否 | 建议 rgba 或 hex |
 
-## 8.18 `overlay.glow_frame`
+## 8.21 `overlay.glow_frame`
 
 ### 字段白名单
 
@@ -651,7 +760,7 @@
 | `pulseStrength` | `number` | 否 | 建议 `0.0 ~ 1.0` |
 | `inset` | `number` | 否 | 非负数 |
 
-## 8.19 `text.counter_number`
+## 8.22 `text.counter_number`
 
 ### 定位
 
@@ -690,7 +799,7 @@
 - 小数位建议 ≤ 2
 - 建议配合 `backing.glass_plate` 或 `backing.solid_plate` 做背景衬底
 
-## 8.20 `text.label_chip`
+## 8.23 `text.label_chip`
 
 ### 定位
 
@@ -734,7 +843,7 @@
 - 同一场景建议 ≤ 4 个 chip，避免信息过载
 - 若需要强冲击感（如促销角标），改用 `overlay.badge_pop`
 
-## 8.21 `backing.solid_plate`
+## 8.24 `backing.solid_plate`
 
 ### 定位
 
@@ -767,7 +876,7 @@
 - 不要和 `backing.glass_plate` 同时叠加在同一区域
 - 暗色场景推荐 `color: "#0B1120"` + `opacity: 0.65`，亮色场景反之
 
-## 8.22 `backing.capsule`
+## 8.25 `backing.capsule`
 
 ### 定位
 
@@ -802,7 +911,7 @@
 - 建议与 `text.kinetic_pop` 或 `text.label_chip` 搭配使用
 - `position` 应与目标文字层对齐（或略偏移做层次感）
 
-## 8.23 `backing.glass_plate`
+## 8.26 `backing.glass_plate`
 
 ### 定位
 
@@ -966,8 +1075,22 @@
 2. Java 后端 `sanitizeScript / validateScript` 应按本文档做 schema-aware 校验
 3. 若新增 preset，应先更新注册表，再更新本文档，再更新 prompt 与 validator
 
-这份文档的目标不是“描述大概能怎么用”，而是作为 **Remotion 编排协议基线**，帮助我们统一：
+这份文档的目标不是”描述大概能怎么用”，而是作为 **Remotion 编排协议基线**，帮助我们统一：
 
 1. 模型输出
 2. 后端校验
 3. 渲染器消费
+
+---
+
+## 13. AI 生成素材在编排中的呈现方式
+
+当槽位匹配阶段判定某 MISSING 槽位可 AI 生图补位并生成成功后，该素材在编排 LLM 的 `assetBrief` 中以 `IMAGE_GENERATED` 资产卡片呈现：
+
+- **assetVariant**: `IMAGE_GENERATED`（区别于 `ORIGINAL` / `ADAPTED`）
+- **src**: Seedream 返回的公网 URL，Remotion 侧按普通 `media.image` 预设渲染
+- **imageGenCategory**: 生图类别 (`UI_ELEMENT` / `STICKER` / `LOGO` / `ILLUSTRATION` / `BACKGROUND`)
+- **imageGenDescription**: 中文自然语言描述，帮助编排 LLM 理解该图的语义角色
+- **priorityHint**: 编排优先级建议
+
+Remotion 渲染层无需感知素材来源——AI 生成的图片通过标准的 `media.image` preset + `src` URL 使用，与其他图片素材一致。生图判定逻辑、异步状态机和透明背景约束完全在后端 `AdaptationOrchestratorServiceImpl` 和 `CreationProjectServiceImpl` 中处理，详见 [04-创作链路与素材适配模块](04-创作链路与素材适配模块.md)。

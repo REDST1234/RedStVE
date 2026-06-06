@@ -10,6 +10,9 @@ import { registerAllPresets } from './presets/registerAll';
 // 确保在任何组件挂载前注册预设
 registerAllPresets();
 
+/** 尾音效最多延长的帧数（3秒@30fps），与 DynamicVideoRenderer 保持一致 */
+const MAX_TRAILING_FRAMES = 90;
+
 /** 根据编排 JSON 动态计算视频元数据 */
 const calculateMetadata: CalculateMetadataFunction<CompositionScript> = async ({ props }) => {
   const totalSceneFrames = props.scenes.reduce((sum, s) => sum + s.durationInFrames, 0);
@@ -17,9 +20,41 @@ const calculateMetadata: CalculateMetadataFunction<CompositionScript> = async ({
     (sum, t) => sum + (t.params.durationInFrames || 0),
     0,
   );
+  const baseDuration = Math.max(1, totalSceneFrames - transitionOverlap);
+
+  // 计算最后一场景尾音效溢出量，延长视频以播完音效
+  let audioOverflow = 0;
+  const lastScene = props.scenes[props.scenes.length - 1];
+  if (lastScene) {
+    let maxEnd = lastScene.durationInFrames;
+    for (const layer of lastScene.layers) {
+      if (layer.preset !== 'media.audio') continue;
+      const params = layer.params as Record<string, unknown> | undefined;
+      const ownDur = layer.durationInFrames
+        ?? (typeof params?.totalDurationFrames === 'number' ? Math.round(params.totalDurationFrames as number) : 0)
+        ?? lastScene.durationInFrames;
+      let effectiveFrom = layer.enterAtFrame ?? 0;
+      if (params?.syncWithLayerId) {
+        const syncMode = (params.syncMode as string) ?? 'match_layer';
+        const targetLayer = lastScene.layers.find((c) => c.layerId === params.syncWithLayerId);
+        if (targetLayer) {
+          const targetDur = targetLayer.durationInFrames ?? lastScene.durationInFrames;
+          const targetFrom = targetLayer.enterAtFrame ?? 0;
+          if (syncMode === 'trigger_on_end' || syncMode === 'trigger_on_typing_end') {
+            effectiveFrom = targetFrom + targetDur;
+          } else {
+            effectiveFrom = targetFrom;
+          }
+        }
+      }
+      const end = effectiveFrom + ownDur;
+      if (end > maxEnd) maxEnd = end;
+    }
+    audioOverflow = Math.max(0, Math.min(MAX_TRAILING_FRAMES, maxEnd - lastScene.durationInFrames));
+  }
 
   return {
-    durationInFrames: Math.max(1, totalSceneFrames - transitionOverlap),
+    durationInFrames: baseDuration + audioOverflow,
     width: props.canvas.width,
     height: props.canvas.height,
     fps: props.canvas.fps,
@@ -635,6 +670,321 @@ const newComponentsShowcaseScript: CompositionScript = {
     },
   ],
 };
+/** 2.5D 运镜动效演示 — motion.float_2d5 / motion.parallax_drift / motion.perspective_tilt */
+const motionShowcaseScript: CompositionScript = {
+  canvas: { width: 1080, height: 1920, fps: 30 },
+  globalStyle: { fontFamily: 'Noto Sans SC', backgroundColor: '#0A0A0F' },
+  scenes: [
+    // ═══ Scene 1: 2.5D 漂浮卡片 — motion.float_2d5 ═══
+    {
+      sceneId: 'scene_1_float_card',
+      sceneIndex: 0,
+      role: 'hook',
+      durationInFrames: 90,
+      layers: [
+        {
+          layerId: 'bg_mesh',
+          preset: 'bg.mesh_gradient',
+          params: {
+            colors: ['#0F0F23', '#1A1A3E', '#2D1B69', '#4F46E5'],
+            intensity: 1.0,
+          },
+        },
+        {
+          layerId: 'bg_noise',
+          preset: 'bg.noise_grain',
+          params: {
+            backgroundColor: 'transparent',
+            grainOpacity: 0.08,
+            scale: 1,
+          },
+        },
+        {
+          layerId: 'glass_backing',
+          preset: 'backing.glass_plate',
+          enterAtFrame: 4,
+          durationInFrames: 82,
+          params: {
+            width: '78%',
+            height: '62%',
+            blurAmount: 20,
+            tintColor: 'rgba(255,255,255,0.08)',
+            borderRadius: 28,
+            borderColor: 'rgba(255,255,255,0.12)',
+            borderWidth: 1,
+            position: { x: 'center', y: 'center' },
+            shadowEnabled: true,
+            shadowColor: 'rgba(0,0,0,0.3)',
+          },
+        },
+        {
+          layerId: 'float_product',
+          preset: 'motion.float_2d5',
+          enterAtFrame: 6,
+          durationInFrames: 78,
+          params: {
+            src: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80',
+            floatAmplitude: 10,
+            floatSpeed: 0.7,
+            swayAmount: 2.5,
+            scaleBreath: 0.025,
+            perspective: 800,
+            shadowEnabled: true,
+            shadowColor: 'rgba(0,0,0,0.3)',
+            objectFit: 'contain',
+            scale: 0.75,
+          },
+        },
+        {
+          layerId: 'label_tag',
+          preset: 'text.label_chip',
+          enterAtFrame: 12,
+          durationInFrames: 68,
+          params: {
+            text: '🪩 2.5D Float',
+            variant: 'filled',
+            bgColor: '#7C3AED',
+            color: '#FFFFFF',
+            fontSize: 24,
+            fontWeight: 700,
+            position: { x: 'center', y: '80%' },
+          },
+        },
+        {
+          layerId: 'title_float',
+          preset: 'text.kinetic_pop',
+          enterAtFrame: 18,
+          durationInFrames: 60,
+          params: {
+            text: '漂浮卡片',
+            fontSize: 72,
+            color: '#F5F3FF',
+            fontWeight: 900,
+            position: { x: 'center', y: '16%' },
+            scaleFrom: 1.4,
+            rotationFrom: 0,
+            enterFrames: 14,
+            settleFrames: 18,
+            textShadow: '0 8px 32px rgba(124,58,237,0.4)',
+          },
+        },
+        {
+          layerId: 'desc_float',
+          preset: 'text.typewriter',
+          enterAtFrame: 36,
+          durationInFrames: 42,
+          params: {
+            text: '上下浮动 · 摇摆 · 动态阴影',
+            fontSize: 34,
+            color: '#A5B4FC',
+            fontWeight: 600,
+            position: { x: 'center', y: '88%' },
+            charIntervalFrames: 2,
+            cursor: '',
+          },
+        },
+      ],
+    },
+    // ═══ Scene 2: 视差漂移 — motion.parallax_drift ═══
+    {
+      sceneId: 'scene_2_parallax',
+      sceneIndex: 1,
+      role: 'body',
+      durationInFrames: 100,
+      layers: [
+        {
+          layerId: 'parallax_bg',
+          preset: 'motion.parallax_drift',
+          params: {
+            src: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1080&q=80',
+            driftRangeX: 28,
+            driftRangeY: 18,
+            driftSpeedX: 0.5,
+            driftSpeedY: 0.7,
+            scaleRange: 0.04,
+            rotationRange: 1.2,
+            objectFit: 'cover',
+          },
+        },
+        {
+          layerId: 'dark_overlay',
+          preset: 'backing.solid_plate',
+          params: {
+            width: '100%',
+            height: '100%',
+            color: '#000000',
+            opacity: 0.35,
+            borderRadius: 0,
+            padding: 0,
+            position: { x: 'center', y: 'center' },
+            shadowEnabled: false,
+            enterFrames: 0,
+          },
+        },
+        {
+          layerId: 'title_parallax',
+          preset: 'text.mask_reveal',
+          enterAtFrame: 14,
+          durationInFrames: 72,
+          params: {
+            text: '视差漂移',
+            fontSize: 76,
+            color: '#FFFFFF',
+            fontWeight: 900,
+            position: { x: 'center', y: '36%' },
+            revealDirection: 'bottom_to_top',
+            revealFrames: 24,
+            textShadow: '0 6px 28px rgba(0,0,0,0.6)',
+          },
+        },
+        {
+          layerId: 'label_parallax',
+          preset: 'text.label_chip',
+          enterAtFrame: 22,
+          durationInFrames: 62,
+          params: {
+            text: '🌊 李萨如轨迹',
+            variant: 'soft',
+            color: '#E0E7FF',
+            bgColor: '#4F46E5',
+            fontSize: 22,
+            position: { x: 'center', y: '54%' },
+          },
+        },
+        {
+          layerId: 'desc_parallax',
+          preset: 'text.fade_title',
+          enterAtFrame: 36,
+          durationInFrames: 50,
+          params: {
+            text: 'XY 异步正弦漂移\n深度移动感',
+            fontSize: 36,
+            color: '#CBD5E1',
+            fontWeight: 600,
+            position: { x: 'center', y: '70%' },
+            textShadow: '0 2px 12px rgba(0,0,0,0.5)',
+          },
+        },
+      ],
+    },
+    // ═══ Scene 3: 透视倾斜 — motion.perspective_tilt ═══
+    {
+      sceneId: 'scene_3_tilt',
+      sceneIndex: 2,
+      role: 'outro',
+      durationInFrames: 90,
+      layers: [
+        {
+          layerId: 'bg_mesh_tilt',
+          preset: 'bg.mesh_gradient',
+          params: {
+            colors: ['#171347', '#1E1B4B', '#312E81', '#22D3EE'],
+            intensity: 0.95,
+          },
+        },
+        {
+          layerId: 'bg_noise_tilt',
+          preset: 'bg.noise_grain',
+          params: {
+            backgroundColor: 'transparent',
+            grainOpacity: 0.07,
+            scale: 1.1,
+          },
+        },
+        {
+          layerId: 'tilt_card',
+          preset: 'motion.perspective_tilt',
+          enterAtFrame: 6,
+          durationInFrames: 78,
+          params: {
+            src: 'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=800&q=80',
+            rotateX: -5,
+            rotateY: 3,
+            perspective: 1000,
+            scale: 0.78,
+            dynamicEnabled: true,
+            dynamicRange: 2,
+            shadowEnabled: true,
+            shadowColor: 'rgba(0,0,0,0.35)',
+            objectFit: 'contain',
+          },
+        },
+        {
+          layerId: 'title_tilt',
+          preset: 'text.kinetic_pop',
+          enterAtFrame: 14,
+          durationInFrames: 62,
+          params: {
+            text: '透视倾斜',
+            fontSize: 74,
+            color: '#F8FAFC',
+            fontWeight: 900,
+            position: { x: 'center', y: '18%' },
+            scaleFrom: 1.5,
+            rotationFrom: 0,
+            enterFrames: 14,
+            settleFrames: 18,
+            textShadow: '0 8px 32px rgba(34,211,238,0.35)',
+          },
+        },
+        {
+          layerId: 'label_tilt',
+          preset: 'text.label_chip',
+          enterAtFrame: 22,
+          durationInFrames: 52,
+          params: {
+            text: '🃏 CSS 3D Perspective',
+            variant: 'outlined',
+            color: '#22D3EE',
+            borderColor: 'rgba(34,211,238,0.6)',
+            fontSize: 22,
+            position: { x: 'center', y: '82%' },
+          },
+        },
+        {
+          layerId: 'glow_frame',
+          preset: 'overlay.glow_frame',
+          enterAtFrame: 4,
+          durationInFrames: 80,
+          params: {
+            color: '#22D3EE',
+            thickness: 8,
+            glowBlur: 22,
+            opacity: 0.5,
+            borderRadius: 28,
+            inset: 20,
+          },
+        },
+      ],
+    },
+  ],
+  transitions: [
+    {
+      fromSceneIndex: 0,
+      toSceneIndex: 1,
+      preset: 'transition.fade',
+      params: {
+        durationInFrames: 18,
+        timing: 'linear',
+      },
+      overlay: {
+        preset: 'overlay.flash',
+        params: { color: '#FFFFFF', maxOpacity: 0.5, enterFrames: 2, holdFrames: 1, exitFrames: 8 },
+      },
+    },
+    {
+      fromSceneIndex: 1,
+      toSceneIndex: 2,
+      preset: 'transition.slide',
+      params: {
+        direction: 'from-bottom',
+        durationInFrames: 16,
+        timing: 'spring',
+      },
+    },
+  ],
+};
+
 const showcaseLandscapeScript: CompositionScript = {
   canvas: { width: 1920, height: 1080, fps: 30 },
   globalStyle: { fontFamily: 'Noto Sans SC', backgroundColor: '#0B1120' },
@@ -813,6 +1163,17 @@ export const RemotionRoot: React.FC = () => {
         width={1080}
         height={1920}
         defaultProps={newComponentsShowcaseScript}
+        schema={CompositionScriptSchema}
+        calculateMetadata={calculateMetadata}
+      />
+      <Composition
+        id="MotionShowcase"
+        component={DynamicVideoRenderer}
+        durationInFrames={244}
+        fps={30}
+        width={1080}
+        height={1920}
+        defaultProps={motionShowcaseScript}
         schema={CompositionScriptSchema}
         calculateMetadata={calculateMetadata}
       />

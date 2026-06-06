@@ -42,6 +42,8 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import com.bytedance.aivideo.creation.entity.CreativeMaterialEntity;
+import com.bytedance.aivideo.creation.entity.RenderRecordEntity;
+import com.bytedance.aivideo.creation.mapper.RenderRecordMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -83,6 +85,7 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
     private final CreativeMaterialMapper creativeMaterialMapper;
     private final SlotMatchResultMapper slotMatchResultMapper;
     private final CreationProjectBgmBindingService creationProjectBgmBindingService;
+    private final RenderRecordMapper renderRecordMapper;
 
     @Value("${remotion.service.url:http://localhost:3001}")
     private String remotionServiceUrl;
@@ -96,7 +99,8 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             ObjectMapper objectMapper,
             CreativeMaterialMapper creativeMaterialMapper,
             SlotMatchResultMapper slotMatchResultMapper,
-            CreationProjectBgmBindingService creationProjectBgmBindingService
+            CreationProjectBgmBindingService creationProjectBgmBindingService,
+            RenderRecordMapper renderRecordMapper
     ) {
         this.deconstructTemplateService = deconstructTemplateService;
         this.creationTemplateSnapshotService = creationTemplateSnapshotService;
@@ -107,6 +111,7 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         this.creativeMaterialMapper = creativeMaterialMapper;
         this.slotMatchResultMapper = slotMatchResultMapper;
         this.creationProjectBgmBindingService = creationProjectBgmBindingService;
+        this.renderRecordMapper = renderRecordMapper;
     }
 
     @Override
@@ -217,6 +222,9 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         String description = project.getDescription() != null && !project.getDescription().isBlank()
                 ? project.getDescription() : project.getTitle();
 
+        // 生成唯一 renderId
+        String renderId = projectId + "_" + System.currentTimeMillis();
+
         // 获取真实素材
         List<CreativeMaterialEntity> materials = creativeMaterialMapper.selectList(
                 new LambdaQueryWrapper<CreativeMaterialEntity>()
@@ -255,21 +263,33 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             script.setProjectId(projectId);
             applySelectedBgm(script, selectedBgm);
             applyCanvas(script, targetCanvas);
-            persistOrchestrationArtifacts(projectId, orchestrationResult, script);
+            persistOrchestrationArtifacts(projectId, renderId, orchestrationResult, script);
         } else {
             applyCanvas(script, targetCanvas);
+            // 重试时也迁移缓存键到新 renderId
+            migrateRetryScriptCache(projectId, renderId);
         }
         normalizeMediaSources(script);
 
         // 调用 Remotion 微服务
-        RenderResponse response = remotionServiceClient.submitRenderTask(projectId, script);
-        
+        RenderResponse response = remotionServiceClient.submitRenderTask(renderId, script);
+        response.setRenderId(renderId);
+
         if ("FAILED".equals(response.getStatus())) {
             throw new BizException(ErrorCode.INTERNAL_ERROR, "提交渲染任务失败: " + response.getError());
         }
 
+        // 保存渲染记录
+        RenderRecordEntity record = new RenderRecordEntity();
+        record.setRenderId(renderId);
+        record.setProjectId(projectId);
+        record.setStatus("QUEUED");
+        record.setAspectRatio(normalizedAspectRatio);
+        renderRecordMapper.insert(record);
+
         // 更新项目状态
         project.setStatus("GENERATING");
+        project.setLatestRenderId(renderId);
         this.baseMapper.updateById(project);
     }
 
@@ -304,6 +324,7 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             }
         }
         assetList.addAll(buildAdaptedRenderAssets(projectId, materialByBizId));
+        assetList.addAll(buildImageGeneratedRenderAssets(projectId));
         return assetList;
     }
 
@@ -449,6 +470,12 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             if (asset.containsKey("priorityHint")) {
                 appendBriefLine(sb, "使用建议", stringValue(asset.get("priorityHint")));
             }
+            if (asset.containsKey("imageGenCategory")) {
+                appendBriefLine(sb, "AI生图类别", stringValue(asset.get("imageGenCategory")));
+            }
+            if (asset.containsKey("imageGenDescription")) {
+                appendBriefLine(sb, "AI生图说明", stringValue(asset.get("imageGenDescription")));
+            }
             if (asset.containsKey("textContent")) {
                 appendBriefLine(sb, "文本内容", stringValue(asset.get("textContent")));
             }
@@ -523,6 +550,58 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             adaptedAssets.add(asset);
         }
         return adaptedAssets;
+    }
+
+    private List<Map<String, Object>> buildImageGeneratedRenderAssets(String projectId) {
+        List<Map<String, Object>> assets = new ArrayList<>();
+        String latestVersionId = resolveLatestMatchedVersionId(projectId);
+        if (latestVersionId == null) {
+            return assets;
+        }
+        List<SlotMatchResultEntity> rows = slotMatchResultMapper.selectList(
+                new LambdaQueryWrapper<SlotMatchResultEntity>()
+                        .eq(SlotMatchResultEntity::getProjectId, projectId)
+                        .eq(SlotMatchResultEntity::getVersionId, latestVersionId)
+                        .eq(SlotMatchResultEntity::getImageGenEligible, true)
+                        .eq(SlotMatchResultEntity::getImageGenStatus, "COMPLETED")
+                        .isNull(SlotMatchResultEntity::getDeletedAt)
+                        .orderByAsc(SlotMatchResultEntity::getSegmentIndex)
+        );
+        for (SlotMatchResultEntity row : rows) {
+            if (row.getAdaptedFilePath() == null || row.getAdaptedFilePath().isBlank()) {
+                continue;
+            }
+            Map<String, Object> asset = new HashMap<>();
+            asset.put("materialBizId", "img_gen__seg_" + row.getSegmentIndex());
+            asset.put("materialType", "IMAGE");
+            asset.put("assetVariant", "IMAGE_GENERATED");
+            asset.put("segmentIndex", row.getSegmentIndex());
+            asset.put("segmentRole", row.getSegmentRole());
+            asset.put("matchStatus", row.getMatchStatus());
+            asset.put("imageGenCategory", row.getImageGenCategory());
+            asset.put("src", toRemotionMediaSrc(row.getAdaptedFilePath()));
+            if (row.getImageGenDescription() != null && !row.getImageGenDescription().isBlank()) {
+                asset.put("imageGenDescription", row.getImageGenDescription());
+            }
+            asset.put("adaptationSummary",
+                    "AI 生成素材(" + (row.getImageGenCategory() != null ? row.getImageGenCategory() : "IMAGE")
+                            + "): " + (row.getImageGenDescription() != null ? row.getImageGenDescription() : ""));
+            asset.put("priorityHint", buildImageGenPriorityHint(row));
+            assets.add(asset);
+        }
+        return assets;
+    }
+
+    private String buildImageGenPriorityHint(SlotMatchResultEntity row) {
+        StringBuilder sb = new StringBuilder("这是 AI 生成的图片素材，用于填补模板缺口。");
+        if (row.getSegmentRole() != null && !row.getSegmentRole().isBlank()) {
+            sb.append(" 目标段落为 ").append(row.getSegmentRole()).append("。");
+        }
+        if (row.getImageGenCategory() != null) {
+            sb.append(" 素材类型为 ").append(row.getImageGenCategory()).append("。");
+        }
+        sb.append(" 请在使用时优先考虑该段落的需求，适当配合文字层和转场完成编排。");
+        return sb.toString();
     }
 
     private String resolveLatestMatchedVersionId(String projectId) {
@@ -983,49 +1062,99 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
 
     @Override
     public RenderResponse getRenderStatus(String projectId) {
-        // 先从 Redis 查询高频进度
-        String redisKey = RENDER_TASK_KEY_PREFIX + projectId;
-        String json = stringRedisTemplate.opsForValue().get(redisKey);
-        
-        if (json != null) {
-            try {
-                RenderResponse resp = objectMapper.readValue(json, RenderResponse.class);
-                // 状态同步
-                if ("DONE".equals(resp.getStatus()) || "FAILED".equals(resp.getStatus())) {
-                    CreationProjectEntity project = requireActiveProject(projectId);
-                    if (!resp.getStatus().equals(project.getStatus())) {
-                        project.setStatus(resp.getStatus());
-                        this.baseMapper.updateById(project);
+        CreationProjectEntity project = requireActiveProject(projectId);
+        String renderId = project.getLatestRenderId();
+
+        // 先从 Redis 查询高频进度（使用 latestRenderId 构造 key）
+        if (renderId != null && !renderId.isBlank()) {
+            String redisKey = RENDER_TASK_KEY_PREFIX + renderId;
+            String json = stringRedisTemplate.opsForValue().get(redisKey);
+            if (json != null) {
+                try {
+                    RenderResponse resp = objectMapper.readValue(json, RenderResponse.class);
+                    resp.setRenderId(renderId);
+                    // 状态同步
+                    if ("DONE".equals(resp.getStatus()) || "FAILED".equals(resp.getStatus())) {
+                        if (!resp.getStatus().equals(project.getStatus())) {
+                            project.setStatus(resp.getStatus());
+                            this.baseMapper.updateById(project);
+                        }
+                        // 同步渲染记录
+                        syncRenderRecord(renderId, resp);
                     }
+                    return resp;
+                } catch (Exception e) {
+                    // 忽略解析错误，降级查数据库
                 }
-                return resp;
-            } catch (Exception e) {
-                // 忽略解析错误，降级查数据库
             }
         }
 
         // 若 Redis 中无数据，查询 MySQL
-        CreationProjectEntity project = requireActiveProject(projectId);
         RenderResponse response = new RenderResponse();
         response.setTaskId(projectId);
-        
+        response.setRenderId(renderId);
+
         if ("GENERATING".equals(project.getStatus())) {
-            // Redis 里没数据，但 MySQL 是 GENERATING，说明可能刚提交或者意外丢失，暂时返回 QUEUED
             response.setStatus("QUEUED");
         } else if ("DONE".equals(project.getStatus())) {
             response.setStatus("DONE");
+            if (renderId != null) {
+                response.setOutputPath(buildOutputUrl(renderId));
+            }
         } else {
             response.setStatus("NOT_STARTED");
         }
-        
+
         return response;
+    }
+
+    /** 同步 Remotion 返回的渲染状态到 render_record 表 */
+    private void syncRenderRecord(String renderId, RenderResponse resp) {
+        try {
+            List<RenderRecordEntity> existing = renderRecordMapper.selectList(
+                    new LambdaQueryWrapper<RenderRecordEntity>()
+                            .eq(RenderRecordEntity::getRenderId, renderId)
+            );
+            if (existing != null && !existing.isEmpty()) {
+                RenderRecordEntity record = existing.get(0);
+                if (resp.getStatus() != null && !resp.getStatus().equals(record.getStatus())) {
+                    record.setStatus(resp.getStatus());
+                    if (resp.getOutputPath() != null) {
+                        record.setOutputPath(resp.getOutputPath());
+                    }
+                    renderRecordMapper.updateById(record);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to sync render record: renderId={}", renderId, e);
+        }
+    }
+
+    private String buildOutputUrl(String renderId) {
+        return remotionServiceUrl + "/out/" + renderId + ".mp4";
+    }
+
+    /** 查询项目的渲染历史记录 */
+    public List<RenderRecordEntity> getRenderHistory(String projectId) {
+        return renderRecordMapper.selectList(
+                new LambdaQueryWrapper<RenderRecordEntity>()
+                        .eq(RenderRecordEntity::getProjectId, projectId)
+                        .orderByDesc(RenderRecordEntity::getCreatedAt)
+        );
     }
 
     private CompositionScript loadRetryableScript(String projectId, CreationProjectEntity project, CanvasConfig targetCanvas) {
         if (!"FAILED".equals(project.getStatus())) {
             return null;
         }
-        String json = stringRedisTemplate.opsForValue().get(RENDER_SCRIPT_KEY_PREFIX + projectId);
+        // 优先使用 latestRenderId 查找缓存，回退到 projectId（兼容旧缓存）
+        String lookupId = project.getLatestRenderId() != null && !project.getLatestRenderId().isBlank()
+                ? project.getLatestRenderId() : projectId;
+        String json = stringRedisTemplate.opsForValue().get(RENDER_SCRIPT_KEY_PREFIX + lookupId);
+        if (json == null || json.isBlank()) {
+            // 回退到 projectId 查找
+            json = stringRedisTemplate.opsForValue().get(RENDER_SCRIPT_KEY_PREFIX + projectId);
+        }
         if (json == null || json.isBlank()) {
             return null;
         }
@@ -1059,10 +1188,10 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         return actual != null && expected != null && actual > 0 && expected > 0 && actual.intValue() == expected.intValue();
     }
 
-    private void persistOrchestrationArtifacts(String projectId, VideoOrchestrationResult orchestrationResult, CompositionScript script) {
+    private void persistOrchestrationArtifacts(String projectId, String renderId, VideoOrchestrationResult orchestrationResult, CompositionScript script) {
         try {
             stringRedisTemplate.opsForValue().set(
-                    RENDER_SCRIPT_KEY_PREFIX + projectId,
+                    RENDER_SCRIPT_KEY_PREFIX + renderId,
                     objectMapper.writeValueAsString(script),
                     ORCHESTRATION_CACHE_TTL_DAYS,
                     TimeUnit.DAYS
@@ -1070,17 +1199,44 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
 
             Map<String, Object> meta = new HashMap<>();
             meta.put("projectId", projectId);
+            meta.put("renderId", renderId);
             meta.put("rawContent", orchestrationResult.getRawContent());
             meta.put("reasoningContent", orchestrationResult.getReasoningContent());
             meta.put("cachedAt", java.time.OffsetDateTime.now().toString());
             stringRedisTemplate.opsForValue().set(
-                    RENDER_ORCHESTRATION_KEY_PREFIX + projectId,
+                    RENDER_ORCHESTRATION_KEY_PREFIX + renderId,
                     objectMapper.writeValueAsString(meta),
                     ORCHESTRATION_CACHE_TTL_DAYS,
                     TimeUnit.DAYS
             );
         } catch (Exception e) {
-            log.warn("Failed to persist orchestration artifacts: projectId={}", projectId, e);
+            log.warn("Failed to persist orchestration artifacts: projectId={}, renderId={}", projectId, renderId, e);
+        }
+    }
+
+    /** 重试时把旧缓存键的数据迁移到新 renderId 键下，保持重试链完整 */
+    private void migrateRetryScriptCache(String projectId, String renderId) {
+        try {
+            String oldScript = stringRedisTemplate.opsForValue().get(RENDER_SCRIPT_KEY_PREFIX + projectId);
+            if (oldScript != null && !oldScript.isBlank()) {
+                stringRedisTemplate.opsForValue().set(
+                        RENDER_SCRIPT_KEY_PREFIX + renderId,
+                        oldScript,
+                        ORCHESTRATION_CACHE_TTL_DAYS,
+                        TimeUnit.DAYS
+                );
+            }
+            String oldMeta = stringRedisTemplate.opsForValue().get(RENDER_ORCHESTRATION_KEY_PREFIX + projectId);
+            if (oldMeta != null && !oldMeta.isBlank()) {
+                stringRedisTemplate.opsForValue().set(
+                        RENDER_ORCHESTRATION_KEY_PREFIX + renderId,
+                        oldMeta,
+                        ORCHESTRATION_CACHE_TTL_DAYS,
+                        TimeUnit.DAYS
+                );
+            }
+        } catch (Exception e) {
+            log.warn("Failed to migrate retry script cache: projectId={}, renderId={}", projectId, renderId, e);
         }
     }
 
@@ -1088,5 +1244,112 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         stringRedisTemplate.delete(RENDER_SCRIPT_KEY_PREFIX + projectId);
         stringRedisTemplate.delete(RENDER_ORCHESTRATION_KEY_PREFIX + projectId);
         stringRedisTemplate.delete(RENDER_TASK_KEY_PREFIX + projectId);
+    }
+
+    @Override
+    public com.bytedance.aivideo.creation.dto.RenderFromJsonResponse renderFromJson(CompositionScript script) {
+        com.bytedance.aivideo.creation.dto.RenderFromJsonResponse response =
+                new com.bytedance.aivideo.creation.dto.RenderFromJsonResponse();
+
+        // 1. 基本校验
+        if (script == null) {
+            response.setStatus("FAILED");
+            response.setError("请求体不能为空，请提供合法的 CompositionScript JSON");
+            return response;
+        }
+        if (script.getCanvas() == null || script.getCanvas().getWidth() == null
+                || script.getCanvas().getHeight() == null || script.getCanvas().getFps() == null) {
+            response.setStatus("FAILED");
+            response.setError("canvas 字段不完整，需要提供 width / height / fps");
+            return response;
+        }
+        if (script.getScenes() == null || script.getScenes().isEmpty()) {
+            response.setStatus("FAILED");
+            response.setError("scenes 数组不能为空，至少需要一个场景");
+            return response;
+        }
+
+        try {
+            // 2. 生成唯一 renderId
+            String renderId = "json_" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
+
+            // 3. Sanitize（校验+注入SFX src+修复常见问题）
+            script = videoOrchestrationService.sanitizeScript(script);
+
+            // 4. 缓存脚本到 Redis（便于后续排查与重试）
+            try {
+                stringRedisTemplate.opsForValue().set(
+                        RENDER_SCRIPT_KEY_PREFIX + renderId,
+                        objectMapper.writeValueAsString(script),
+                        ORCHESTRATION_CACHE_TTL_DAYS,
+                        TimeUnit.DAYS
+                );
+            } catch (Exception e) {
+                log.warn("Failed to cache JSON render script: renderId={}", renderId, e);
+            }
+
+            // 5. 投递 Remotion 渲染
+            RenderResponse remotionResp = remotionServiceClient.submitRenderTask(renderId, script);
+            remotionResp.setRenderId(renderId);
+
+            if ("FAILED".equals(remotionResp.getStatus())) {
+                response.setRenderId(renderId);
+                response.setStatus("FAILED");
+                response.setError(remotionResp.getError());
+                return response;
+            }
+
+            // 6. 返回成功
+            response.setRenderId(renderId);
+            response.setStatus("QUEUED");
+            response.setOutputUrlTemplate(remotionServiceUrl + "/out/" + renderId + ".mp4");
+            log.info("JSON render task submitted: renderId={}, scenes={}, canvas={}x{}",
+                    renderId, script.getScenes().size(),
+                    script.getCanvas().getWidth(), script.getCanvas().getHeight());
+        } catch (Exception e) {
+            log.error("Failed to submit JSON render task", e);
+            response.setStatus("FAILED");
+            response.setError("提交渲染异常: " + e.getMessage());
+        }
+
+        return response;
+    }
+
+    /**
+     * 查询 JSON 直投渲染任务的状态（仅查 Redis，不依赖项目）。
+     */
+    public RenderResponse getJsonRenderStatus(String renderId) {
+        RenderResponse fallback = new RenderResponse();
+        fallback.setTaskId(renderId);
+        fallback.setStatus("QUEUED");
+
+        if (renderId == null || renderId.isBlank()) {
+            fallback.setStatus("FAILED");
+            fallback.setError("renderId 不能为空");
+            return fallback;
+        }
+
+        try {
+            String key = RENDER_TASK_KEY_PREFIX + renderId;
+            String json = stringRedisTemplate.opsForValue().get(key);
+            if (json == null || json.isBlank()) {
+                // 任务可能刚提交还未被 Remotion 回写 Redis
+                fallback.setStatus("QUEUED");
+                fallback.setProgress(0.05);
+                fallback.setError(null);
+                return fallback;
+            }
+            RenderResponse parsed = objectMapper.readValue(json, RenderResponse.class);
+            if (parsed == null) {
+                return fallback;
+            }
+            parsed.setRenderId(renderId);
+            return parsed;
+        } catch (Exception e) {
+            log.warn("Failed to read JSON render status: renderId={}", renderId, e);
+            fallback.setStatus("FAILED");
+            fallback.setError("查询渲染状态异常: " + e.getMessage());
+            return fallback;
+        }
     }
 }

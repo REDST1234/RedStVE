@@ -4,6 +4,7 @@ import { creationApi } from '../../api/creation';
 import { useToast } from '../../contexts/ToastContext';
 import { CreationAssetData } from '../../types';
 import { extractFileName, formatBytes, formatDuration } from '../../utils/format';
+import { ProjectCreationTabs } from '../../components/ProjectCreationTabs';
 
 export default function CreateProjectWorkflow() {
   const { id } = useParams();
@@ -136,7 +137,7 @@ export default function CreateProjectWorkflow() {
 
   return (
     <div className="detail-page fade-in" style={{ borderColor: '#e0e7ff' }}>
-      <div className="detail-header" style={{ background: '#f8fafc', justifyContent: 'space-between' }}>
+      <div className="detail-header" style={{ background: '#f8fafc', justifyContent: 'space-between', borderBottom: 'none', paddingBottom: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button className="back-btn" onClick={() => navigate(`/create/detail/${projectId}`)} title="返回">
             <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -145,30 +146,8 @@ export default function CreateProjectWorkflow() {
           </button>
           <h2 className="detail-title">创作工作流 · 素材阶段</h2>
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button
-            onClick={() => navigate(`/create/detail/${projectId}/gap-detection`)}
-            className="btn-primary"
-            style={{ padding: '8px 14px', fontSize: '0.88rem' }}
-          >
-            下一步
-          </button>
-          <button 
-            onClick={() => navigate(`/create/detail/${projectId}/template-debug`)}
-            className="action-btn secondary"
-            style={{ padding: '6px 12px', fontSize: '0.85rem' }}
-          >
-            去往模板推荐 Debug
-          </button>
-          <button 
-            onClick={() => navigate(`/create/detail/${projectId}/bgm-debug`)}
-            className="action-btn secondary"
-            style={{ padding: '6px 12px', fontSize: '0.85rem', marginLeft: '6px' }}
-          >
-            去往 BGM 推荐 Debug
-          </button>
-        </div>
       </div>
+      <ProjectCreationTabs projectId={projectId} activeTab="workflow" />
 
       <div style={{ padding: '14px 32px 0', color: '#64748b', fontSize: '0.9rem' }}>
         项目：<strong style={{ color: '#0f172a' }}>{projectTitle || '未命名项目'}</strong> · 状态：{projectStatus}

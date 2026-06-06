@@ -3,6 +3,7 @@ package com.bytedance.aivideo.engine.remotion;
 import com.bytedance.aivideo.common.error.ErrorCode;
 import com.bytedance.aivideo.common.exception.BizException;
 import com.bytedance.aivideo.config.ArkProperties;
+import com.bytedance.aivideo.config.SfxAudioProperties;
 import com.bytedance.aivideo.creation.dto.remotion.BgmConfig;
 import com.bytedance.aivideo.creation.dto.remotion.CompositionScript;
 import com.bytedance.aivideo.creation.util.BgmMixLevelResolver;
@@ -31,17 +32,20 @@ public class VideoOrchestrationService {
     private final ArkPayloadFactory arkPayloadFactory;
     private final ArkResponsesClient arkResponsesClient;
     private final ArkProperties arkProperties;
+    private final SfxAudioProperties sfxAudioProperties;
     private final ObjectMapper objectMapper;
 
     public VideoOrchestrationService(
             ArkPayloadFactory arkPayloadFactory,
             ArkResponsesClient arkResponsesClient,
             ArkProperties arkProperties,
+            SfxAudioProperties sfxAudioProperties,
             ObjectMapper objectMapper
     ) {
         this.arkPayloadFactory = arkPayloadFactory;
         this.arkResponsesClient = arkResponsesClient;
         this.arkProperties = arkProperties;
+        this.sfxAudioProperties = sfxAudioProperties;
         this.objectMapper = objectMapper;
     }
 
@@ -201,9 +205,38 @@ public class VideoOrchestrationService {
             if (!layerObject.has("enterAtFrame") || layerObject.path("enterAtFrame").asInt(-1) < 0) {
                 layerObject.put("enterAtFrame", 0);
             }
+            // 为缺少 src 的 media.audio 层根据 cueType 自动填入默认音频 URL
+            injectSfxAudioSrc(layerObject);
             sanitizedLayers.add(layerObject);
         }
         return sanitizedLayers;
+    }
+
+    /**
+     * 若 layer 是 media.audio 且缺少 src 但有 cueType，则从 SFX 映射表自动填入 src。
+     */
+    private void injectSfxAudioSrc(ObjectNode layerObject) {
+        String preset = layerObject.path("preset").asText("");
+        if (!"media.audio".equals(preset)) {
+            return;
+        }
+        ObjectNode params = (ObjectNode) layerObject.get("params");
+        if (params == null) {
+            return;
+        }
+        // 已有 src 则不覆盖
+        if (params.has("src") && !params.path("src").asText("").isBlank()) {
+            return;
+        }
+        String cueType = params.path("cueType").asText("");
+        if (cueType.isBlank()) {
+            return;
+        }
+        String resolvedSrc = sfxAudioProperties.resolveSrc(cueType);
+        if (resolvedSrc != null && !resolvedSrc.isBlank()) {
+            params.put("src", resolvedSrc);
+            log.info("SFX audio src auto-injected: cueType={}, src={}", cueType, resolvedSrc);
+        }
     }
 
     private int inferSceneDuration(ArrayNode layers) {
@@ -304,6 +337,21 @@ public class VideoOrchestrationService {
                 }
                 if (layer.getParams() == null) {
                     throw new BizException(ErrorCode.INVALID_REQUEST, "layer.params 必须是对象，scene索引: " + i + ", layer索引: " + j);
+                }
+                // 校验 media / motion 类 preset 必须有 src
+                // 例外: media.audio 若有 cueType，src 可由后端 SFX 映射自动填入
+                String preset = layer.getPreset();
+                if (preset != null && (preset.startsWith("media.") || preset.startsWith("motion."))) {
+                    boolean isAudioWithCueType = "media.audio".equals(preset)
+                            && layer.getParams().get("cueType") != null
+                            && !((String) layer.getParams().get("cueType")).isBlank();
+                    if (!isAudioWithCueType) {
+                        Object src = layer.getParams().get("src");
+                        if (src == null || (src instanceof String s && s.isBlank())) {
+                            throw new BizException(ErrorCode.INVALID_REQUEST,
+                                    "layer.preset=" + preset + " 缺少必填字段 params.src，scene索引: " + i + ", layerId: " + layer.getLayerId());
+                        }
+                    }
                 }
             }
         }

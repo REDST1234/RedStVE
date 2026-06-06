@@ -23,4 +23,7 @@ public class BgmRecommendRequest {
      * 返回推荐结果的限制数量，默认 5
      */
     private Integer topN = 5;
+
+    /** 强制刷新 — 设为 true 时跳过缓存重新计算 */
+    private Boolean forceRefresh = false;
 }

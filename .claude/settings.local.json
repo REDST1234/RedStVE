@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(mvn compile *)",
+      "Bash(mvn clean *)",
+      "Bash(bash fix_image_gen_persistence.sh)",
+      "PowerShell(mysql -h 100.79.235.109 -u root -p82405702 -D redstve -e \"SELECT match_id, project_id, version_id, segment_index, match_status, image_gen_eligible, image_gen_category, image_gen_status, image_gen_error_message FROM slot_match_result WHERE match_status='MISSING' AND image_gen_eligible=1 ORDER BY id DESC LIMIT 20;\" 2>&1)",
+      "PowerShell(mysql -h 100.79.235.109 -u root -p82405702 -D redstve -e \"SELECT match_id, segment_index, match_status, image_gen_eligible, image_gen_category, image_gen_status, adapted_file_path, image_gen_url FROM slot_match_result WHERE image_gen_eligible=1 ORDER BY id DESC LIMIT 20;\" 2>&1)",
+      "Bash(ffmpeg -i \"d:\\\\Develop\\\\code\\\\bytedance-ai-video\\\\storage\\\\audio-database\\\\sfx\\\\brand_logo_hit.wav\" -af \"silencedetect=n=-50dB:d=0.1\" -f null -)",
+      "Bash(Select-String \"silence\")",
+      "Bash(npx remotion *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

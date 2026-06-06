@@ -19,6 +19,8 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
 
     private static final String TAG_UNKNOWN = "UNKNOWN";
     private static final String TAG_STATIC = "STATIC";
+    /** 品类: 动态图形/动画模板 — 不依赖实拍视频素材 */
+    private static final String CATEGORY_MOTION_GRAPHICS = "motion_graphics";
     private static final double UNKNOWN_TAG_PENALTY = 0.1;
     private static final double GEOMETRIC_FLOOR = 0.01;
     private static final double MIN_SEGMENT_SCORE_THRESHOLD = 0.65;
@@ -33,11 +35,18 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
 
     @Override
     public double calculateStructureScore(List<CreativeMaterialEntity> materials, String templateJson) {
-        return calculateStructureScore(materials, templateJson, "");
+        return calculateStructureScore(materials, templateJson, "", null);
     }
 
     @Override
-    public double calculateStructureScore(List<CreativeMaterialEntity> materials, String templateJson, String templateKey) {
+    public double calculateStructureScore(List<CreativeMaterialEntity> materials, String templateJson,
+            String templateKey) {
+        return calculateStructureScore(materials, templateJson, templateKey, null);
+    }
+
+    @Override
+    public double calculateStructureScore(List<CreativeMaterialEntity> materials, String templateJson,
+            String templateKey, String categoryId) {
         if (materials == null || materials.isEmpty() || templateJson == null || templateJson.isBlank()) {
             return 0.0;
         }
@@ -54,13 +63,18 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
             int fallbackMappingCount = template.fallbackMappingCount();
             int unknownTagPenaltyCount = 0;
             String vetoReason = "NONE";
+            boolean hasVideoMaterials = false;
 
             for (CreativeMaterialEntity material : materials) {
                 if (!"PROFILED".equals(material.getStatus()) || material.getProfileJson() == null) {
                     continue;
                 }
+                if ("VIDEO".equalsIgnoreCase(material.getMaterialType())) {
+                    hasVideoMaterials = true;
+                }
                 JsonNode profileNode = objectMapper.readTree(material.getProfileJson());
-                TemplateMatchCanonicalizer.CanonicalMaterial canonicalMaterial = canonicalizer.canonicalizeMaterial(material, profileNode);
+                TemplateMatchCanonicalizer.CanonicalMaterial canonicalMaterial = canonicalizer
+                        .canonicalizeMaterial(material, profileNode);
                 materialProfiles.add(canonicalMaterial);
                 materialMissingTagCount += canonicalMaterial.missingTagCount();
                 fallbackMappingCount += canonicalMaterial.fallbackMappingCount();
@@ -69,6 +83,9 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
             if (materialProfiles.isEmpty()) {
                 return 0.0;
             }
+
+            // MG模板：仅当用户没有上传任何视频素材时才跳过镜头运动/类型匹配
+            final boolean mgSkipVideoChecks = CATEGORY_MOTION_GRAPHICS.equals(categoryId) && !hasVideoMaterials;
 
             List<Double> segmentBestScores = new ArrayList<>();
             int segmentCount = template.segments().size();
@@ -82,8 +99,8 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
                             profile,
                             segment,
                             template.acousticEnvironment(),
-                            template.aspectRatio()
-                    );
+                            template.aspectRatio(),
+                            mgSkipVideoChecks);
                     if (evaluation.score() > bestMaterialScore) {
                         bestMaterialScore = evaluation.score();
                         bestUnknownPenaltyCount = evaluation.unknownTagPenaltyCount();
@@ -114,6 +131,13 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
                 finalScore *= MIN_SEGMENT_SCORE_PENALTY_FACTOR;
             }
 
+            // 正向惩罚：若项目中包含任何视频实拍素材，对纯 MG 动效模板给予 0.1 分的惩罚
+            if (CATEGORY_MOTION_GRAPHICS.equals(categoryId) && hasVideoMaterials) {
+                finalScore -= 0.1;
+                finalScore = Math.max(0.0, finalScore);
+                log.info("structure score penalized by 0.1 for MG template with video: templateKey={}", templateKey);
+            }
+
             int templateTagSlots = segmentCount * 2;
             int materialTagSlots = materialProfiles.size() * 2;
             int totalTagSlots = Math.max(1, templateTagSlots + materialTagSlots);
@@ -121,9 +145,11 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
             double fieldCoverage = Math.max(0.0, 1.0 - ((double) missingTotal / totalTagSlots));
 
             if (fieldCoverage < 0.85) {
-                log.warn("structure field coverage low: templateKey={}, fieldCoverage={}, threshold=0.85", templateKey, fieldCoverage);
+                log.warn("structure field coverage low: templateKey={}, fieldCoverage={}, threshold=0.85", templateKey,
+                        fieldCoverage);
             }
-            log.info("structure score computed: templateKey={}, templateMissingTagCount={}, materialMissingTagCount={}, fallbackMappingCount={}, unknownTagPenaltyCount={}, fieldCoverage={}, minSegmentScore={}, aggregation=GEOMETRIC_MEAN_WITH_MIN_PENALTY, vetoReason={}, score={}",
+            log.info(
+                    "structure score computed: templateKey={}, templateMissingTagCount={}, materialMissingTagCount={}, fallbackMappingCount={}, unknownTagPenaltyCount={}, fieldCoverage={}, minSegmentScore={}, aggregation=GEOMETRIC_MEAN_WITH_MIN_PENALTY, vetoReason={}, score={}",
                     templateKey,
                     template.missingTagCount(),
                     materialMissingTagCount,
@@ -144,75 +170,88 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
     private SegmentEvaluation evaluateMaterialForSegment(
             TemplateMatchCanonicalizer.CanonicalMaterial profile,
             TemplateMatchCanonicalizer.CanonicalSegment segment,
-            String templateAcousticEnv, String templateAspectRatio) {
+            String templateAcousticEnv, String templateAspectRatio,
+            boolean mgSkipVideoChecks) {
 
         double score = 1.0;
         int unknownTagPenaltyCount = 0;
 
-        boolean needDynamic = !TAG_STATIC.equals(segment.cameraMovementTag()) && !TAG_UNKNOWN.equals(segment.cameraMovementTag());
-        boolean isMaterialStatic = true;
-        boolean isMaterialPureDynamic = true;
-        boolean hasAnyHighlight = false;
-        boolean materialMovementKnown = false;
-        for (TemplateMatchCanonicalizer.CanonicalHighlight highlight : profile.highlights()) {
-            hasAnyHighlight = true;
-            String cm = highlight.cameraMovementTag();
-            if (!TAG_UNKNOWN.equals(cm)) {
-                materialMovementKnown = true;
-            }
-            if (!TAG_STATIC.equals(cm) && !TAG_UNKNOWN.equals(cm)) {
-                isMaterialStatic = false;
-            }
-            if (TAG_STATIC.equals(cm) || TAG_UNKNOWN.equals(cm)) {
-                isMaterialPureDynamic = false;
-            }
-        }
-
-        // 正向硬拦截：动模板不能由静素材承载
-        if (needDynamic && isMaterialStatic && "VIDEO".equalsIgnoreCase(profile.material().getMaterialType()) && materialMovementKnown) {
-            return new SegmentEvaluation(-1.0, unknownTagPenaltyCount);
-        }
-        // 反向硬拦截：静模板不能由纯动态素材承载（防廉价手持晃动污染氛围段）
-        if (TAG_STATIC.equals(segment.cameraMovementTag())
-                && "VIDEO".equalsIgnoreCase(profile.material().getMaterialType())
-                && hasAnyHighlight
-                && materialMovementKnown
-                && isMaterialPureDynamic) {
-            return new SegmentEvaluation(-1.0, unknownTagPenaltyCount);
-        }
-        if (TAG_UNKNOWN.equals(segment.cameraMovementTag()) || !materialMovementKnown) {
-            score -= UNKNOWN_TAG_PENALTY;
-            unknownTagPenaltyCount++;
-        }
-
-        String matAcousticEnv = profile.semanticTagsNode().path("acousticEnvironment").asText("").toLowerCase(Locale.ROOT);
-        if ("asmr".equals(templateAcousticEnv) && ("noisy".equals(matAcousticEnv) || "speech_focused".equals(matAcousticEnv))) {
-            score -= 0.4;
-        }
-
-        if (!TAG_UNKNOWN.equals(segment.shotTypeTag())) {
-            boolean shotTypeMatch = false;
-            boolean shotTypeKnown = false;
+        // ── 镜头运动匹配 ──
+        // MG 模板无视频素材时跳过镜头运动匹配
+        if (!mgSkipVideoChecks) {
+            boolean needDynamic = !TAG_STATIC.equals(segment.cameraMovementTag())
+                    && !TAG_UNKNOWN.equals(segment.cameraMovementTag());
+            boolean isMaterialStatic = true;
+            boolean isMaterialPureDynamic = true;
+            boolean hasAnyHighlight = false;
+            boolean materialMovementKnown = false;
             for (TemplateMatchCanonicalizer.CanonicalHighlight highlight : profile.highlights()) {
-                String st = highlight.shotTypeTag();
-                if (!TAG_UNKNOWN.equals(st)) {
-                    shotTypeKnown = true;
+                hasAnyHighlight = true;
+                String cm = highlight.cameraMovementTag();
+                if (!TAG_UNKNOWN.equals(cm)) {
+                    materialMovementKnown = true;
                 }
-                if (segment.shotTypeTag().equals(st)) {
-                    shotTypeMatch = true;
-                    break;
+                if (!TAG_STATIC.equals(cm) && !TAG_UNKNOWN.equals(cm)) {
+                    isMaterialStatic = false;
+                }
+                if (TAG_STATIC.equals(cm) || TAG_UNKNOWN.equals(cm)) {
+                    isMaterialPureDynamic = false;
                 }
             }
-            if (!shotTypeMatch) {
-                score -= 0.2;
+
+            // 正向硬拦截：动模板不能由静素材承载
+            if (needDynamic && isMaterialStatic && "VIDEO".equalsIgnoreCase(profile.material().getMaterialType())
+                    && materialMovementKnown) {
+                return new SegmentEvaluation(-1.0, unknownTagPenaltyCount);
             }
-            if (!shotTypeKnown) {
+            // 反向硬拦截：静模板不能由纯动态素材承载（防廉价手持晃动污染氛围段）
+            if (TAG_STATIC.equals(segment.cameraMovementTag())
+                    && "VIDEO".equalsIgnoreCase(profile.material().getMaterialType())
+                    && hasAnyHighlight
+                    && materialMovementKnown
+                    && isMaterialPureDynamic) {
+                return new SegmentEvaluation(-1.0, unknownTagPenaltyCount);
+            }
+            if (TAG_UNKNOWN.equals(segment.cameraMovementTag()) || !materialMovementKnown) {
                 score -= UNKNOWN_TAG_PENALTY;
                 unknownTagPenaltyCount++;
             }
-        } else {
-            score -= UNKNOWN_TAG_PENALTY;
-            unknownTagPenaltyCount++;
+        }
+
+        String matAcousticEnv = profile.semanticTagsNode().path("acousticEnvironment").asText("")
+                .toLowerCase(Locale.ROOT);
+        if ("asmr".equals(templateAcousticEnv)
+                && ("noisy".equals(matAcousticEnv) || "speech_focused".equals(matAcousticEnv))) {
+            score -= 0.4;
+        }
+
+        // ── 镜头类型匹配 ──
+        // MG 模板无视频素材时跳过镜头类型匹配
+        if (!mgSkipVideoChecks) {
+            if (!TAG_UNKNOWN.equals(segment.shotTypeTag())) {
+                boolean shotTypeMatch = false;
+                boolean shotTypeKnown = false;
+                for (TemplateMatchCanonicalizer.CanonicalHighlight highlight : profile.highlights()) {
+                    String st = highlight.shotTypeTag();
+                    if (!TAG_UNKNOWN.equals(st)) {
+                        shotTypeKnown = true;
+                    }
+                    if (segment.shotTypeTag().equals(st)) {
+                        shotTypeMatch = true;
+                        break;
+                    }
+                }
+                if (!shotTypeMatch) {
+                    score -= 0.2;
+                }
+                if (!shotTypeKnown) {
+                    score -= UNKNOWN_TAG_PENALTY;
+                    unknownTagPenaltyCount++;
+                }
+            } else {
+                score -= UNKNOWN_TAG_PENALTY;
+                unknownTagPenaltyCount++;
+            }
         }
 
         boolean hasRole = false;
@@ -263,8 +302,7 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
 
     private double calculateVisualFunctionPenalty(
             TemplateMatchCanonicalizer.CanonicalMaterial profile,
-            TemplateMatchCanonicalizer.CanonicalSegment segment
-    ) {
+            TemplateMatchCanonicalizer.CanonicalSegment segment) {
         List<String> requiredFunctions = segment.requiredVisualFunctions();
         if (requiredFunctions == null || requiredFunctions.isEmpty()) {
             return 0.0;
@@ -327,7 +365,8 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
             if ("CLOSE_UP".equals(shotTypeTag)) {
                 functions.add("detail_showcase");
             }
-            if ("STATIC".equals(cameraMovementTag) && ("title_overlay".equals(textType) || "normal_subtitle".equals(textType))) {
+            if ("STATIC".equals(cameraMovementTag)
+                    && ("title_overlay".equals(textType) || "normal_subtitle".equals(textType))) {
                 functions.add("static_summary_card");
             }
             if ("title_overlay".equals(textType)) {
@@ -339,12 +378,14 @@ public class TemplateStructureMatchServiceImpl implements TemplateStructureMatch
                 functions.add("detail_showcase");
             }
             if (actionState.contains("process") || actionState.contains("usage") || actionState.contains("demo")
-                    || actionState.contains("operation") || actionState.contains("apply") || actionState.contains("assemble")
+                    || actionState.contains("operation") || actionState.contains("apply")
+                    || actionState.contains("assemble")
                     || actionState.contains("cook") || actionState.contains("step")) {
                 functions.add("usage_process");
             }
             if (actionState.contains("compare") || actionState.contains("before_after")
-                    || actionState.contains("proof") || actionState.contains("test") || actionState.contains("review")) {
+                    || actionState.contains("proof") || actionState.contains("test")
+                    || actionState.contains("review")) {
                 functions.add("proof_or_comparison");
             }
             if (actionState.contains("intro") || actionState.contains("hook") || actionState.contains("arrival")) {

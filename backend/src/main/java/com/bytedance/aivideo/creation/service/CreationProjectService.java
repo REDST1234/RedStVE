@@ -32,4 +32,11 @@ public interface CreationProjectService extends IService<CreationProjectEntity> 
 
     // 查询视频渲染进度 (结合 Redis 与 MySQL)
     com.bytedance.aivideo.engine.remotion.dto.RenderResponse getRenderStatus(String projectId);
+
+    // 查询项目渲染历史记录
+    java.util.List<com.bytedance.aivideo.creation.entity.RenderRecordEntity> getRenderHistory(String projectId);
+
+    // 直接提交外部 JSON 编排脚本进行渲染（跳过 LLM 编排，仅校验+sanitize+投递）
+    com.bytedance.aivideo.creation.dto.RenderFromJsonResponse renderFromJson(
+            com.bytedance.aivideo.creation.dto.remotion.CompositionScript script);
 }

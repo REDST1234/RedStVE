@@ -28,7 +28,7 @@ import java.util.UUID;
 @Slf4j
 public class AiEngineLogAspect {
 
-    private static final int MAX_LOG_LENGTH = 12000;
+    private static final int MAX_LOG_LENGTH = Integer.MAX_VALUE;
 
     private final ObjectMapper objectMapper;
 

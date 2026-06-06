@@ -93,11 +93,12 @@ export const GlassPlate: React.FC<GlassPlateProps> = ({
 
   const resolvedPosition = resolveBackingPosition(position);
 
-  const fadeInOpacity = interpolate(frame, [0, enterFrames], [0, 1], {
+  const effectiveEnter = Math.max(1, enterFrames);
+  const fadeInOpacity = interpolate(frame, [0, effectiveEnter], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
-  const scale = interpolate(frame, [0, enterFrames], [0.97, 1], {
+  const scale = interpolate(frame, [0, effectiveEnter], [0.97, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });

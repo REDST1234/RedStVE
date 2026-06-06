@@ -174,6 +174,14 @@ export interface CreationMatchResultItem {
   vetoReason?: string;
   adaptationPlanJson?: string;
   adaptedFilePath?: string;
+  adaptedFileUrl?: string;
+  // AI 生图补位
+  imageGenEligible?: boolean;
+  imageGenCategory?: string;
+  imageGenDescription?: string;
+  imageGenStatus?: string;
+  imageGenUrl?: string;
+  imageGenErrorMessage?: string;
 }
 
 export interface CreationMatchResultData {

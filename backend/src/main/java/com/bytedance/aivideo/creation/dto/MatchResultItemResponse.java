@@ -18,4 +18,15 @@ public class MatchResultItemResponse {
     private String vetoReason;
     private String adaptationPlanJson;
     private String adaptedFilePath;
+
+    /** 本地适配文件的可访问 URL（/api/storage/...），供前端直接展示 */
+    private String adaptedFileUrl;
+
+    // ---- AI 生图补位字段 ----
+    private Boolean imageGenEligible;
+    private String imageGenCategory;
+    private String imageGenDescription;
+    private String imageGenStatus;
+    private String imageGenUrl;
+    private String imageGenErrorMessage;
 }

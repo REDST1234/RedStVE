@@ -76,6 +76,31 @@ asr:
   doubao:
     model: ${ASR_DOUBAO_MODEL:doubao-seed-2-0-lite-260428}
 
+comfyui:
+  base-url: ${COMFYUI_BASE_URL:http://localhost:8001}
+  workflow-path: ${COMFYUI_WORKFLOW_PATH:config/comfyui_bg_removal_workflow.json}
+  poll-timeout-seconds: ${COMFYUI_POLL_TIMEOUT:120}
+  timeout-seconds: ${COMFYUI_TIMEOUT:60}
+
+seedream:
+  api-key: ${SEEDREAM_API_KEY:}
+  model: ${SEEDREAM_MODEL:doubao-seedream-4-0-250828}
+  images-path: ${SEEDREAM_IMAGES_PATH:/api/v3/images/generations}
+  size: ${SEEDREAM_SIZE:2K}
+  watermark: ${SEEDREAM_WATERMARK:true}
+  response-format: ${SEEDREAM_RESPONSE_FORMAT:url}
+  sequential-image-generation: ${SEEDREAM_SEQUENTIAL_IMAGE_GENERATION:disabled}
+  timeout-seconds: ${SEEDREAM_TIMEOUT_SECONDS:120}
+
+sfx-audio:
+  mappings:
+    typewriter_loop: ${SFX_TYPEWRITER_LOOP:http://localhost:3001/storage/audio-database/sfx/typewriter_loop.wav}
+    type_end_click: ${SFX_TYPE_END_CLICK:http://localhost:3001/storage/audio-database/sfx/type_end_click.wav}
+    emphasis_hit: ${SFX_EMPHASIS_HIT:http://localhost:3001/storage/audio-database/sfx/emphasis_hit.wav}
+    transition_whoosh: ${SFX_TRANSITION_WHOOSH:http://localhost:3001/storage/audio-database/sfx/transition_whoosh.wav}
+    brand_logo_hit: ${SFX_BRAND_LOGO_HIT:http://localhost:3001/storage/audio-database/sfx/brand_logo_hit.wav}
+    ui_click: ${SFX_UI_CLICK:http://localhost:3001/storage/audio-database/sfx/ui_click.wav}
+
 timeline:
   min-segment-duration-sec: ${TIMELINE_MIN_SEGMENT_DURATION_SEC:0.60}
   float-epsilon: ${TIMELINE_FLOAT_EPSILON:0.000001}

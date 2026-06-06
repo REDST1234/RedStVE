@@ -10,6 +10,7 @@ public interface BgmRecommendService {
      * @param w2 能量曲线匹配权重
      * @param w3 时长与 BPM 匹配权重
      * @param topN 返回推荐项数量限制
+     * @param forceRefresh 强制刷新 — true 时跳过缓存重新计算
      */
-    BgmRecommendResponse recommend(String projectId, double w1, double w2, double w3, int topN);
+    BgmRecommendResponse recommend(String projectId, double w1, double w2, double w3, int topN, boolean forceRefresh);
 }

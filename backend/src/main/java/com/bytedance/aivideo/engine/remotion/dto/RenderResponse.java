@@ -5,6 +5,7 @@ import lombok.Data;
 @Data
 public class RenderResponse {
     private String taskId;
+    private String renderId;
     private String status;
     private String error;
     private Double progress;

@@ -4,6 +4,24 @@ import { Project, DeconstructProjectApiItem } from '../../types';
 import { deconstructApi } from '../../api/deconstruct';
 import { MOCK_DECONSTRUCT_PROJECTS } from '../../mock/data';
 
+const FALLBACK_COVERS = [
+  'https://images.unsplash.com/photo-1611162617474-5b21e879e113?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80', // Netflix
+  'https://images.unsplash.com/photo-1536440136628-849c177e76a1?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80', // Cinema
+  'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80', // Audio
+  'https://images.unsplash.com/photo-1485846234645-a62644f84728?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80', // Film Reel
+  'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80', // Camera Lens
+  'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80'  // Clapperboard
+];
+
+function getFallbackCover(id: string) {
+  if (!id) return FALLBACK_COVERS[0];
+  let sum = 0;
+  for (let i = 0; i < id.length; i++) {
+    sum += id.charCodeAt(i);
+  }
+  return FALLBACK_COVERS[sum % FALLBACK_COVERS.length];
+}
+
 export default function ProjectList() {
   const navigate = useNavigate();
   const [deconstructProjects, setDeconstructProjects] = useState<Project[]>(MOCK_DECONSTRUCT_PROJECTS);
@@ -19,7 +37,7 @@ export default function ProjectList() {
         title: item.title,
         description: item.description || '',
         tags: item.tags || [],
-        cover: item.coverUrl || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?ixlib=rb-4.0.3',
+        cover: item.coverUrl || getFallbackCover(item.id),
         status: item.status === 'COMPLETED' ? 'completed' : item.status === 'PENDING' ? 'pending' : 'working',
         date: item.createdAt ? item.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]
       }));

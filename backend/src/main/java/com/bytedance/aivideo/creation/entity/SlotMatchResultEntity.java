@@ -36,7 +36,27 @@ public class SlotMatchResultEntity {
     private String adaptationPlanJson;
     
     private String adaptedFilePath;
-    
+
+    // ---- AI 生图补位字段 ----
+    private Boolean imageGenEligible;
+    private String imageGenCategory;
+    private String imageGenPrompt;
+    private String imageGenDescription;
+    private String imageGenStatus;
+    private String imageGenUrl;
+    private String imageGenErrorMessage;
+
+    public boolean isImageGenReady() {
+        return Boolean.TRUE.equals(imageGenEligible)
+                && "COMPLETED".equals(imageGenStatus)
+                && imageGenUrl != null && !imageGenUrl.isBlank();
+    }
+
+    public boolean isImageGenPending() {
+        return Boolean.TRUE.equals(imageGenEligible)
+                && ("PENDING".equals(imageGenStatus) || "PROCESSING".equals(imageGenStatus));
+    }
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
     

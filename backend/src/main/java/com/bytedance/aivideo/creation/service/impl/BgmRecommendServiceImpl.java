@@ -15,6 +15,7 @@ import com.bytedance.aivideo.infrastructure.vector.BgmVectorProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -34,6 +35,7 @@ public class BgmRecommendServiceImpl implements BgmRecommendService {
     private final BgmEnergyCurveMatchService energyCurveMatchService;
     private final BgmVectorProperties bgmVectorProperties;
     private final ObjectMapper objectMapper;
+    private final StringRedisTemplate stringRedisTemplate;
 
     public BgmRecommendServiceImpl(
             CreativeMaterialMapper materialMapper,
@@ -41,17 +43,19 @@ public class BgmRecommendServiceImpl implements BgmRecommendService {
             BgmVectorSearchService vectorSearchService,
             BgmEnergyCurveMatchService energyCurveMatchService,
             BgmVectorProperties bgmVectorProperties,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            StringRedisTemplate stringRedisTemplate) {
         this.materialMapper = materialMapper;
         this.projectMapper = projectMapper;
         this.vectorSearchService = vectorSearchService;
         this.energyCurveMatchService = energyCurveMatchService;
         this.bgmVectorProperties = bgmVectorProperties;
         this.objectMapper = objectMapper;
+        this.stringRedisTemplate = stringRedisTemplate;
     }
 
     @Override
-    public BgmRecommendResponse recommend(String projectId, double w1, double w2, double w3, int topN) {
+    public BgmRecommendResponse recommend(String projectId, double w1, double w2, double w3, int topN, boolean forceRefresh) {
         log.info("开始执行智能 BGM 推荐，projectId={}, w1={}, w2={}, w3={}, topN={}", projectId, w1, w2, w3, topN);
 
         // 1. 查询已提取完毕（PROFILED 状态）的素材画像
@@ -130,17 +134,41 @@ public class BgmRecommendServiceImpl implements BgmRecommendService {
             }
         }
 
-        String queryText = queryBuilder.toString().trim();
-        if (queryText.isEmpty()) {
-            queryText = "video background music rhythm beat"; // 兜底 Query
+        String cacheKey = "aivideo:recommend:bgm:" + projectId + ":" + topN;
+        String cachedJson = forceRefresh ? null : stringRedisTemplate.opsForValue().get(cacheKey);
+        List<BgmRecommendItemResponse> items = new ArrayList<>();
+
+        if (cachedJson != null && !cachedJson.isBlank()) {
+            try {
+                items = objectMapper.readValue(
+                        cachedJson,
+                        new com.fasterxml.jackson.core.type.TypeReference<List<BgmRecommendItemResponse>>() {}
+                );
+                for (BgmRecommendItemResponse item : items) {
+                    double semantic = item.getSemanticScore() != null ? item.getSemanticScore() : 0.0;
+                    double energy = item.getEnergyCurveScore() != null ? item.getEnergyCurveScore() : 1.0;
+                    double durationBpm = item.getDurationBpmScore() != null ? item.getDurationBpmScore() : 1.0;
+                    double finalScore = (semantic * w1) + (energy * w2) + (durationBpm * w3);
+                    item.setFinalScore(finalScore);
+                }
+                log.info("BGM recommend cache hit for project: {}, recalculated with w1={}, w2={}, w3={}, topN={}", projectId, w1, w2, w3, topN);
+            } catch (Exception e) {
+                log.warn("Failed to parse cached BGM recommendations for project: {}", projectId, e);
+                items.clear();
+            }
         }
 
-        // 4. Chroma 向量数据库检索 TopK BGM 候选集
-        List<BgmCandidate> candidates = vectorSearchService.searchCandidates(queryText, Math.max(topN * 2, 20));
+        if (items.isEmpty()) {
+            String queryText = queryBuilder.toString().trim();
+            if (queryText.isEmpty()) {
+                queryText = "video background music rhythm beat"; // 兜底 Query
+            }
 
-        // 5. 遍历候选 BGM 列表，解析对应的本地 audio_data.json 并打分
-        List<BgmRecommendItemResponse> items = new ArrayList<>();
-        for (BgmCandidate candidate : candidates) {
+            // 4. Chroma 向量数据库检索 TopK BGM 候选集
+            List<BgmCandidate> candidates = vectorSearchService.searchCandidates(queryText, Math.max(topN * 2, 20));
+
+            // 5. 遍历候选 BGM 列表，解析对应的本地 audio_data.json 并打分
+            for (BgmCandidate candidate : candidates) {
             try {
                 // 读取本地 audio_data.json
                 File folder = findAudioFolder(candidate.getFolderName());
@@ -227,6 +255,16 @@ public class BgmRecommendServiceImpl implements BgmRecommendService {
 
             } catch (Exception e) {
                 log.error("计算音频推荐得分失败，audioId={}", candidate.getAudioId(), e);
+            }
+        }
+
+            // Save to cache
+            try {
+                String jsonToCache = objectMapper.writeValueAsString(items);
+                stringRedisTemplate.opsForValue().set(cacheKey, jsonToCache, 24, java.util.concurrent.TimeUnit.HOURS);
+                log.info("Cached BGM recommendations for project: {}", projectId);
+            } catch (Exception e) {
+                log.warn("Failed to cache BGM recommendations for project: {}", projectId, e);
             }
         }
 

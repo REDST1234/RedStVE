@@ -10,6 +10,9 @@ import { VideoClip } from './media/VideoClip';
 import { ImageLayer } from './media/ImageLayer';
 import { AudioTrack } from './media/AudioTrack';
 import { KenBurns } from './motion/KenBurns';
+import { Float2d5 } from './motion/Float2d5';
+import { ParallaxDrift } from './motion/ParallaxDrift';
+import { PerspectiveTilt } from './motion/PerspectiveTilt';
 import { FadeTitle } from './text/FadeTitle';
 import { KineticPopText } from './text/KineticPopText';
 import { HeroBillboardText } from './text/HeroBillboardText';
@@ -46,6 +49,9 @@ export function registerAllPresets(): void {
 
   // 运镜类
   registerPreset({ id: 'motion.ken_burns', component: KenBurns });
+  registerPreset({ id: 'motion.float_2d5', component: Float2d5 });
+  registerPreset({ id: 'motion.parallax_drift', component: ParallaxDrift });
+  registerPreset({ id: 'motion.perspective_tilt', component: PerspectiveTilt });
 
   // 文字类
   registerPreset({ id: 'text.fade_title', component: FadeTitle });

@@ -35,7 +35,17 @@ public class ArkClient {
     }
 
     public JsonNode postJson(String path, Object payload) {
-        if (arkProperties.getApiKey() == null || arkProperties.getApiKey().isBlank()) {
+        return postJson(path, payload, null);
+    }
+
+    /**
+     * 以指定的 API Key 发送 POST 请求。若 apiKeyOverride 为 null/blank 则回退使用 ark.api-key。
+     */
+    public JsonNode postJson(String path, Object payload, String apiKeyOverride) {
+        String effectiveKey = (apiKeyOverride != null && !apiKeyOverride.isBlank())
+                ? apiKeyOverride
+                : arkProperties.getApiKey();
+        if (effectiveKey == null || effectiveKey.isBlank()) {
             throw new BizException(ErrorCode.ARK_API_ERROR, "ARK_API_KEY 未配置");
         }
         String body;
@@ -49,7 +59,7 @@ public class ArkClient {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                 .timeout(Duration.ofSeconds(Math.max(5, arkProperties.getTimeoutSeconds())))
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + arkProperties.getApiKey())
+                .header("Authorization", "Bearer " + effectiveKey)
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
 

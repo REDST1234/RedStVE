@@ -6,8 +6,27 @@ import { videoApi } from '../../api/video';
 import { formatBytes, extractFileName, formatDuration } from '../../utils/format';
 import { Project, UploadedFileView, VideoTaskResultData } from '../../types';
 
+const FALLBACK_COVERS = [
+  'https://images.unsplash.com/photo-1611162617474-5b21e879e113?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
+  'https://images.unsplash.com/photo-1536440136628-849c177e76a1?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
+  'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
+  'https://images.unsplash.com/photo-1485846234645-a62644f84728?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
+  'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
+  'https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80'
+];
+
+function getFallbackCover(id: string) {
+  if (!id) return FALLBACK_COVERS[0];
+  let sum = 0;
+  for (let i = 0; i < id.length; i++) {
+    sum += id.charCodeAt(i);
+  }
+  return FALLBACK_COVERS[sum % FALLBACK_COVERS.length];
+}
+
 export default function ProjectDetail() {
   const { id } = useParams();
+  const routeProjectId = id || 'new';
   const navigate = useNavigate();
   const { showToast } = useToast();
 
@@ -25,6 +44,8 @@ export default function ProjectDetail() {
   const [deletingMaterialIds, setDeletingMaterialIds] = useState<string[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [liveTaskResult, setLiveTaskResult] = useState<VideoTaskResultData | null>(null);
+  const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
+  const [loadingTimeline, setLoadingTimeline] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const latestMediaInfo = uploadedFiles[0]?.mediaInfo || null;
@@ -128,6 +149,64 @@ export default function ProjectDetail() {
             mediaInfo: { duration: m.duration, width: m.width, height: m.height, format: m.format }
           }));
           setUploadedFiles(files);
+          
+          if (data.status === 'COMPLETED' && files[0].taskId) {
+            setLoadingTimeline(true);
+            try {
+              const res = await videoApi.getTaskResult(files[0].taskId, true);
+              if (res.code === '0' || res.code === '200') {
+                let rTimeline = res.data?.refinedTimeline;
+                if (typeof rTimeline === 'string') {
+                  try { rTimeline = JSON.parse(rTimeline); } catch (e) {}
+                }
+                
+                let parsedEvents: any[] = [];
+                if (rTimeline && rTimeline.timelineSegments && Array.isArray(rTimeline.timelineSegments)) {
+                    rTimeline.timelineSegments.forEach((seg: any) => {
+                        const timeRangeStr = seg.timeRange || "0.0s";
+                        const timeRangeParts = timeRangeStr.split('-').map((s: string) => {
+                            const str = s.replace(/s/g, '').trim();
+                            const parts = str.split(':');
+                            if (parts.length === 2) return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+                            return parseFloat(str) || 0;
+                        });
+                        const aStart = timeRangeParts[0] || 0;
+                        const aEnd = timeRangeParts.length > 1 ? timeRangeParts[1] : aStart;
+              
+                        if (seg.audioAndText && seg.audioAndText.length > 0) {
+                            seg.audioAndText.forEach((a: any) => {
+                                if (a.text) {
+                                    const aTimeStr = a.timestamp || seg.timeRange || "0.0s";
+                                    const aTimeParts = aTimeStr.split('-').map((s: string) => {
+                                        const str = s.replace(/s/g, '').trim();
+                                        const parts = str.split(':');
+                                        if (parts.length === 2) return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+                                        return parseFloat(str) || 0;
+                                    });
+                                    const asStart = aTimeParts[0] || 0;
+                                    const asEnd = aTimeParts.length > 1 ? aTimeParts[1] : asStart;
+                                    parsedEvents.push({ timeRange: [asStart, asEnd], type: "asr", content: a.text, rawTime: a.timestamp || aTimeStr });
+                                }
+                            });
+                        }
+                        if (seg.visualDynamics) {
+                            const action = seg.visualDynamics.translatedAction || '';
+                            const cuts = seg.visualDynamics.rawCutsCount || 0;
+                            const translated = action || `发生画面变动 (${cuts}次切分)`;
+                            parsedEvents.push({ timeRange: [aStart, aEnd], type: "physics", content: translated, rawTime: seg.timeRange || timeRangeStr });
+                        }
+                    });
+                    
+                    parsedEvents.sort((a, b) => a.timeRange[0] - b.timeRange[0]);
+                }
+                setTimelineEvents(parsedEvents);
+              }
+            } catch (e) {
+              console.warn('Failed to load real timeline', e);
+            } finally {
+              if (!cancelled) setLoadingTimeline(false);
+            }
+          }
         }
       } catch (err) {
         console.warn('获取详情失败', err);
@@ -344,7 +423,7 @@ export default function ProjectDetail() {
         title: projectTitle,
         description: projectDesc,
         tags: projectTags,
-        coverUrl: editingProject?.cover || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80'
+        coverUrl: editingProject?.cover || getFallbackCover(routeProjectId)
       };
       
       try {
@@ -668,43 +747,98 @@ export default function ProjectDetail() {
                           </div>
                         </div>
 
-                        {/* 📜 多路归一日志 (Timeline Log) */}
-                        <div className="timeline-log-panel">
-                          <div className="log-header">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                            样例多路归一日志 (Timeline Log)
+                        {/* 📜 多模态时序日志 (Timeline Log) - 采用新版暗黑风格与模拟数据 */}
+                        <div className="timeline-log-panel" style={{ background: '#1e293b', borderRadius: '16px', border: '1px solid #334155', padding: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                          <div className="log-header" style={{ margin: '0 0 24px 0', fontSize: '1.1rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: 'none' }}>
+                            <span style={{ fontSize: '1.4rem' }}>⏱️</span> 多模态时序日志
                           </div>
-                          <div className="log-body">
-                            <div className="log-row">
-                              <span className="log-time">[0.0s - 3.2s]</span>
-                              <div className="log-badge asr">🔵 ASR台词</div>
-                              <span className="log-text">“大一早八顶不住？那是...”</span>
+                          <div className="log-body custom-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingRight: '12px', paddingLeft: '8px', maxHeight: '400px' }}>
+                            {loadingTimeline ? (
+                               <div style={{ padding: '20px', color: '#94a3b8', textAlign: 'center', fontSize: '0.9rem' }}>正在拉取底层分析数据...</div>
+                            ) : (
+                               <div style={{ 
+                                   position: 'relative', 
+                                   paddingLeft: '24px', 
+                                   paddingRight: '24px', 
+                                   borderLeft: '2px solid rgba(245, 158, 11, 0.3)', 
+                                   borderRight: '2px solid rgba(59, 130, 246, 0.3)' 
+                               }}>
+                                   {(timelineEvents.length > 0 ? timelineEvents : [
+                                  { timeRange: [0, 17.6], rawTime: "00:00.00 - 00:17.60", type: "physics", content: "发生中等强度画面变动\n(avgScore=0.26, 共1次切分, 0.1次/秒)", vel: 0.1 },
+                                  { timeRange: [17.6, 39.01], rawTime: "00:17.60 - 00:39.01", type: "physics", content: "轻微画面变动(2次微切分,\navgScore=0.06)", vel: 0.09 },
+                                ]).map((ev: any, idx: number) => {
+                                    const isAsr = ev.type === 'asr';
+                                    return (
+                                    <div key={idx} style={{ 
+                                        position: 'relative', 
+                                        marginBottom: '24px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: isAsr ? 'flex-end' : 'flex-start',
+                                        textAlign: isAsr ? 'right' : 'left'
+                                    }}>
+                                        {/* 轴上的圆点 */}
+                                        <div style={{ 
+                                            position: 'absolute', 
+                                            left: isAsr ? 'auto' : '-30px', 
+                                            right: isAsr ? '-30px' : 'auto',
+                                            top: '4px', 
+                                            width: '10px', 
+                                            height: '10px', 
+                                            borderRadius: '50%', 
+                                            background: isAsr ? '#3b82f6' : '#f59e0b',
+                                            boxShadow: `0 0 8px ${isAsr ? '#3b82f6' : '#f59e0b'}`,
+                                            zIndex: 2 
+                                        }} />
+                                        
+                                        {/* 轻量化胶囊与文本 */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', alignItems: isAsr ? 'flex-end' : 'flex-start' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexDirection: isAsr ? 'row-reverse' : 'row' }}>
+                                                <span style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                                                    [{ev.rawTime || `${ev.timeRange[0]}s`}]
+                                                </span>
+                                                {ev.type === 'physics' && (
+                                                    <span style={{ 
+                                                        background: 'rgba(245, 158, 11, 0.15)', 
+                                                        color: '#fbbf24', 
+                                                        padding: '4px 10px', 
+                                                        borderRadius: '6px', 
+                                                        fontSize: '0.8rem', 
+                                                        fontWeight: 'bold',
+                                                        border: '1px solid rgba(245, 158, 11, 0.3)'
+                                                    }}>
+                                                        ⚡️ 画面硬切 {ev.vel !== undefined ? `(Vel:${ev.vel}/s)` : ''}
+                                                    </span>
+                                                )}
+                                                {ev.type === 'asr' && (
+                                                    <span style={{ 
+                                                        background: 'rgba(59, 130, 246, 0.15)', 
+                                                        color: '#60a5fa', 
+                                                        padding: '4px 10px', 
+                                                        borderRadius: '6px', 
+                                                        fontSize: '0.8rem', 
+                                                        fontWeight: 'bold',
+                                                        border: '1px solid rgba(59, 130, 246, 0.3)'
+                                                    }}>
+                                                        🔵 ASR台词
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div style={{ 
+                                                color: isAsr ? '#f8fafc' : '#cbd5e1', 
+                                                fontSize: '0.95rem', 
+                                                lineHeight: 1.6,
+                                                fontWeight: isAsr ? 500 : 400,
+                                                maxWidth: '90%',
+                                                whiteSpace: 'pre-wrap'
+                                            }}>
+                                                {isAsr ? `💬 ${ev.content}` : ev.content}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )})}
                             </div>
-                            <div className="log-row">
-                              <span className="log-time">[1.2s]</span>
-                              <div className="log-badge physics">🟠 物理异动</div>
-                              <span className="log-text highlight">检测到像素突变 + 转场音效波峰</span>
-                            </div>
-                            <div className="log-row">
-                              <span className="log-time">[3.2s - 12.0s]</span>
-                              <div className="log-badge asr">🔵 ASR台词</div>
-                              <span className="log-text">“纯正手作咖啡，10秒瞬间让你清醒回到巅峰状态！”</span>
-                            </div>
-                            <div className="log-row">
-                              <span className="log-time">[8.5s]</span>
-                              <div className="log-badge physics">🟠 物理异动</div>
-                              <span className="log-text">人物骨骼大幅度变化 (挥手动作)</span>
-                            </div>
-                            <div className="log-row">
-                              <span className="log-time">[12.0s - 15.0s]</span>
-                              <div className="log-badge asr">🔵 ASR台词</div>
-                              <span className="log-text">“点击下方链接，享受专属于你的清晨...”</span>
-                            </div>
-                            <div className="log-row">
-                              <span className="log-time">[13.5s]</span>
-                              <div className="log-badge physics">🟠 物理异动</div>
-                              <span className="log-text highlight">购物车弹框 UI 识别提取</span>
-                            </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -782,7 +916,7 @@ export default function ProjectDetail() {
                       )}
 
                       <div className="extract-footer">
-                        <label className="debug-toggle">
+                        <label className="debug-toggle" style={{ display: 'none' }}>
                           <input type="checkbox" checked={isDebugMode} onChange={(e) => setIsDebugMode(e.target.checked)} />
                           <span>开启调试模式 (使用原始 JSON 展出)</span>
                         </label>

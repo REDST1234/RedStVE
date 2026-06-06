@@ -8,11 +8,14 @@ import com.bytedance.aivideo.creation.entity.CreationFfmpegCommandLogEntity;
 import com.bytedance.aivideo.creation.entity.CreationProjectEntity;
 import com.bytedance.aivideo.creation.entity.CreativeMaterialEntity;
 import com.bytedance.aivideo.creation.entity.SlotMatchResultEntity;
+import com.bytedance.aivideo.creation.event.ImageGenerationCompletedEvent;
 import com.bytedance.aivideo.creation.mapper.CreationFfmpegCommandLogMapper;
 import com.bytedance.aivideo.creation.mapper.SlotMatchResultMapper;
 import com.bytedance.aivideo.creation.service.AdaptationOrchestratorService;
 import com.bytedance.aivideo.creation.service.CreationProjectService;
 import com.bytedance.aivideo.creation.service.CreativeMaterialService;
+import com.bytedance.aivideo.engine.comfyui.ComfyuiBgRemovalService;
+import com.bytedance.aivideo.engine.seedream.SeedreamImageService;
 import com.bytedance.aivideo.engine.strategy.StrategyExecutor;
 import com.bytedance.aivideo.engine.strategy.StrategyExecutionFragment;
 import com.bytedance.aivideo.engine.strategy.StrategyOutputKind;
@@ -78,6 +81,8 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
     private final CreationFfmpegCommandLogMapper commandLogMapper;
     private final StrategyRouter strategyRouter;
     private final FfmpegCommandProperties ffmpegCommandProperties;
+    private final SeedreamImageService seedreamImageService;
+    private final ComfyuiBgRemovalService comfyuiBgRemovalService;
     private final ObjectMapper objectMapper;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
@@ -88,6 +93,8 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
             CreationFfmpegCommandLogMapper commandLogMapper,
             StrategyRouter strategyRouter,
             FfmpegCommandProperties ffmpegCommandProperties,
+            SeedreamImageService seedreamImageService,
+            ComfyuiBgRemovalService comfyuiBgRemovalService,
             ObjectMapper objectMapper,
             org.springframework.context.ApplicationEventPublisher eventPublisher
     ) {
@@ -97,6 +104,8 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
         this.commandLogMapper = commandLogMapper;
         this.strategyRouter = strategyRouter;
         this.ffmpegCommandProperties = ffmpegCommandProperties;
+        this.seedreamImageService = seedreamImageService;
+        this.comfyuiBgRemovalService = comfyuiBgRemovalService;
         this.objectMapper = objectMapper;
         this.eventPublisher = eventPublisher;
     }
@@ -136,6 +145,15 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
                 if (isSkippedMatch(item)) {
                     writeVetoLog(projectId, resolvedVersionId, item);
                     failedCount++;
+                    continue;
+                }
+                // Handle MISSING slots eligible for Seedream image generation
+                if (MATCH_STATUS_MISSING.equals(item.getMatchStatus())
+                        && Boolean.TRUE.equals(item.getImageGenEligible())) {
+                    handleImageGeneration(projectId, resolvedVersionId, item);
+                    if ("FAILED".equals(item.getImageGenStatus())) {
+                        failedCount++;
+                    }
                     continue;
                 }
                 if (item.getAdaptedFilePath() != null && !item.getAdaptedFilePath().isBlank()) {
@@ -518,6 +536,11 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
     }
 
     private boolean isSkippedMatch(SlotMatchResultEntity item) {
+        // MISSING slots eligible for image generation are handled separately, not skipped
+        if (MATCH_STATUS_MISSING.equals(item.getMatchStatus())
+                && Boolean.TRUE.equals(item.getImageGenEligible())) {
+            return false;
+        }
         return MATCH_STATUS_MISSING.equals(item.getMatchStatus())
                 || MATCH_STATUS_VETOED.equals(item.getMatchStatus())
                 || item.getMatchedAssetId() == null
@@ -758,6 +781,168 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
             }
         }
         return "";
+    }
+
+    private void handleImageGeneration(
+            String projectId,
+            String versionId,
+            SlotMatchResultEntity item
+    ) {
+        if ("COMPLETED".equals(item.getImageGenStatus())) {
+            return;
+        }
+
+        item.setImageGenStatus("PROCESSING");
+        slotMatchResultMapper.updateById(item);
+        writeImageGenLog(projectId, versionId, item, "PROCESSING", null, null);
+
+        String prompt = item.getImageGenPrompt();
+        String category = item.getImageGenCategory();
+        prompt = enforceTransparencyPrompt(prompt, category);
+        String negativePrompt = transparencyNegativePrompt(category);
+
+        long startedAt = System.currentTimeMillis();
+        try {
+            String imageUrl = seedreamImageService.generateImageUrl(prompt, negativePrompt);
+
+            // Download and persist locally — Seedream URLs may expire
+            String localPath = downloadGeneratedImage(projectId, versionId, item.getSegmentIndex(), imageUrl);
+
+            // ComfyUI background removal for categories that need transparent backgrounds
+            if (Set.of("UI_ELEMENT", "STICKER", "LOGO").contains(category)) {
+                try {
+                    Path processedPath = comfyuiBgRemovalService.removeBackground(Paths.get(localPath));
+                    localPath = processedPath.toString();
+                    log.info("comfyui bg removal completed: localPath={}", localPath);
+                } catch (Exception ex) {
+                    log.warn("comfyui bg removal failed, keeping original image: {}", ex.getMessage());
+                    // 非致命：保留原图继续，不阻断流程
+                }
+            }
+
+            item.setImageGenUrl(imageUrl);
+            item.setImageGenStatus("COMPLETED");
+            item.setAdaptedFilePath(localPath);
+            item.setImageGenErrorMessage(null);
+            slotMatchResultMapper.updateById(item);
+
+            writeImageGenLog(projectId, versionId, item, "COMPLETED", localPath, null);
+
+            eventPublisher.publishEvent(new ImageGenerationCompletedEvent(
+                    this, projectId, versionId, item.getMatchId(), item.getSegmentIndex(),
+                    true, localPath, null
+            ));
+
+            log.info("image generation completed: projectId={}, segmentIndex={}, category={}, localPath={}, url={}, elapsedMs={}",
+                    projectId, item.getSegmentIndex(), category, localPath, imageUrl, System.currentTimeMillis() - startedAt);
+        } catch (Exception ex) {
+            String errorMsg = ex.getMessage() != null
+                    ? ex.getMessage().substring(0, Math.min(500, ex.getMessage().length()))
+                    : "未知错误";
+            item.setImageGenStatus("FAILED");
+            item.setImageGenErrorMessage(errorMsg);
+            slotMatchResultMapper.updateById(item);
+            writeImageGenLog(projectId, versionId, item, "FAILED", null, errorMsg);
+
+            eventPublisher.publishEvent(new ImageGenerationCompletedEvent(
+                    this, projectId, versionId, item.getMatchId(), item.getSegmentIndex(),
+                    false, null, errorMsg
+            ));
+
+            log.warn("image generation failed: projectId={}, segmentIndex={}, category={}, error={}",
+                    projectId, item.getSegmentIndex(), category, errorMsg);
+        }
+    }
+
+    /**
+     * Download the Seedream-generated image and persist it locally.
+     * Seedream URLs may expire; local persistence ensures render availability.
+     */
+    private String downloadGeneratedImage(String projectId, String versionId, int segmentIndex, String imageUrl) {
+        Path outputDir = Paths.get("storage", "creation-adapt", projectId, versionId).toAbsolutePath();
+        try {
+            Files.createDirectories(outputDir);
+        } catch (IOException ex) {
+            throw new BizException(ErrorCode.INTERNAL_ERROR, "无法创建生图输出目录: " + ex.getMessage());
+        }
+        Path localFile = outputDir.resolve(String.format("img_gen_seg_%03d.png", segmentIndex));
+
+        try {
+            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                    .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+                    .build();
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder(
+                    java.net.URI.create(imageUrl))
+                    .timeout(java.time.Duration.ofSeconds(60))
+                    .GET()
+                    .build();
+            java.net.http.HttpResponse<java.io.InputStream> response = client.send(
+                    request, java.net.http.HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new BizException(ErrorCode.ARK_API_ERROR,
+                        "下载生图失败: status=" + response.statusCode());
+            }
+            Files.copy(response.body(), localFile, StandardCopyOption.REPLACE_EXISTING);
+            log.info("seedream image downloaded: url={} -> localPath={}, size={}",
+                    imageUrl, localFile, Files.size(localFile));
+        } catch (BizException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new BizException(ErrorCode.INTERNAL_ERROR, "下载生图失败: " + ex.getMessage());
+        }
+        return localFile.toString();
+    }
+
+    /**
+     * For categories requiring transparent background, ensure the prompt
+     * includes explicit transparency instructions.
+     */
+    private String enforceTransparencyPrompt(String prompt, String category) {
+        if (!"UI_ELEMENT".equals(category) && !"STICKER".equals(category) && !"LOGO".equals(category)) {
+            return prompt;
+        }
+        if (!prompt.toLowerCase().contains("transparent")
+                && !prompt.toLowerCase().contains("alpha channel")
+                && !prompt.toLowerCase().contains("no background")) {
+            return prompt + ", transparent background, no background, isolated on transparent, PNG with alpha channel";
+        }
+        return prompt;
+    }
+
+    /**
+     * Negative prompt tailored for transparent-background generation.
+     */
+    private String transparencyNegativePrompt(String category) {
+        if (!"UI_ELEMENT".equals(category) && !"STICKER".equals(category) && !"LOGO".equals(category)) {
+            return "low quality, blurry, distorted, extra limbs, bad anatomy, watermark, signature";
+        }
+        return "solid background, white background, black background, colored background, opaque, JPEG artifacts, watermark text, cluttered background, gradient background, backdrop";
+    }
+
+    private void writeImageGenLog(
+            String projectId,
+            String versionId,
+            SlotMatchResultEntity item,
+            String status,
+            String imageUrl,
+            String errorMessage
+    ) {
+        CreationFfmpegCommandLogEntity entity = new CreationFfmpegCommandLogEntity();
+        entity.setProjectId(projectId);
+        entity.setVersionId(versionId);
+        entity.setMatchId(item.getMatchId());
+        entity.setSegmentIndex(item.getSegmentIndex());
+        entity.setMaterialBizId("IMAGE_GEN");
+        entity.setStrategyType("SEEDREAM_IMAGE_GEN");
+        entity.setStatus(status);
+        entity.setCommandText(item.getImageGenPrompt());
+        if (errorMessage != null) {
+            entity.setErrorMessage(errorMessage);
+        }
+        if (imageUrl != null) {
+            entity.setStdoutTail(imageUrl);
+        }
+        commandLogMapper.insert(entity);
     }
 
     private record CommandExecutionResult(int exitCode, long elapsedMs, String stdoutTail, String stderrTail) {
