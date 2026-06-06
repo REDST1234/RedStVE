@@ -18,12 +18,13 @@ export default function MainLayout() {
       {/* --- Sidebar --- */}
       <aside className="sidebar">
         <div className="logo-area">
-          <div className="logo-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          <div className="logo-icon" style={{ background: 'linear-gradient(135deg, #e11d48, #fb7185)', boxShadow: '0 2px 12px rgba(225, 29, 72, 0.4)' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 22 L12 3 h6 q6 0 3 5.5 q-3 5.5 -9 5.5 H2" />
+              <path d="M13 14 l8 8" />
             </svg>
           </div>
-          <span className="logo-text">VideoDecon</span>
+          <span className="logo-text">RedStVE</span>
         </div>
 
         <div className="user-profile">
