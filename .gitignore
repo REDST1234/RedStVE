@@ -37,6 +37,6 @@ logs/
 
 ./docs/*.docx
 /docs/*.txt
-/storage/
+/storage/*
+!/storage/audio-database/
 test.json
-

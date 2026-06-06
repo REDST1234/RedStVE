@@ -1,0 +1,97 @@
+{
+    "audioId": "bgm_travel_trance_002",
+    "audioName": "时空穿梭",
+    "filePath": "854595__sergequadrado__travel-trance-loop.mp3",
+    "globalMetrics": {
+        "bpm": 132,
+        "overallStyle": "travel_trance",
+        "durationSeconds": 44.0
+    },
+    "mixDefaults": {
+        "defaultMixLevel": "DRIVE",
+        "loopRecommended": true,
+        "fadeInFrames": 12,
+        "fadeOutFrames": 12,
+        "duckingRecommended": true,
+        "duckingRatio": 0.25
+    },
+    "loudnessMetrics": {
+        "integratedLufs": -14.8,
+        "truePeakDbtp": -1.0,
+        "loudnessRangeLra": 5.1
+    },
+    "auditoryTimeline": [
+        {
+            "timelineId": "t_01",
+            "timeRange": {
+                "start": 0.0,
+                "end": 11.0
+            },
+            "auditoryPerception": {
+                "energyLevel": 5,
+                "moodVibe": "起步与轻盈律动",
+                "acousticFeatures": [
+                    "合成器琶音",
+                    "清脆的打击乐点缀"
+                ],
+                "perceivedPace": "medium"
+            },
+            "recommendedMaterial": "微距慢动作特写、全景氛围展示、充满科技感的抽象线条启动画面",
+            "bestMatchedSlot": "hook"
+        },
+        {
+            "timelineId": "t_02",
+            "timeRange": {
+                "start": 11.0,
+                "end": 22.0
+            },
+            "auditoryPerception": {
+                "energyLevel": 7,
+                "moodVibe": "动感增强与沉浸",
+                "acousticFeatures": [
+                    "4/4拍底鼓切入",
+                    "滚动的贝斯线"
+                ],
+                "perceivedPace": "fast"
+            },
+            "recommendedMaterial": "平稳推进的中景镜头、充满节奏感的走路或驾驶画面、手部细节交互",
+            "bestMatchedSlot": "body"
+        },
+        {
+            "timelineId": "t_03",
+            "timeRange": {
+                "start": 22.0,
+                "end": 33.0
+            },
+            "auditoryPerception": {
+                "energyLevel": 9,
+                "moodVibe": "极速推进与空间感",
+                "acousticFeatures": [
+                    "高频踩镲全开",
+                    "宽广的合成器和弦铺垫"
+                ],
+                "perceivedPace": "fast"
+            },
+            "recommendedMaterial": "快速运镜转场、高频闪变画面、航拍穿越镜头或激烈的情绪释放特写",
+            "bestMatchedSlot": "climax"
+        },
+        {
+            "timelineId": "t_04",
+            "timeRange": {
+                "start": 33.0,
+                "end": 44.0
+            },
+            "auditoryPerception": {
+                "energyLevel": 4,
+                "moodVibe": "缓冲与平稳过渡",
+                "acousticFeatures": [
+                    "低通滤波衰减",
+                    "鼓点节奏弱化"
+                ],
+                "perceivedPace": "medium"
+            },
+            "recommendedMaterial": "定焦虚化镜头、慢动作情绪回落特写、逐渐变暗的远景空镜头",
+            "bestMatchedSlot": "outro"
+        }
+    ]
+}

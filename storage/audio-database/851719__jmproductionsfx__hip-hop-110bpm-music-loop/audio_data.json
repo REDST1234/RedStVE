@@ -1,0 +1,97 @@
+{
+    "audioId": "bgm_hiphop_groove_001",
+    "audioName": "街头律动",
+    "filePath": "851719__jmproductionsfx__hip-hop-110bpm-music-loop.m4a",
+    "globalMetrics": {
+        "bpm": 110,
+        "overallStyle": "hip_hop_beat",
+        "durationSeconds": 16.0
+    },
+    "mixDefaults": {
+        "defaultMixLevel": "DRIVE",
+        "loopRecommended": true,
+        "fadeInFrames": 12,
+        "fadeOutFrames": 12,
+        "duckingRecommended": true,
+        "duckingRatio": 0.2
+    },
+    "loudnessMetrics": {
+        "integratedLufs": -13.5,
+        "truePeakDbtp": -1.0,
+        "loudnessRangeLra": 2.8
+    },
+    "auditoryTimeline": [
+        {
+            "timelineId": "t_01",
+            "timeRange": {
+                "start": 0.0,
+                "end": 4.0
+            },
+            "auditoryPerception": {
+                "energyLevel": 5,
+                "moodVibe": "干练，充满街头气息的开场",
+                "acousticFeatures": [
+                    "标志性鼓点节奏",
+                    "简约的切分音"
+                ],
+                "perceivedPace": "medium"
+            },
+            "recommendedMaterial": "城市街头涂鸦墙的特写、滑板选手侧身滑过、极具张力的定格瞬间",
+            "bestMatchedSlot": "hook"
+        },
+        {
+            "timelineId": "t_02",
+            "timeRange": {
+                "start": 4.0,
+                "end": 8.0
+            },
+            "auditoryPerception": {
+                "energyLevel": 7,
+                "moodVibe": "稳健的节奏推进",
+                "acousticFeatures": [
+                    "加入低音贝斯线",
+                    "踩镲节奏律动感"
+                ],
+                "perceivedPace": "medium"
+            },
+            "recommendedMaterial": "人物行走在城市的快动作镜头、充满线条感的建筑外观、自信的神态捕捉",
+            "bestMatchedSlot": "body"
+        },
+        {
+            "timelineId": "t_03",
+            "timeRange": {
+                "start": 8.0,
+                "end": 12.0
+            },
+            "auditoryPerception": {
+                "energyLevel": 9,
+                "moodVibe": "爆发力十足的律动",
+                "acousticFeatures": [
+                    "增强的鼓点冲击",
+                    "合成器采样切片叠加"
+                ],
+                "perceivedPace": "fast"
+            },
+            "recommendedMaterial": "高频闪变的快速剪辑、极具视觉冲击力的街舞表演、灯光交错的舞台特写",
+            "bestMatchedSlot": "climax"
+        },
+        {
+            "timelineId": "t_04",
+            "timeRange": {
+                "start": 12.0,
+                "end": 16.0
+            },
+            "auditoryPerception": {
+                "energyLevel": 4,
+                "moodVibe": "干净利落的收尾",
+                "acousticFeatures": [
+                    "乐器声层层递减",
+                    "保留最后的鼓点余韵"
+                ],
+                "perceivedPace": "medium"
+            },
+            "recommendedMaterial": "镜头缓慢拉远，定格在街头空旷的一角、色彩逐渐变暗，极简的尾声视觉",
+            "bestMatchedSlot": "outro"
+        }
+    ]
+}
