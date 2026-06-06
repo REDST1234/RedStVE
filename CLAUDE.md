@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Video Generation Platform — full-stack monorepo with Java backend and TypeScript frontend.
+**RedStVE** (原 VideoDecon) — AI Video Generation Platform. 
+A full-stack monorepo with Java backend, TypeScript frontend, and Node.js Remotion renderer.
 
 ## Commands
 
@@ -25,6 +26,14 @@ npm run build    # tsc -b && vite build
 npm run preview  # Preview production build
 ```
 
+### Remotion Service (Node.js Video Renderer)
+```bash
+cd remotion-service
+npm install
+npm run server   # Start the Express API server on :3001 for Remotion rendering
+npm run dev      # Start the Remotion studio for interactive debugging
+```
+
 ## Architecture
 
 ### Backend — `backend/`
@@ -43,6 +52,10 @@ Key dependencies: Spring Boot Web, MyBatis Plus 3.5.7, MySQL Connector, Spring D
 Vite 6 + React 18 + TypeScript + Tailwind CSS 3 (PostCSS).
 
 - Standard Vite React project with `src/` entry point
-- Tailwind utility classes via `@tailwind` directives in `index.css`
+- Tailwind utility classes via `index.css`
 - Vite dev server proxies `/api/*` requests to `http://localhost:8080`
-- No routing library configured yet — bare React setup
+- Configured with `react-router-dom` for multi-page flows (`/create`, `/deconstruct` etc.)
+
+### Remotion Service — `remotion-service/`
+Node.js + Express service wrapping Remotion to render composition scripts sent from the backend.
+Requires OS-level dependencies (`ffmpeg`, `libnss3`, etc.) to run headless Chromium.

@@ -1,0 +1,97 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: redstve-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ai_video
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redstve-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: redstve-chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+
+  backend:
+    build:
+      context: ./backend
+    container_name: redstve-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/ai_video?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      - DB_USERNAME=root
+      - DB_PASSWORD=root
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CHROMA_HOST=http://chroma
+      - CHROMA_PORT=8000
+      - REMOTION_SERVICE_URL=http://remotion:3001
+      - AUDIO_DATABASE_DIR=/storage/audio-database
+      - MEDIA_UPLOAD_DIR=/storage/analysis-video
+      - ASR_AUDIO_OUTPUT_DIR=/storage/analysis-audio
+      # ComfyUI 和 Ollama 默认通过 host.docker.internal 访问宿主机上的服务
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - COMFYUI_BASE_URL=http://host.docker.internal:8188
+    volumes:
+      - ./storage:/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      chroma:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  remotion:
+    build:
+      context: ./remotion-service
+    container_name: redstve-remotion
+    ports:
+      - "3001:3001"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./storage:/storage
+      - ./remotion-service/out:/app/out
+    depends_on:
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: redstve-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+  redis_data:
+  chroma_data:
