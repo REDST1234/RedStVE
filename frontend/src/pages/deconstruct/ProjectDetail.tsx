@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { deconstructApi } from '../../api/deconstruct';
 import { videoApi } from '../../api/video';
+import { request } from '../../services/http';
 import { formatBytes, extractFileName, formatDuration } from '../../utils/format';
-import { Project, UploadedFileView, VideoTaskResultData } from '../../types';
+import { Project, UploadedFileView, VideoTaskResultData, ApiResponse } from '../../types';
 
 const FALLBACK_COVERS = [
   'https://images.unsplash.com/photo-1611162617474-5b21e879e113?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
@@ -26,11 +27,24 @@ function getFallbackCover(id: string) {
 
 export default function ProjectDetail() {
   const { id } = useParams();
-  const routeProjectId = id || 'new';
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  
+  const [categoryMap, setCategoryMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    request<ApiResponse<{ categories: any[]; templates: any[] }>>('/v1/categories/graph-data')
+      .then(res => {
+        if (res.code === '0' || res.code === '200') {
+          const map: Record<string, string> = {};
+          res.data.categories.forEach(c => {
+            map[c.categoryId] = c.categoryName;
+          });
+          setCategoryMap(map);
+        }
+      })
+      .catch(e => console.warn('Failed to load categories', e));
+  }, []);
   
   // States that were in App.tsx
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -39,8 +53,12 @@ export default function ProjectDetail() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileView[]>([]);
   const [uploading, setUploading] = useState(false);
   const [startingExtraction, setStartingExtraction] = useState(false);
-  const [triggeringDebugAsr, setTriggeringDebugAsr] = useState(false);
   const [debugAsrTriggeredTaskIds, setDebugAsrTriggeredTaskIds] = useState<string[]>([]);
+  const [triggeringDebugAsr, setTriggeringDebugAsr] = useState(false);
+  
+  // 用于记录每个阶段在前端进入 RUNNING 状态的本地时间戳，解决跨时区/时钟不同步导致的进度条跳跃
+  const stageStartedAtRef = useRef<Record<string, number>>({});
+
   const [deletingMaterialIds, setDeletingMaterialIds] = useState<string[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [liveTaskResult, setLiveTaskResult] = useState<VideoTaskResultData | null>(null);
@@ -150,56 +168,12 @@ export default function ProjectDetail() {
           }));
           setUploadedFiles(files);
           
-          if (data.status === 'COMPLETED' && files[0].taskId) {
+          if (files[0].taskId) {
             setLoadingTimeline(true);
             try {
               const res = await videoApi.getTaskResult(files[0].taskId, true);
               if (res.code === '0' || res.code === '200') {
-                let rTimeline = res.data?.refinedTimeline;
-                if (typeof rTimeline === 'string') {
-                  try { rTimeline = JSON.parse(rTimeline); } catch (e) {}
-                }
-                
-                let parsedEvents: any[] = [];
-                if (rTimeline && rTimeline.timelineSegments && Array.isArray(rTimeline.timelineSegments)) {
-                    rTimeline.timelineSegments.forEach((seg: any) => {
-                        const timeRangeStr = seg.timeRange || "0.0s";
-                        const timeRangeParts = timeRangeStr.split('-').map((s: string) => {
-                            const str = s.replace(/s/g, '').trim();
-                            const parts = str.split(':');
-                            if (parts.length === 2) return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
-                            return parseFloat(str) || 0;
-                        });
-                        const aStart = timeRangeParts[0] || 0;
-                        const aEnd = timeRangeParts.length > 1 ? timeRangeParts[1] : aStart;
-              
-                        if (seg.audioAndText && seg.audioAndText.length > 0) {
-                            seg.audioAndText.forEach((a: any) => {
-                                if (a.text) {
-                                    const aTimeStr = a.timestamp || seg.timeRange || "0.0s";
-                                    const aTimeParts = aTimeStr.split('-').map((s: string) => {
-                                        const str = s.replace(/s/g, '').trim();
-                                        const parts = str.split(':');
-                                        if (parts.length === 2) return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
-                                        return parseFloat(str) || 0;
-                                    });
-                                    const asStart = aTimeParts[0] || 0;
-                                    const asEnd = aTimeParts.length > 1 ? aTimeParts[1] : asStart;
-                                    parsedEvents.push({ timeRange: [asStart, asEnd], type: "asr", content: a.text, rawTime: a.timestamp || aTimeStr });
-                                }
-                            });
-                        }
-                        if (seg.visualDynamics) {
-                            const action = seg.visualDynamics.translatedAction || '';
-                            const cuts = seg.visualDynamics.rawCutsCount || 0;
-                            const translated = action || `发生画面变动 (${cuts}次切分)`;
-                            parsedEvents.push({ timeRange: [aStart, aEnd], type: "physics", content: translated, rawTime: seg.timeRange || timeRangeStr });
-                        }
-                    });
-                    
-                    parsedEvents.sort((a, b) => a.timeRange[0] - b.timeRange[0]);
-                }
-                setTimelineEvents(parsedEvents);
+                setLiveTaskResult(res.data);
               }
             } catch (e) {
               console.warn('Failed to load real timeline', e);
@@ -215,6 +189,73 @@ export default function ProjectDetail() {
     void loadData();
     return () => { cancelled = true; };
   }, [id]);
+
+  useEffect(() => {
+    if (!liveTaskResult) return;
+    try {
+      let rTimeline = liveTaskResult.refinedTimeline;
+      if (typeof rTimeline === 'string') {
+        try { rTimeline = JSON.parse(rTimeline); } catch (e) {}
+      }
+      if (!rTimeline && liveTaskResult.videoStructureTemplate) {
+        rTimeline = liveTaskResult.videoStructureTemplate;
+      }
+      
+      let parsedEvents: any[] = [];
+      if (rTimeline && rTimeline.timelineSegments && Array.isArray(rTimeline.timelineSegments)) {
+          rTimeline.timelineSegments.forEach((seg: any) => {
+              const timeRangeStr = seg.timeRange || "0.0s";
+              const timeRangeParts = timeRangeStr.split('-').map((s: string) => {
+                  const str = s.replace(/s/g, '').trim();
+                  const parts = str.split(':');
+                  if (parts.length === 2) return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+                  return parseFloat(str) || 0;
+              });
+              const aStart = timeRangeParts[0] || 0;
+              const aEnd = timeRangeParts.length > 1 ? timeRangeParts[1] : aStart;
+    
+              if (seg.audioAndText && seg.audioAndText.length > 0) {
+                  seg.audioAndText.forEach((a: any) => {
+                      if (a.text) {
+                          const aTimeStr = a.timestamp || seg.timeRange || "0.0s";
+                          const aTimeParts = aTimeStr.split('-').map((s: string) => {
+                              const str = s.replace(/s/g, '').trim();
+                              const parts = str.split(':');
+                              if (parts.length === 2) return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+                              return parseFloat(str) || 0;
+                          });
+                          const asStart = aTimeParts[0] || 0;
+                          const asEnd = aTimeParts.length > 1 ? aTimeParts[1] : asStart;
+                          parsedEvents.push({ timeRange: [asStart, asEnd], type: "asr", content: a.text, rawTime: a.timestamp || aTimeStr });
+                      }
+                  });
+              }
+              if (seg.visualDynamics) {
+                  const action = seg.visualDynamics.translatedAction || '';
+                  const cuts = seg.visualDynamics.rawCutsCount || 0;
+                  const translated = action || `发生画面变动 (${cuts}次切分)`;
+                  parsedEvents.push({ timeRange: [aStart, aEnd], type: "physics", content: translated, rawTime: seg.timeRange || timeRangeStr });
+              }
+          });
+          
+          parsedEvents.sort((a, b) => a.timeRange[0] - b.timeRange[0]);
+      }
+      setTimelineEvents(parsedEvents);
+    } catch (e) {
+      console.warn('Failed to parse timeline events from liveTaskResult', e);
+    }
+
+    // 更新前端记录的各阶段启动时间
+    if (liveTaskResult?.stages) {
+      liveTaskResult.stages.forEach(stage => {
+        if (stage.stageStatus === 'RUNNING' && !stageStartedAtRef.current[stage.stageType]) {
+          stageStartedAtRef.current[stage.stageType] = Date.now();
+        } else if (stage.stageStatus !== 'RUNNING' && stageStartedAtRef.current[stage.stageType]) {
+          delete stageStartedAtRef.current[stage.stageType];
+        }
+      });
+    }
+  }, [liveTaskResult]);
 
   useEffect(() => {
     if (deconstructStep !== 'processing') return;
@@ -357,11 +398,20 @@ export default function ProjectDetail() {
   const failedStageInfo = getFirstFailedStage(liveTaskResult);
 
   const estimateRunningStageProgress = (
-    stage: { stageProgress?: number; startedAt?: string } | undefined,
+    stage: { stageType?: string; stageProgress?: number; startedAt?: string } | undefined,
     options: { floor: number; cap: number; halfLifeSec: number }
   ) => {
     const reported = Math.max(0, Math.min(100, stage?.stageProgress ?? 10));
-    const startedAtMs = stage?.startedAt ? Date.parse(stage.startedAt) : Number.NaN;
+    // 优先使用前端记录的时间，如果拿不到，再回退使用后端时间（尝试加上 'Z' 防止被错误解析为本地时间）
+    let startedAtMs = Number.NaN;
+    if (stage?.stageType && stageStartedAtRef.current[stage.stageType]) {
+      startedAtMs = stageStartedAtRef.current[stage.stageType];
+    } else if (stage?.startedAt) {
+      let timeStr = stage.startedAt;
+      if (!timeStr.endsWith('Z') && !timeStr.includes('+')) timeStr += 'Z';
+      startedAtMs = Date.parse(timeStr);
+    }
+    
     if (!Number.isFinite(startedAtMs)) {
       return reported;
     }
@@ -395,13 +445,14 @@ export default function ProjectDetail() {
     // Timeline: 30%
     if (isStageSuccessStatus(timeline?.stageStatus)) total += 30;
     else if (isStageRunningStatus(timeline?.stageStatus)) {
-      total += estimateRunningStageProgress(timeline, { floor: 20, cap: 88, halfLifeSec: 14 }) * 0.30;
+      total += estimateRunningStageProgress(timeline, { floor: 20, cap: 95, halfLifeSec: 10 }) * 0.30;
     }
 
     // LLM: 30%
     if (isStageSuccessStatus(llm?.stageStatus)) total += 30;
     else if (isStageRunningStatus(llm?.stageStatus)) {
-      total += estimateRunningStageProgress(llm, { floor: 12, cap: 92, halfLifeSec: 28 }) * 0.30;
+      // 降低 halfLifeSec 并提高 cap，加快跑条速度避免让用户觉得卡住
+      total += estimateRunningStageProgress(llm, { floor: 12, cap: 98, halfLifeSec: 20 }) * 0.30;
     }
 
     return Math.min(100, Math.floor(total));
@@ -423,7 +474,7 @@ export default function ProjectDetail() {
         title: projectTitle,
         description: projectDesc,
         tags: projectTags,
-        coverUrl: editingProject?.cover || getFallbackCover(routeProjectId)
+        coverUrl: editingProject?.cover || ''
       };
       
       try {
@@ -519,6 +570,30 @@ export default function ProjectDetail() {
     }
   };
 
+  const handleRetryLlm = async () => {
+    const taskId = uploadedFiles[0]?.taskId;
+    if (!taskId) {
+      showToast('未找到可执行的任务', 'error');
+      return;
+    }
+    setStartingExtraction(true);
+    try {
+      const resp = await videoApi.retryLlm(taskId);
+      if (resp.code !== '0' && resp.code !== '200') {
+        throw new Error(resp.message || '重新拆解失败');
+      }
+      setDeconstructStep('processing');
+      setLiveTaskResult(null);
+      postExtractTriggeredTaskRef.current = null;
+      showToast('已跳过前置阶段，重新启动 LLM 结构分析', 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '重新拆解失败，请稍后重试';
+      showToast(message, 'error');
+    } finally {
+      setStartingExtraction(false);
+    }
+  };
+
   const handleNextDebugStep = () => {
     void runNextDebugStep();
   };
@@ -555,7 +630,8 @@ export default function ProjectDetail() {
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      void uploadSelectedFiles(Array.from(files));
+      if (files.length > 1) showToast('仅支持单文件上传，已自动选择第一个', 'error');
+      void uploadSelectedFiles([files[0]]);
     }
   };
 
@@ -568,7 +644,8 @@ export default function ProjectDetail() {
       showToast('请上传有效的视频文件', 'error');
       return;
     }
-    await uploadSelectedFiles(videoFiles);
+    if (videoFiles.length > 1) showToast('仅支持单文件上传，已自动选择第一个', 'error');
+    await uploadSelectedFiles([videoFiles[0]]);
   };
 
   const openFilePicker = () => {
@@ -577,38 +654,24 @@ export default function ProjectDetail() {
 
   const uploadSelectedFiles = async (files: File[]) => {
     if (files.length === 0) return;
+    if (uploadedFiles.length >= 1) {
+      showToast('单个拆解项目仅支持上传 1 个视频文件，请先删除现有素材', 'error');
+      return;
+    }
     setUploadError(null);
     setUploading(true);
     try {
-      if (files.length === 1) {
-        const resp = await videoApi.uploadSingle(files[0], editingProject?.id, isDebugMode);
-        if (resp.code !== '0') throw new Error(resp.message || '上传失败');
-        
-        const item: UploadedFileView = {
-          materialBizId: resp.data.materialBizId,
-          name: files[0].name,
-          size: formatBytes(files[0].size),
-          taskId: resp.data.taskId,
-          mediaInfo: resp.data.mediaInfo
-        };
-        setUploadedFiles(prev => [...prev, item]);
-        return;
-      }
-
-      const resp = await videoApi.uploadBatch(files, editingProject?.id, isDebugMode);
-      if (resp.code !== '0') throw new Error(resp.message || '批量上传失败');
+      const resp = await videoApi.uploadSingle(files[0], editingProject?.id, isDebugMode);
+      if (resp.code !== '0') throw new Error(resp.message || '上传失败');
       
-      const taskIds = resp.data.taskIds || [];
-      const mediaInfos = resp.data.mediaInfos || [];
-      const responseItems = resp.data.items || [];
-        const items = files.map((file, index) => ({
-        materialBizId: responseItems[index]?.materialBizId || '',
-        name: file.name,
-        size: formatBytes(file.size),
-        taskId: responseItems[index]?.taskId || taskIds[index] || '',
-        mediaInfo: responseItems[index]?.mediaInfo || mediaInfos[index] || {}
-      }));
-      setUploadedFiles(prev => [...prev, ...items]);
+      const item: UploadedFileView = {
+        materialBizId: resp.data.materialBizId,
+        name: files[0].name,
+        size: formatBytes(files[0].size),
+        taskId: resp.data.taskId,
+        mediaInfo: resp.data.mediaInfo
+      };
+      setUploadedFiles([item]);
     } catch (error) {
       const message = error instanceof Error ? error.message : '上传失败，请重试';
       setUploadError(message);
@@ -651,7 +714,7 @@ export default function ProjectDetail() {
       <div className="detail-page fade-in" style={{borderColor: '#e0e7ff', display: 'flex', flexDirection: 'row', gap: '20px', padding: '24px', height: 'calc(100vh - 80px)' }}>
               
               {/* === 左侧主工作流 === */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'auto', paddingRight: '12px' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', paddingRight: '12px', height: '100%' }}>
                 <div className="detail-header" style={{ padding: '0 0 20px 0' }}>
                   <button className="back-btn" onClick={() => {
                     if (deconstructStep !== 'info') {
@@ -688,13 +751,15 @@ export default function ProjectDetail() {
                   )}
                 </div>
 
-                <div className="detail-body" style={{ padding: 0 }}>
+                <div className="detail-body" style={{ padding: 0, display: 'flex', flex: 1, minHeight: 0 }}>
                   {deconstructStep === 'info' && (
                     <>
                       <div className="detail-left">
                         <div className="cover-preview">
                           {editingProject?.cover ? (
                             <img src={editingProject.cover} alt="cover" />
+                          ) : (id && id !== 'new') ? (
+                            <img src={getFallbackCover(id)} alt="cover fallback" />
                           ) : (
                             <div className="cover-placeholder">
                               <svg width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
@@ -702,18 +767,10 @@ export default function ProjectDetail() {
                             </div>
                           )}
                         </div>
-                        
-                        <div className="params-box">
-                          <div className="params-title">详细参数 (Details)</div>
-                          <div className="param-row"><span className="param-label">时长</span><span className="param-val">{formatDuration(latestMediaInfo?.duration)}</span></div>
-                          <div className="param-row"><span className="param-label">分辨率</span><span className="param-val">{latestMediaInfo?.width && latestMediaInfo?.height ? `${latestMediaInfo.width} x ${latestMediaInfo.height}` : '---- x ----'}</span></div>
-                          <div className="param-row"><span className="param-label">FPS</span><span className="param-val">{latestMediaInfo?.fps ? latestMediaInfo.fps.toFixed(3) : '--'}</span></div>
-                          <div className="param-row"><span className="param-label">镜头数</span><span className="param-val">0</span></div>
-                        </div>
                       </div>
 
-                      <div className="detail-mid" style={{flexDirection: 'row', gap: '32px'}}>
-                        <div className="input-group" style={{flex: 1}}>
+                      <div className="detail-mid" style={{ display: 'flex', flex: 1, flexDirection: 'row', gap: '32px', minHeight: 0 }}>
+                        <div className="input-group custom-scroll" style={{ flex: 1, overflowY: 'auto', paddingRight: '12px' }}>
                           <div className="input-group">
                             <label className="input-label">项目标题 (Title)</label>
                             <input type="text" className="input-field" placeholder="输入爆款视频解析项目标题..." value={projectTitle} onChange={e => setProjectTitle(e.target.value)} />
@@ -735,26 +792,32 @@ export default function ProjectDetail() {
                             />
                           </div>
 
-                          <div className="input-group" style={{marginTop: '24px'}}>
-                            <label className="input-label">品类标签 (Tags)</label>
-                            <div className="tags-container">
-                              {['混剪', '营销', '影视', '从零', '电商', 'Vlog'].map(tag => (
-                                <div key={tag} onClick={() => toggleTag(tag)} className={`tag-btn ${projectTags.includes(tag) ? 'selected' : ''}`} style={{ cursor: 'pointer' }}>
-                                  {tag}
-                                </div>
-                              ))}
-                            </div>
+                          {/* 移位补过来的详细参数卡片 */}
+                          <div className="params-box" style={{marginTop: '32px'}}>
+                            <div className="params-title">详细参数与识别结果 (Details)</div>
+                            <div className="param-row"><span className="param-label">品类</span><span className="param-val" style={{color: '#3b82f6', fontWeight: 600}}>
+                              {categoryMap[liveTaskResult?.categoryId || liveTaskResult?.videoStructureTemplate?.category || liveTaskResult?.videoStructureTemplate?.categoryId || ''] || liveTaskResult?.videoStructureTemplate?.category || liveTaskResult?.categoryId || '暂未识别 / 待分析'}
+                            </span></div>
+                            <div className="param-row"><span className="param-label">时长</span><span className="param-val">{formatDuration(latestMediaInfo?.duration)}</span></div>
+                            <div className="param-row"><span className="param-label">分辨率</span><span className="param-val">{latestMediaInfo?.width && latestMediaInfo?.height ? `${latestMediaInfo.width} x ${latestMediaInfo.height}` : '---- x ----'}</span></div>
+                            <div className="param-row"><span className="param-label">FPS</span><span className="param-val">{latestMediaInfo?.fps ? latestMediaInfo.fps.toFixed(3) : '--'}</span></div>
+                            <div className="param-row"><span className="param-label">镜头数</span><span className="param-val">{liveTaskResult?.videoStructureTemplate?.scenes?.length || '0'}</span></div>
                           </div>
                         </div>
 
                         {/* 📜 多模态时序日志 (Timeline Log) - 采用新版暗黑风格与模拟数据 */}
-                        <div className="timeline-log-panel" style={{ background: '#1e293b', borderRadius: '16px', border: '1px solid #334155', padding: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                        <div className="timeline-log-panel" style={{ background: '#1e293b', borderRadius: '16px', border: '1px solid #334155', padding: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minHeight: 0, height: '100%' }}>
                           <div className="log-header" style={{ margin: '0 0 24px 0', fontSize: '1.1rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: 'none' }}>
                             <span style={{ fontSize: '1.4rem' }}>⏱️</span> 多模态时序日志
                           </div>
-                          <div className="log-body custom-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingRight: '12px', paddingLeft: '8px', maxHeight: '400px' }}>
+                          <div className="log-body custom-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingRight: '12px', paddingLeft: '8px', height: '100%', minHeight: 0 }}>
                             {loadingTimeline ? (
                                <div style={{ padding: '20px', color: '#94a3b8', textAlign: 'center', fontSize: '0.9rem' }}>正在拉取底层分析数据...</div>
+                            ) : timelineEvents.length === 0 ? (
+                               <div style={{ padding: '40px 20px', color: '#64748b', textAlign: 'center', fontSize: '0.95rem' }}>
+                                 <div style={{ fontSize: '2rem', marginBottom: '12px', opacity: 0.6 }}>📭</div>
+                                 暂无时序数据，请在保存项目后开始拆解工作流
+                               </div>
                             ) : (
                                <div style={{ 
                                    position: 'relative', 
@@ -763,10 +826,7 @@ export default function ProjectDetail() {
                                    borderLeft: '2px solid rgba(245, 158, 11, 0.3)', 
                                    borderRight: '2px solid rgba(59, 130, 246, 0.3)' 
                                }}>
-                                   {(timelineEvents.length > 0 ? timelineEvents : [
-                                  { timeRange: [0, 17.6], rawTime: "00:00.00 - 00:17.60", type: "physics", content: "发生中等强度画面变动\n(avgScore=0.26, 共1次切分, 0.1次/秒)", vel: 0.1 },
-                                  { timeRange: [17.6, 39.01], rawTime: "00:17.60 - 00:39.01", type: "physics", content: "轻微画面变动(2次微切分,\navgScore=0.06)", vel: 0.09 },
-                                ]).map((ev: any, idx: number) => {
+                                   {timelineEvents.map((ev: any, idx: number) => {
                                     const isAsr = ev.type === 'asr';
                                     return (
                                     <div key={idx} style={{ 
@@ -849,14 +909,13 @@ export default function ProjectDetail() {
                     <div className="extract-view upload-view fade-in">
                       <div className="extract-header">
                         <h3>步骤 1：上传视频素材</h3>
-                        <p>请上传需要进行结构拆解和信息提取的原始视频文件，支持批量上传进行批次任务分析。</p>
+                        <p>请上传需要进行结构拆解和信息提取的原始视频文件。</p>
                       </div>
                       
                       <input
                         ref={fileInputRef}
                         type="file"
                         accept=".mp4,.mov,video/mp4,video/quicktime"
-                        multiple
                         style={{ display: 'none' }}
                         onChange={handleFileInputChange}
                       />
@@ -920,13 +979,24 @@ export default function ProjectDetail() {
                           <input type="checkbox" checked={isDebugMode} onChange={(e) => setIsDebugMode(e.target.checked)} />
                           <span>开启调试模式 (使用原始 JSON 展出)</span>
                         </label>
-                        <button
-                          className="btn-primary"
-                          disabled={uploadedFiles.length === 0 || uploading || startingExtraction}
-                          onClick={() => void handleStartExtraction()}
-                        >
-                          {startingExtraction ? '启动中...' : '开始提取视频'}
-                        </button>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                          {uploadedFiles[0]?.taskId && (
+                            <button
+                              className="btn-outline"
+                              disabled={startingExtraction}
+                              onClick={() => void handleRetryLlm()}
+                            >
+                              重新拆解模板
+                            </button>
+                          )}
+                          <button
+                            className="btn-primary"
+                            disabled={uploadedFiles.length === 0 || uploading || startingExtraction}
+                            onClick={() => void handleStartExtraction()}
+                          >
+                            {startingExtraction ? '启动中...' : '开始提取视频'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}

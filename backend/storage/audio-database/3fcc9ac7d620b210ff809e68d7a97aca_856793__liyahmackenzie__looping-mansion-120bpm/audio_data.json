@@ -1,0 +1,36 @@
+{
+  "audioName" : "暖窗琴音",
+  "globalMetrics" : {
+    "bpm" : 120,
+    "overallStyle" : "soft_synth_piano",
+    "durationSeconds" : 16
+  },
+  "loudnessMetrics" : {
+    "integratedLufs" : -15.8,
+    "truePeakDbtp" : -1.9,
+    "loudnessRangeLra" : 4.2
+  },
+  "auditoryTimeline" : [ {
+    "timeRange" : {
+      "start" : 0,
+      "end" : 16
+    },
+    "auditoryPerception" : {
+      "moodVibe" : "温馨松弛、明亮治愈，带着淡淡的怀旧氛围感",
+      "energyLevel" : "medium",
+      "acousticFeatures" : [ "复古音色合成电钢琴", "极轻柔的背景合成器铺底" ]
+    },
+    "bestMatchedSlot" : "body",
+    "recommendedMaterial" : "日常vlog慢镜头、窗边景物缓慢推移、居家书桌日常、午后街道散步等舒适向画面"
+  } ],
+  "mixDefaults" : {
+    "defaultMixLevel" : "BALANCED",
+    "fadeInFrames" : 24,
+    "fadeOutFrames" : 32,
+    "duckingRatio" : 0.6,
+    "duckingRecommended" : true,
+    "loopRecommended" : true
+  },
+  "audioId" : "3fcc9ac7d620b210ff809e68d7a97aca_856793__liyahmackenzie__looping-mansion-120bpm",
+  "filePath" : "856793__liyahmackenzie__looping-mansion-120bpm.mp3"
+}

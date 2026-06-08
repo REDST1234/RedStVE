@@ -54,6 +54,13 @@ export const videoApi = {
     });
   },
 
+  // 重新拆解模版（仅重置 LLM 阶段）
+  retryLlm: (taskId: string) => {
+    return request<ApiResponse<boolean>>(`/v1/videos/tasks/${taskId}/retry-llm`, {
+      method: 'POST'
+    });
+  },
+
   // 触发 Timeline 组装
   triggerTimelineMatch: (taskId: string, threshold?: number) => {
     const query = typeof threshold === 'number' ? `?threshold=${threshold}` : '';

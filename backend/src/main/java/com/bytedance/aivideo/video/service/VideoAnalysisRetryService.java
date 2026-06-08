@@ -74,6 +74,27 @@ public class VideoAnalysisRetryService {
         return failedStage;
     }
 
+    @Transactional(rollbackFor = Exception.class)
+    public String retryLlmOnly(String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
+        }
+        VideoAnalysisTaskEntity task = videoAnalysisTaskMapper.selectOne(
+                new LambdaQueryWrapper<VideoAnalysisTaskEntity>()
+                        .eq(VideoAnalysisTaskEntity::getTaskId, taskId)
+                        .isNull(VideoAnalysisTaskEntity::getDeletedAt)
+        );
+        if (task == null) {
+            throw new BizException(ErrorCode.TASK_NOT_FOUND, "任务不存在: " + taskId);
+        }
+
+        String targetStage = VideoTaskStageService.STAGE_TYPE_LLM;
+        resetFailedStageAndDownstream(taskId, targetStage);
+        videoAnalysisResultService.markTaskProcessingForRetry(taskId, targetStage);
+        dispatchRetry(taskId, targetStage);
+        return targetStage;
+    }
+
     private String resolveFirstFailedStage(String taskId) {
         for (String stageType : STAGE_ORDER) {
             VideoAnalysisTaskStageEntity stage = videoTaskStageService.getStage(taskId, stageType);

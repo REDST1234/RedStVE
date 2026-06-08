@@ -11,9 +11,8 @@ spring:
 
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:root}
       database: ${REDIS_DATABASE:0}
       timeout: 3000ms
       lettuce:
@@ -54,12 +53,12 @@ seedream:
 
 sfx-audio:
   mappings:
-    typewriter_loop: ${SFX_TYPEWRITER_LOOP:http://localhost:3001/storage/audio-database/sfx/typewriter_loop.wav}
-    type_end_click: ${SFX_TYPE_END_CLICK:http://localhost:3001/storage/audio-database/sfx/type_end_click.wav}
-    emphasis_hit: ${SFX_EMPHASIS_HIT:http://localhost:3001/storage/audio-database/sfx/emphasis_hit.wav}
-    transition_whoosh: ${SFX_TRANSITION_WHOOSH:http://localhost:3001/storage/audio-database/sfx/transition_whoosh.wav}
-    brand_logo_hit: ${SFX_BRAND_LOGO_HIT:http://localhost:3001/storage/audio-database/sfx/brand_logo_hit.wav}
-    ui_click: ${SFX_UI_CLICK:http://localhost:3001/storage/audio-database/sfx/ui_click.wav}
+    typewriter_loop: ${SFX_TYPEWRITER_LOOP:http://localhost:8080/api/storage/audio-database/sfx/typewriter_loop.wav}
+    type_end_click: ${SFX_TYPE_END_CLICK:http://localhost:8080/api/storage/audio-database/sfx/type_end_click.wav}
+    emphasis_hit: ${SFX_EMPHASIS_HIT:http://localhost:8080/api/storage/audio-database/sfx/emphasis_hit.wav}
+    transition_whoosh: ${SFX_TRANSITION_WHOOSH:http://localhost:8080/api/storage/audio-database/sfx/transition_whoosh.wav}
+    brand_logo_hit: ${SFX_BRAND_LOGO_HIT:http://localhost:8080/api/storage/audio-database/sfx/brand_logo_hit.wav}
+    ui_click: ${SFX_UI_CLICK:http://localhost:8080/api/storage/audio-database/sfx/ui_click.wav}
 
 mybatis-plus:
   configuration:
@@ -94,3 +93,4 @@ creation:
   bgm-vector:
     collection-name: ${CREATION_BGM_COLLECTION:creation_bgm}
     audio-database-dir: ${AUDIO_DATABASE_DIR:storage/audio-database}
+vector.auto-init.enabled: true

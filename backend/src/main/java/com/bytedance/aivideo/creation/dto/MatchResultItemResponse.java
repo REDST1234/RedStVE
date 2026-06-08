@@ -25,6 +25,7 @@ public class MatchResultItemResponse {
     // ---- AI 生图补位字段 ----
     private Boolean imageGenEligible;
     private String imageGenCategory;
+    private String imageGenPrompt;
     private String imageGenDescription;
     private String imageGenStatus;
     private String imageGenUrl;

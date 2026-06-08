@@ -4,10 +4,8 @@
  */
 import React from 'react';
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig, Easing } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/NotoSansSC';
+import { getFontFamily, FontTier } from '../../fontSystem';
 import { LayoutMode, resolveTextLayout, TextPositionPreset } from './layout';
-
-const { fontFamily } = loadFont();
 
 interface TypewriterTitleProps {
   text: string;
@@ -25,6 +23,8 @@ interface TypewriterTitleProps {
   maxWidth?: string | number;
   letterSpacing?: string | number;
   textAlign?: 'left' | 'center' | 'right';
+  /** 字体分层，默认 'bodySerif'（Noto Serif SC 衬线体） */
+  fontTier?: FontTier;
 }
 
 export const TypewriterTitle: React.FC<TypewriterTitleProps> = ({
@@ -43,7 +43,9 @@ export const TypewriterTitle: React.FC<TypewriterTitleProps> = ({
   maxWidth = '82%',
   letterSpacing = 0,
   textAlign,
+  fontTier = 'bodySerif',
 }) => {
+  const fontFamily = getFontFamily(fontTier);
   const frame = useCurrentFrame();
   const { durationInFrames, width, height } = useVideoConfig();
   const layout = resolveTextLayout({

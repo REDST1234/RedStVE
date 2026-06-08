@@ -119,6 +119,21 @@ public class VectorInitService {
         return "OK: 同步 " + documents.size() + " 个模板";
     }
 
+    public void syncSingleTemplate(DeconstructTemplateEntity entity) {
+        if (entity == null || entity.getTemplateJson() == null || entity.getTemplateJson().isBlank()) {
+            return;
+        }
+        try {
+            Document doc = buildTemplateDocument(entity);
+            if (doc != null) {
+                templateVectorStore.add(List.of(doc));
+                log.info("实时同步单条模板至向量库成功: templateId={}", entity.getTemplateId());
+            }
+        } catch (Exception e) {
+            log.error("实时同步单条模板至向量库失败: templateId={}", entity.getTemplateId(), e);
+        }
+    }
+
     private Document buildTemplateDocument(DeconstructTemplateEntity entity) throws Exception {
         JsonNode root = objectMapper.readTree(entity.getTemplateJson());
         StringBuilder sb = new StringBuilder();

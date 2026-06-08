@@ -57,10 +57,10 @@ ollama run nomic-embed-text
 ```
 
 #### ComfyUI 配置
-用于处理涉及像素级修改的图像任务：
-1. 启动 ComfyUI，确保服务运行在 `8188` 端口。
-2. 确保 ComfyUI 中已安装所需的工作流节点（如背景移除相关节点）。
-3. 如需修改端口，可在 `.env` 或 `docker-compose.yml` 中配置 `COMFYUI_BASE_URL`。
+用于处理涉及像素级修改的图像任务。请注意，**系统并未硬编码 ComfyUI 端口**，默认通过环境变量或配置文件指向您的服务地址。
+1. 启动 ComfyUI（通常默认运行在 `8188` 端口）。
+2. 本项目重度依赖背景移除节点，请务必使用 **ComfyUI Manager** 搜索并安装 **ComfyUI-RMBG** 插件。
+3. 如果您的 ComfyUI 端口不是 `8188`，或者在非宿主机环境运行，可在 `.env` 配置文件或 `docker-compose.yml` 中修改 `COMFYUI_BASE_URL` 环境变量以正确映射服务。
 
 ## 目录结构说明
 

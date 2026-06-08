@@ -1,0 +1,36 @@
+{
+  "audioName" : "霓虹公路疾驰",
+  "globalMetrics" : {
+    "bpm" : 128,
+    "overallStyle" : "retro synthwave",
+    "durationSeconds" : 12
+  },
+  "loudnessMetrics" : {
+    "integratedLufs" : -10.7,
+    "truePeakDbtp" : -0.6,
+    "loudnessRangeLra" : 3.1
+  },
+  "auditoryTimeline" : [ {
+    "timeRange" : {
+      "start" : 0,
+      "end" : 12
+    },
+    "auditoryPerception" : {
+      "moodVibe" : "明快动感，充满80年代复古电子怀旧活力，节奏强劲富有驱动力",
+      "energyLevel" : "high",
+      "acousticFeatures" : [ "复古琶音合成器", "合成器贝斯线条", "四四拍电子鼓点", "主奏合成器lead" ]
+    },
+    "bestMatchedSlot" : "hook",
+    "recommendedMaterial" : "赛博朋克夜景车流穿梭、复古街机游戏闯关镜头、老录像带风格运动混剪画面"
+  } ],
+  "mixDefaults" : {
+    "defaultMixLevel" : "DRIVE",
+    "fadeInFrames" : 10,
+    "fadeOutFrames" : 20,
+    "duckingRatio" : 0.6,
+    "duckingRecommended" : true,
+    "loopRecommended" : true
+  },
+  "audioId" : "d2b8670b7a51cc0c64dd1a2447917e88_856689__fonoskop__synthdrive-loop",
+  "filePath" : "856689__fonoskop__synthdrive-loop.wav"
+}

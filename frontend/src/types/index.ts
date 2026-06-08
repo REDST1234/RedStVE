@@ -118,6 +118,7 @@ export interface CreationProjectData {
   status: string;
   templateId?: string;
   aspectRatio?: string;
+  renderAspectRatio?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -178,6 +179,7 @@ export interface CreationMatchResultItem {
   // AI 生图补位
   imageGenEligible?: boolean;
   imageGenCategory?: string;
+  imageGenPrompt?: string;
   imageGenDescription?: string;
   imageGenStatus?: string;
   imageGenUrl?: string;

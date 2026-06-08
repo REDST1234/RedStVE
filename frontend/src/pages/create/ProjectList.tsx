@@ -10,6 +10,13 @@ export default function CreateProjectList() {
   const [creationProjects, setCreationProjects] = useState<CreationProjectData[]>([]);
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState('');
+  
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [editProjectTitle, setEditProjectTitle] = useState('');
+  const [editProjectDescription, setEditProjectDescription] = useState('');
+  const [editAspectRatio, setEditAspectRatio] = useState('9:16');
+  const [savingProject, setSavingProject] = useState(false);
 
   const coverPalette = useMemo(
     () => [
@@ -38,11 +45,52 @@ export default function CreateProjectList() {
   };
 
   const handleCreateNew = () => {
-    navigate('/create/detail/new');
+    setEditingProjectId(null);
+    setEditProjectTitle('');
+    setEditProjectDescription('');
+    setEditAspectRatio('9:16');
+    setShowEditModal(true);
+  };
+
+  const handleEditBasicInfo = (e: React.MouseEvent, proj: CreationProjectData) => {
+    e.stopPropagation();
+    setEditingProjectId(proj.projectId);
+    setEditProjectTitle(proj.title);
+    setEditProjectDescription(proj.description || '');
+    setEditAspectRatio(proj.renderAspectRatio || proj.aspectRatio || '9:16');
+    setShowEditModal(true);
+  };
+
+  const submitProjectBasicInfo = async () => {
+    if (!editProjectTitle.trim()) {
+      showToast('项目名称不能为空', 'error');
+      return;
+    }
+    setSavingProject(true);
+    try {
+      if (editingProjectId) {
+        await creationApi.updateProject(editingProjectId, editProjectTitle.trim(), editProjectDescription.trim() || undefined, editAspectRatio);
+        showToast('项目信息已更新', 'success');
+        setShowEditModal(false);
+        await loadProjects();
+      } else {
+        const resp = await creationApi.createProject(editProjectTitle.trim(), editProjectDescription.trim() || undefined, editAspectRatio);
+        const newId = resp.data?.projectId;
+        if (newId) {
+          showToast('创建成功，进入素材提取工作流', 'success');
+          setShowEditModal(false);
+          navigate(`/create/detail/${newId}/workflow`);
+        }
+      }
+    } catch (error: any) {
+      showToast(error?.message || '保存失败', 'error');
+    } finally {
+      setSavingProject(false);
+    }
   };
 
   const handleEditProject = (proj: CreationProjectData) => {
-    navigate(`/create/detail/${proj.projectId}`);
+    navigate(`/create/detail/${proj.projectId}/workflow`);
   };
 
   const formatStatusLabel = (status?: string) => {
@@ -103,6 +151,12 @@ export default function CreateProjectList() {
         </div>
       </div>
 
+      {!loading && creationProjects.length === 0 && (
+        <div style={{ color: '#94a3b8', fontSize: '0.95rem', marginBottom: '16px' }}>
+          暂无创作项目，点击“新建装配生成”创建。
+        </div>
+      )}
+
       <div className="project-grid">
         {creationProjects.map(proj => (
           <div 
@@ -118,13 +172,27 @@ export default function CreateProjectList() {
             </div>
             <div className="card-info">
               <h3 className="card-title">{proj.title}</h3>
-              <span className="card-date">{formatDate(proj.updatedAt || proj.createdAt)}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="card-date">{formatDate(proj.updatedAt || proj.createdAt)}</span>
+                <button 
+                  style={{
+                    background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px'
+                  }}
+                  title="编辑项目信息"
+                  onClick={(e) => handleEditBasicInfo(e, proj)}
+                  onMouseOver={(e) => e.currentTarget.style.color = '#3b82f6'}
+                  onMouseOut={(e) => e.currentTarget.style.color = '#94a3b8'}
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         ))}
-        {!loading && creationProjects.length === 0 && (
-          <div style={{ color: '#94a3b8', fontSize: '0.95rem' }}>暂无创作项目，点击“新建装配生成”创建。</div>
-        )}
         
         <div 
           className="create-project-card creation-mode" 
@@ -140,6 +208,73 @@ export default function CreateProjectList() {
           </span>
         </div>
       </div>
+
+      {showEditModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '500px', width: '90%' }}>
+            <h3 style={{ marginBottom: '16px' }}>{editingProjectId ? '编辑创作项目' : '新建创作项目'}</h3>
+            <div className="input-group">
+              <label className="input-label">项目名称</label>
+              <input 
+                className="input-field" 
+                value={editProjectTitle} 
+                onChange={(e) => setEditProjectTitle(e.target.value)} 
+                placeholder="请输入项目名称" 
+                autoFocus 
+              />
+            </div>
+            <div className="input-group" style={{ marginTop: '16px' }}>
+              <label className="input-label">项目描述 (可选)</label>
+              <textarea 
+                className="input-field" 
+                style={{ minHeight: '100px' }}
+                value={editProjectDescription} 
+                onChange={(e) => setEditProjectDescription(e.target.value)} 
+                placeholder="例如：一款洗面奶的带货视频..." 
+              />
+            </div>
+            <div className="input-group" style={{ marginTop: '16px' }}>
+              <label className="input-label">画面比例</label>
+              <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
+                <div 
+                  onClick={() => setEditAspectRatio('9:16')}
+                  style={{
+                    padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px',
+                    cursor: 'pointer', flex: 1, textAlign: 'center',
+                    borderColor: editAspectRatio === '9:16' ? '#3b82f6' : '#e2e8f0',
+                    backgroundColor: editAspectRatio === '9:16' ? '#eff6ff' : 'white',
+                    color: editAspectRatio === '9:16' ? '#1e40af' : '#475569',
+                    fontWeight: editAspectRatio === '9:16' ? 500 : 400
+                  }}
+                >
+                  9:16 (竖屏)
+                </div>
+                <div 
+                  onClick={() => setEditAspectRatio('16:9')}
+                  style={{
+                    padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px',
+                    cursor: 'pointer', flex: 1, textAlign: 'center',
+                    borderColor: editAspectRatio === '16:9' ? '#3b82f6' : '#e2e8f0',
+                    backgroundColor: editAspectRatio === '16:9' ? '#eff6ff' : 'white',
+                    color: editAspectRatio === '16:9' ? '#1e40af' : '#475569',
+                    fontWeight: editAspectRatio === '16:9' ? 500 : 400
+                  }}
+                >
+                  16:9 (横屏)
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px' }}>
+              <button className="btn-outline" onClick={() => setShowEditModal(false)} disabled={savingProject}>
+                取消
+              </button>
+              <button className="btn-primary" onClick={submitProjectBasicInfo} disabled={savingProject || !editProjectTitle.trim()}>
+                {savingProject ? '保存中...' : '确认'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -64,7 +64,7 @@ const calculateMetadata: CalculateMetadataFunction<CompositionScript> = async ({
 /** 全面展示预设库能力的测试脚本 */
 const showcaseScript: CompositionScript = {
   canvas: { width: 1080, height: 1920, fps: 30 },
-  globalStyle: { fontFamily: 'Noto Sans SC', backgroundColor: '#111111' },
+  globalStyle: { fontFamily: 'Noto Sans SC', fontTier: 'subtitle' as const, backgroundColor: '#111111' },
   scenes: [
     {
       sceneId: "scene_1_mg_hook",
@@ -286,7 +286,7 @@ const showcaseScript: CompositionScript = {
 /** 新增组件演示脚本 — text.counter_number / text.label_chip / backing.* */
 const newComponentsShowcaseScript: CompositionScript = {
   canvas: { width: 1080, height: 1920, fps: 30 },
-  globalStyle: { fontFamily: 'Noto Sans SC', backgroundColor: '#0B1120' },
+  globalStyle: { fontFamily: 'Noto Sans SC', fontTier: 'subtitle' as const, backgroundColor: '#0B1120' },
   scenes: [
     // ═══ Scene 1: 数据看板 — glass_plate + counter_number + label_chip ═══
     {
@@ -673,7 +673,7 @@ const newComponentsShowcaseScript: CompositionScript = {
 /** 2.5D 运镜动效演示 — motion.float_2d5 / motion.parallax_drift / motion.perspective_tilt */
 const motionShowcaseScript: CompositionScript = {
   canvas: { width: 1080, height: 1920, fps: 30 },
-  globalStyle: { fontFamily: 'Noto Sans SC', backgroundColor: '#0A0A0F' },
+  globalStyle: { fontFamily: 'Noto Sans SC', fontTier: 'subtitle' as const, backgroundColor: '#0A0A0F' },
   scenes: [
     // ═══ Scene 1: 2.5D 漂浮卡片 — motion.float_2d5 ═══
     {
@@ -987,7 +987,7 @@ const motionShowcaseScript: CompositionScript = {
 
 const showcaseLandscapeScript: CompositionScript = {
   canvas: { width: 1920, height: 1080, fps: 30 },
-  globalStyle: { fontFamily: 'Noto Sans SC', backgroundColor: '#0B1120' },
+  globalStyle: { fontFamily: 'Noto Sans SC', fontTier: 'subtitle' as const, backgroundColor: '#0B1120' },
   scenes: [
     {
       sceneId: "landscape_scene_1",

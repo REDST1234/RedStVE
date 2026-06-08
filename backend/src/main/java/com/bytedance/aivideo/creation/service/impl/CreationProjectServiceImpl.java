@@ -90,6 +90,9 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
     @Value("${remotion.service.url:http://localhost:3001}")
     private String remotionServiceUrl;
 
+    @Value("${backend.service.url:http://localhost:8080}")
+    private String backendServiceUrl;
+
     public CreationProjectServiceImpl(
             DeconstructTemplateService deconstructTemplateService,
             CreationTemplateSnapshotService creationTemplateSnapshotService,
@@ -116,7 +119,7 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public CreationProjectEntity createProject(String title, String description) {
+    public CreationProjectEntity createProject(String title, String description, String aspectRatio) {
         if (title == null || title.isBlank()) {
             throw new BizException(ErrorCode.INVALID_REQUEST, "title 不能为空");
         }
@@ -128,6 +131,9 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         entity.setTemplateId(null);
         entity.setTemplateSnapshotId(null);
         entity.setTemplateSnapshotJson(null);
+        if (aspectRatio != null && !aspectRatio.isBlank()) {
+            entity.setRenderAspectRatio(aspectRatio.trim());
+        }
         this.baseMapper.insert(entity);
         return entity;
     }
@@ -180,13 +186,16 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public CreationProjectEntity updateProjectBasics(String projectId, String title, String description) {
+    public CreationProjectEntity updateProjectBasics(String projectId, String title, String description, String aspectRatio) {
         if (title == null || title.isBlank()) {
             throw new BizException(ErrorCode.INVALID_REQUEST, "title 不能为空");
         }
         CreationProjectEntity entity = requireActiveProject(projectId);
         entity.setTitle(title.trim());
         entity.setDescription(description == null ? null : description.trim());
+        if (aspectRatio != null && !aspectRatio.isBlank()) {
+            entity.setRenderAspectRatio(aspectRatio.trim());
+        }
         this.baseMapper.updateById(entity);
         return entity;
     }
@@ -432,7 +441,26 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
                 }
                 appendBriefLine(sb, "代表性镜头原型", String.join("；", shotHints));
             }
-            appendBriefLine(sb, "执行要求", "请优先模仿该模板的段落职责、节奏和包装气质，而不是照搬字面内容。");
+            JsonNode categoryExtensions = root.path("categoryExtensions");
+            if (categoryExtensions.isObject()) {
+                JsonNode dynamicFields = categoryExtensions.path("dynamicExtensionFields");
+                if (dynamicFields.isArray() && !dynamicFields.isEmpty()) {
+                    List<String> exts = new ArrayList<>();
+                    for (JsonNode ext : dynamicFields) {
+                        exts.add(text(ext, "fieldName") + "=" + text(ext, "fieldValue"));
+                    }
+                    appendBriefLine(sb, "品类宏观特征", String.join("；", exts));
+                }
+            }
+            JsonNode viralFactors = root.path("viralFactors");
+            if (viralFactors.isArray() && !viralFactors.isEmpty()) {
+                List<String> factors = new ArrayList<>();
+                for (JsonNode factor : viralFactors) {
+                    factors.add("『" + text(factor, "factorName") + "』：" + text(factor, "description"));
+                }
+                appendBriefLine(sb, "爆款灵魂(最高优先级)", String.join("；\n  ", factors));
+            }
+            appendBriefLine(sb, "执行要求", "请优先模仿该模板的段落职责、爆款灵魂、品类特征与包装气质！尤其是【爆款灵魂】中提及的情绪氛围与视觉对比点，必须在编排时重点保留并利用素材予以呈现，绝不可退化为普通的机械拼接。");
             return sb.toString().trim();
         } catch (Exception e) {
             log.warn("Failed to build template brief for project {}", project.getProjectId(), e);
@@ -680,7 +708,18 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             for (JsonNode node : strategyChain) {
                 String strategyType = text(node, "strategyType");
                 if (strategyType != null && !strategyType.isBlank()) {
-                    strategies.add(strategyType.toLowerCase(Locale.ROOT));
+                    String desc = strategyType.toLowerCase(Locale.ROOT);
+                    JsonNode params = node.path("parameters");
+                    if (params.isObject() && !params.isEmpty()) {
+                        List<String> paramList = new ArrayList<>();
+                        if (params.hasNonNull("startTime")) paramList.add("startTime=" + params.get("startTime").asText());
+                        if (params.hasNonNull("endTime")) paramList.add("endTime=" + params.get("endTime").asText());
+                        if (params.hasNonNull("targetDuration")) paramList.add("targetDuration=" + params.get("targetDuration").asText());
+                        if (!paramList.isEmpty()) {
+                            desc += "(" + String.join(", ", paramList) + "s)";
+                        }
+                    }
+                    strategies.add(desc);
                 }
             }
             if (strategies.isEmpty()) {
@@ -1017,7 +1056,7 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             Path storageRoot = resolveStorageRoot();
             if (localPath.startsWith(storageRoot)) {
                 String relative = storageRoot.relativize(localPath).toString().replace(File.separatorChar, '/');
-                return trimTrailingSlash(remotionServiceUrl) + "/storage/" + relative;
+                return trimTrailingSlash(backendServiceUrl) + "/api/storage/" + relative;
             }
         } catch (Exception e) {
             log.warn("Failed to build remotion media src from path: {}", rawPath, e);

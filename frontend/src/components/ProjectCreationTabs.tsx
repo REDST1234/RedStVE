@@ -10,21 +10,13 @@ export const ProjectCreationTabs: React.FC<ProjectCreationTabsProps> = ({ projec
   const navigate = useNavigate();
 
   const tabs = [
-    { id: 'detail', label: '1. 创作项目总览', path: `/create/detail/${projectId}` },
-    { id: 'workflow', label: '2. 素材提取', path: `/create/detail/${projectId}/workflow` },
-    { id: 'recommendation', label: '3. 智能推荐匹配', path: `/create/detail/${projectId}/recommendation` },
-    { id: 'gap-detection', label: '4. 素材缺口识别', path: `/create/detail/${projectId}/gap-detection` },
-    { id: 'generation', label: '5. 视频生成', path: `/create/detail/${projectId}/generation` },
+    { id: 'workflow', label: '1. 素材提取', path: `/create/detail/${projectId}/workflow` },
+    { id: 'recommendation', label: '2. 智能推荐匹配', path: `/create/detail/${projectId}/recommendation` },
+    { id: 'gap-detection', label: '3. 素材缺口识别', path: `/create/detail/${projectId}/gap-detection` },
+    { id: 'generation', label: '4. 视频生成', path: `/create/detail/${projectId}/generation` },
   ];
 
-  const handleTabClick = (path: string, id: string) => {
-    // If it is a new project, only 'detail' is available.
-    if (!projectId || projectId === 'new') {
-      if (id !== 'detail') {
-        alert('请先保存项目基础信息');
-        return;
-      }
-    }
+  const handleTabClick = (path: string) => {
     navigate(path);
   };
 
@@ -35,7 +27,7 @@ export const ProjectCreationTabs: React.FC<ProjectCreationTabsProps> = ({ projec
         return (
           <button
             key={tab.id}
-            onClick={() => handleTabClick(tab.path, tab.id)}
+            onClick={() => handleTabClick(tab.path)}
             style={{
               padding: '10px 20px',
               background: 'transparent',

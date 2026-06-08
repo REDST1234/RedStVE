@@ -33,8 +33,22 @@ export const CanvasSchema = z.object({
   fps: z.number().int().positive().default(30),
 });
 
+/** 字体分层枚举 — 与 fontSystem.ts 中的 FontTier 对齐 */
+export const FontTierSchema = z.enum([
+  'title',      // ZCOOL XiaoWei — 艺术标题
+  'subtitle',   // Noto Sans SC — 高可读字幕
+  'accent',     // Ma Shan Zheng — 书法强调
+  'ui',         // Inter — 现代标签
+  'number',     // Bebas Neue — 展示数字
+  'bodySerif',  // Noto Serif SC — 衬线正文
+  'bodySans',   // Noto Sans SC — 无衬线正文
+  'kaiStyle',   // LXGW WenKai TC — 楷体引用
+]);
+
 export const GlobalStyleSchema = z.object({
   fontFamily: z.string().default('Noto Sans SC'),
+  /** 字体分层 — LLM 可通过此字段选择预设字体组合，优先级低于 fontFamily */
+  fontTier: FontTierSchema.default('subtitle'),
   backgroundColor: z.string().default('#000000'),
 });
 

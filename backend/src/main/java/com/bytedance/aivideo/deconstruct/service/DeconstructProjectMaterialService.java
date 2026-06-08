@@ -165,6 +165,12 @@ public class DeconstructProjectMaterialService {
         }
         String normalized = path.trim();
         String lower = normalized.toLowerCase(Locale.ROOT);
+        
+        // 视频源文件不能作为图片封面，直接返回 null 以便触发前端的 fallback 封面
+        if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".avi") || lower.endsWith(".mkv")) {
+            return null;
+        }
+
         if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("file://")) {
             return normalized;
         }

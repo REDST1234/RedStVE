@@ -628,7 +628,7 @@ LLM 使用规则：
 1. **禁止 CSS transitions / animations** —— 所有动效必须使用 `interpolate()` + `Easing.bezier()`
 2. **禁止 Tailwind 动画类名** —— 不会在服务端渲染中生效
 3. **资源引用** —— 通过 `staticFile()` 引用 `public/` 目录，或直接使用远程 URL
-4. **字体** —— 使用 `@remotion/google-fonts` 加载 Noto Sans SC（中文）和 Inter（英文）
+4. **字体** —— 使用分层字体系统 `fontSystem.ts`，按用途自动选择合适的 Google Font，详见 5.4.5
 
 ### 5.4.4 预设注册表结构
 
@@ -664,6 +664,90 @@ export function getPreset(id: PresetId): PresetEntry;
 export function listPresets(): PresetId[];
 ```
 
+### 5.4.5 字体系统 (Font System)
+
+#### 设计动机
+
+传统做法是全局加载 1 个中文字体（如 Noto Sans SC），所有文字组件共用。这导致：
+- 标题和正文没有区分度，成片显得"呆板"
+- 无法通过字体传递品牌调性或情绪
+- LLM 编排时无法灵活选择字体
+
+#### 分层架构
+
+将字体按 **用途分层 (Tier)**，每个 Tier 有预设的最佳字体。LLM 和前端可通过 `fontTier` 参数切换，组件也接受 `fontFamily` 直接覆盖。
+
+| Tier | 用途 | 加载字体 | Google Font | 风格 |
+|------|------|---------|-------------|------|
+| `title` | 标题/大字报 | ZCOOL XiaoWei | `@remotion/google-fonts/ZCOOLXiaoWei` | 艺术感强，适合开场 hero |
+| `subtitle` | 字幕/正文 | Noto Sans SC | `@remotion/google-fonts/NotoSansSC` | 高可读性，适合长句 |
+| `accent` | 强调/爆点 | Ma Shan Zheng | `@remotion/google-fonts/MaShanZheng` | 书法手写体，制造反差 |
+| `ui` | 标签/角标 | Inter | `@remotion/google-fonts/Inter` | 现代干净，适合英文/数字 |
+| `number` | 数字计数器 | Bebas Neue | `@remotion/google-fonts/BebasNeue` | 粗体展示数字 |
+| `bodySerif` | 正文衬线 | Noto Serif SC | `@remotion/google-fonts/NotoSerifSC` | 优雅衬线，适合引语 |
+| `bodySans` | 正文无衬线 | Noto Sans SC | `@remotion/google-fonts/NotoSansSC` | 保底通用 |
+| `kaiStyle` | 楷体/文学 | LXGW WenKai TC | `@remotion/google-fonts/LXGWWenKaiTC` | 文学气质，适合引语 |
+
+#### 各组件默认 Tier
+
+| 组件 | Preset ID | 默认 Tier | 可覆盖 |
+|------|-----------|----------|--------|
+| Hero Billboard | `text.hero_billboard` | `title` | ✅ |
+| Fade Title | `text.fade_title` | `title` | ✅ |
+| Kinetic Pop | `text.kinetic_pop` | `accent` | ✅ |
+| Mask Reveal | `text.mask_reveal` | `subtitle` | ✅ |
+| Typewriter | `text.typewriter` | `bodySerif` | ✅ |
+| Word Highlight | `text.word_highlight` | `subtitle` | ✅ |
+| Counter Number | `text.counter_number` | `number` | ✅ |
+| Label Chip | `text.label_chip` | `ui` | ✅ |
+| Subtitle | `caption.subtitle` | `subtitle` | ✅ |
+| Badge Pop | `overlay.badge_pop` | `ui` | ✅ |
+
+#### 实现文件
+
+```
+remotion-service/src/
+├── fontSystem.ts              # 字体加载 + Tier → fontFamily 映射
+├── presets/text/*.tsx         # 所有文字组件通过 getFontFamily(tier) 获取字体
+├── presets/caption/Subtitle.tsx
+├── presets/overlay/BadgePopOverlay.tsx
+└── schemas/CompositionScript.ts  # GlobalStyleSchema 新增 fontTier 字段
+```
+
+#### Composition Script 中的字体控制
+
+```jsonc
+{
+  "globalStyle": {
+    "fontFamily": "Noto Sans SC",   // 全局兜底字体（可被 layer 覆盖）
+    "fontTier": "subtitle"           // 全局默认字体分层
+  }
+}
+```
+
+Layer 级别通过 `params.fontTier` 或 `params.fontFamily` 覆盖：
+
+```jsonc
+{
+  "layerId": "hero_title",
+  "preset": "text.hero_billboard",
+  "params": {
+    "text": "改变一切",
+    "fontTier": "title"               // 使用 ZCOOL XiaoWei 标题字体
+  }
+}
+```
+
+#### 扩展指南
+
+要新增字体：
+1. 在 `fontSystem.ts` 中添加 `import { loadFont } from '@remotion/google-fonts/NewFont';`
+2. 在 `fonts` 对象中注册新 Key → `loadFont()` 映射
+3. 在 `FontTier` 类型中自动获得新成员（TypeScript `keyof typeof fonts`）
+4. 在 `CompositionScript.ts` 的 `FontTierSchema` 中添加新枚举值
+
+---
+
 ## 5.5 Composition Script 通信协议（v1）
 
 ### 5.5.1 顶层结构
@@ -681,6 +765,7 @@ export function listPresets(): PresetId[];
 
   "globalStyle": {
     "fontFamily": "Noto Sans SC",
+    "fontTier": "subtitle",
     "backgroundColor": "#000000"
   },
 
@@ -1035,6 +1120,7 @@ d:\Develop\code\bytedance-ai-video\
 │   │   ├── Root.tsx                   # Composition 注册
 │   │   ├── DynamicVideoRenderer.tsx   # 主渲染器
 │   │   ├── SceneRenderer.tsx          # 场景渲染器
+│   │   ├── fontSystem.ts              # 分层字体系统
 │   │   ├── presets/
 │   │   │   ├── PresetRegistry.ts
 │   │   │   ├── media/

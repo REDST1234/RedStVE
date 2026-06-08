@@ -4,10 +4,8 @@
  */
 import React from 'react';
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/NotoSansSC';
+import { getFontFamily, FontTier } from '../../fontSystem';
 import { LayoutMode } from './layout';
-
-const { fontFamily } = loadFont();
 
 type LayoutPattern =
   | 'center_focus'
@@ -41,6 +39,8 @@ interface HeroBillboardTextProps {
   charIntervalFrames?: number;
   staggerFrames?: number;
   lineGap?: number;
+  /** 字体分层，默认 'title'（ZCOOL XiaoWei） */
+  fontTier?: FontTier;
 }
 
 interface BillboardPosition {
@@ -243,7 +243,9 @@ export const HeroBillboardText: React.FC<HeroBillboardTextProps> = ({
   charIntervalFrames = 2,
   staggerFrames = 8,
   lineGap = 18,
+  fontTier = 'title',
 }) => {
+  const fontFamily = getFontFamily(fontTier);
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
   const isLandscape = layoutMode === 'landscape' || (layoutMode === 'auto' && width > height);

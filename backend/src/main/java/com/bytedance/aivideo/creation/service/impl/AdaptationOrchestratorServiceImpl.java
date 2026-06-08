@@ -147,8 +147,8 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
                     failedCount++;
                     continue;
                 }
-                // Handle MISSING slots eligible for Seedream image generation
-                if (MATCH_STATUS_MISSING.equals(item.getMatchStatus())
+                // Handle MISSING or PARTIAL slots eligible for Seedream image generation
+                if ((MATCH_STATUS_MISSING.equals(item.getMatchStatus()) || MATCH_STATUS_PARTIAL.equals(item.getMatchStatus()))
                         && Boolean.TRUE.equals(item.getImageGenEligible())) {
                     handleImageGeneration(projectId, resolvedVersionId, item);
                     if ("FAILED".equals(item.getImageGenStatus())) {
@@ -181,6 +181,56 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
         creationProjectService.updateById(project);
         log.info("adaptation finished: projectId={}, versionId={}, total={}, failed={}, elapsedMs={}",
                 projectId, resolvedVersionId, matches.size(), failedCount, System.currentTimeMillis() - startedAt);
+    }
+
+    @Override
+    @Async("videoTaskExecutor")
+    public void regenerateImageAsync(String projectId, int segmentIndex, String newPrompt) {
+        CreationProjectEntity project = creationProjectService.getOne(
+                new LambdaQueryWrapper<CreationProjectEntity>().eq(CreationProjectEntity::getProjectId, projectId)
+        );
+        if (project == null) {
+            log.warn("regenerateImageAsync failed: project not found {}", projectId);
+            return;
+        }
+
+        SlotMatchResultEntity latest = slotMatchResultMapper.selectOne(
+                new LambdaQueryWrapper<SlotMatchResultEntity>()
+                        .eq(SlotMatchResultEntity::getProjectId, projectId)
+                        .isNull(SlotMatchResultEntity::getDeletedAt)
+                        .orderByDesc(SlotMatchResultEntity::getUpdatedAt)
+                        .last("LIMIT 1")
+        );
+        if (latest == null || latest.getVersionId() == null) {
+            log.warn("regenerateImageAsync failed: no matched version for {}", projectId);
+            return;
+        }
+        String versionId = latest.getVersionId();
+
+        SlotMatchResultEntity item = slotMatchResultMapper.selectOne(
+                new LambdaQueryWrapper<SlotMatchResultEntity>()
+                        .eq(SlotMatchResultEntity::getProjectId, projectId)
+                        .eq(SlotMatchResultEntity::getVersionId, versionId)
+                        .eq(SlotMatchResultEntity::getSegmentIndex, segmentIndex)
+                        .isNull(SlotMatchResultEntity::getDeletedAt)
+                        .last("LIMIT 1")
+        );
+
+        if (item == null) {
+            log.warn("regenerateImageAsync failed: item not found for project={}, segment={}", projectId, segmentIndex);
+            return;
+        }
+
+        if (newPrompt != null && !newPrompt.isBlank()) {
+            item.setImageGenPrompt(newPrompt.trim());
+        }
+        item.setImageGenStatus("PENDING");
+        item.setImageGenUrl(null);
+        item.setAdaptedFilePath(null);
+        slotMatchResultMapper.updateById(item);
+
+        log.info("Starting async regeneration for projectId={}, segmentIndex={}", projectId, segmentIndex);
+        handleImageGeneration(projectId, versionId, item);
     }
 
     private String applyStrategyChain(
@@ -537,7 +587,7 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
 
     private boolean isSkippedMatch(SlotMatchResultEntity item) {
         // MISSING slots eligible for image generation are handled separately, not skipped
-        if (MATCH_STATUS_MISSING.equals(item.getMatchStatus())
+        if ((MATCH_STATUS_MISSING.equals(item.getMatchStatus()) || MATCH_STATUS_PARTIAL.equals(item.getMatchStatus()))
                 && Boolean.TRUE.equals(item.getImageGenEligible())) {
             return false;
         }

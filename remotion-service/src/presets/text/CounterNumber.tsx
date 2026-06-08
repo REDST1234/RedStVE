@@ -4,10 +4,8 @@
  */
 import React from 'react';
 import { Easing, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/NotoSansSC';
+import { getFontFamily, FontTier } from '../../fontSystem';
 import { resolveTextLayout, LayoutMode } from './layout';
-
-const { fontFamily } = loadFont();
 
 interface CounterNumberProps {
   value: number;
@@ -23,6 +21,8 @@ interface CounterNumberProps {
   layoutMode?: LayoutMode;
   textShadow?: string;
   letterSpacing?: string | number;
+  /** 字体分层，默认 'number'（Bebas Neue 展示数字体） */
+  fontTier?: FontTier;
 }
 
 /**
@@ -125,7 +125,9 @@ export const CounterNumber: React.FC<CounterNumberProps> = ({
   layoutMode = 'auto',
   textShadow = '0 4px 20px rgba(0,0,0,0.35)',
   letterSpacing = '0.04em',
+  fontTier = 'number',
 }) => {
+  const fontFamily = getFontFamily(fontTier);
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
   const layout = resolveTextLayout({

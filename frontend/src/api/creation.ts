@@ -31,16 +31,16 @@ export const creationApi = {
       }
     }),
 
-  createProject: (title: string, description?: string) =>
+  createProject: (title: string, description?: string, aspectRatio?: string) =>
     request<ApiResponse<CreationProjectData>>('/v1/creation/projects', {
       method: 'POST',
-      body: { title, description }
+      body: { title, description, aspectRatio }
     }),
 
-  updateProject: (projectId: string, title: string, description?: string) =>
+  updateProject: (projectId: string, title: string, description?: string, aspectRatio?: string) =>
     request<ApiResponse<CreationProjectData>>(`/v1/creation/projects/${projectId}`, {
       method: 'PUT',
-      body: { title, description }
+      body: { title, description, aspectRatio }
     }),
 
   deleteProject: (projectId: string) =>
@@ -175,6 +175,12 @@ export const creationApi = {
     request<ApiResponse<boolean>>(`/v1/creation/projects/${projectId}/regenerate`, {
       method: 'POST',
       body: payload ?? {}
+    }),
+
+  regenerateImage: (projectId: string, segmentIndex: number, prompt: string) =>
+    request<ApiResponse<boolean>>(`/v1/creation/projects/${projectId}/segment/${segmentIndex}/regenerate-image`, {
+      method: 'POST',
+      body: { prompt }
     }),
 
   getRenderStatus: (projectId: string) =>

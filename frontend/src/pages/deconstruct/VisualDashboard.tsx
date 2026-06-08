@@ -688,36 +688,114 @@ export default function VisualDashboard() {
                 </h3>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
                     {(finalTemplate.meta?.styles || finalTemplate.meta?.style ? [].concat(finalTemplate.meta?.styles || finalTemplate.meta?.style) : []).map((t: any, i: number) => {
-                        const label = typeof t === 'object' ? JSON.stringify(t) : String(t);
+                        const isObj = typeof t === 'object';
+                        const label = isObj ? JSON.stringify(t, null, 2) : String(t);
                         return (
-                            <div key={`style-${i}`} style={{ background: 'rgba(99, 102, 241, 0.2)', border: '1px solid rgba(99, 102, 241, 0.5)', color: '#818cf8', padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 'bold' }}>
-                                🎭 风格: {label}
+                            <div key={`style-${i}`} style={{ width: isObj ? '100%' : 'auto', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', color: '#a5b4fc', padding: isObj ? '12px 16px' : '6px 14px', borderRadius: isObj ? '12px' : '20px', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                                {isObj ? (
+                                    <>
+                                        <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>🎭 风格:</div>
+                                        <div style={{ fontFamily: 'monospace', background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px' }}>{label}</div>
+                                    </>
+                                ) : (
+                                    <span style={{ fontWeight: 'bold' }}>🎭 风格: {label}</span>
+                                )}
                             </div>
                         );
                     })}
                     {(finalTemplate.rhythmStructure?.transitionStyles || finalTemplate.rhythmStructure?.transitionStyle ? [].concat(finalTemplate.rhythmStructure?.transitionStyles || finalTemplate.rhythmStructure?.transitionStyle) : []).map((t: any, i: number) => {
-                        const label = typeof t === 'object' ? JSON.stringify(t) : String(t);
+                        const isObj = typeof t === 'object';
+                        const label = isObj ? JSON.stringify(t, null, 2) : String(t);
                         return (
-                            <div key={`trans-${i}`} style={{ background: 'rgba(236, 72, 153, 0.2)', border: '1px solid rgba(236, 72, 153, 0.5)', color: '#f472b6', padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 'bold' }}>
-                                ✨ 转场: {label}
+                            <div key={`trans-${i}`} style={{ width: isObj ? '100%' : 'auto', background: 'rgba(236, 72, 153, 0.1)', border: '1px solid rgba(236, 72, 153, 0.3)', color: '#f9a8d4', padding: isObj ? '12px 16px' : '6px 14px', borderRadius: isObj ? '12px' : '20px', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                                {isObj ? (
+                                    <>
+                                        <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>✨ 转场:</div>
+                                        <div style={{ fontFamily: 'monospace', background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px' }}>{label}</div>
+                                    </>
+                                ) : (
+                                    <span style={{ fontWeight: 'bold' }}>✨ 转场: {label}</span>
+                                )}
                             </div>
                         );
                     })}
                     {(finalTemplate.viralFactors || []).map((t: any, i: number) => {
-                        const label = typeof t === 'object' ? JSON.stringify(t) : String(t);
+                        if (typeof t === 'object' && t.factorName) {
+                            return (
+                                <div key={`viral-${i}`} style={{ width: '100%', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#6ee7b7', padding: '12px 16px', borderRadius: '12px', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                                    <div style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '1rem', display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>🔥 爆款因子：{t.factorName}</span>
+                                        {t.weight !== undefined && <span style={{ fontSize: '0.8rem', background: 'rgba(16, 185, 129, 0.2)', padding: '2px 8px', borderRadius: '12px' }}>权重: {t.weight}</span>}
+                                    </div>
+                                    <div style={{ color: '#a7f3d0' }}>{t.description}</div>
+                                </div>
+                            );
+                        }
+                        const isObj = typeof t === 'object';
+                        const label = isObj ? JSON.stringify(t, null, 2) : String(t);
                         return (
-                            <div key={`viral-${i}`} style={{ background: 'rgba(16, 185, 129, 0.2)', border: '1px solid rgba(16, 185, 129, 0.5)', color: '#34d399', padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 'bold' }}>
-                                🔥 爆款因子: {label}
+                            <div key={`viral-${i}`} style={{ width: '100%', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#6ee7b7', padding: '12px 16px', borderRadius: '12px', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                                <div style={{ fontWeight: 'bold', marginBottom: isObj ? '8px' : 0 }}>🔥 爆款因子 {i + 1}{isObj ? ':' : `: ${label}`}</div>
+                                {isObj && <div style={{ fontFamily: 'monospace', background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px' }}>{label}</div>}
                             </div>
                         );
                     })}
                     {Object.keys(finalTemplate.categoryExtensions || {}).map((key, i) => {
                         const val = finalTemplate.categoryExtensions[key];
                         if (val === null || val === undefined) return null;
-                        const label = typeof val === 'object' ? JSON.stringify(val) : String(val);
+                        
+                        // Handle dynamicExtensionFields specifically
+                        if (key === 'dynamicExtensionFields' && Array.isArray(val)) {
+                            return (
+                                <div key={`ext-${i}`} style={{ width: '100%', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#fcd34d', padding: '16px', borderRadius: '12px', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                                    <div style={{ fontWeight: 'bold', marginBottom: '12px', fontSize: '1.05rem', color: '#fbbf24' }}>
+                                        💡 动态扩展字段 (Dynamic Extension Fields)
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                        {val.map((field: any, j: number) => (
+                                            <div key={`field-${j}`} style={{ background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px', borderLeft: '3px solid #f59e0b' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                                    <span style={{ fontWeight: 'bold', color: '#fde68a' }}>{field.fieldName}</span>
+                                                    <span style={{ fontSize: '0.8rem', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.2)', padding: '2px 8px', borderRadius: '4px' }}>
+                                                        类型: {field.fieldType}
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                                    <span style={{ color: '#d97706' }}>取值:</span>
+                                                    <span style={{ fontFamily: 'monospace', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                                                        {typeof field.fieldValue === 'object' ? JSON.stringify(field.fieldValue) : String(field.fieldValue)}
+                                                    </span>
+                                                </div>
+                                                <div style={{ color: '#fef3c7', fontSize: '0.85rem' }}>{field.description}</div>
+                                                {field.allowedValues && (
+                                                    <div style={{ marginTop: '6px', fontSize: '0.8rem', color: '#fcd34d' }}>
+                                                        可选范围: {Array.isArray(field.allowedValues) ? field.allowedValues.join(', ') : String(field.allowedValues)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        }
+
+                        let displayKey = key;
+                        if (key === 'discoveredCategoryId') displayKey = '识别品类 ID';
+                        if (key === 'discoveredCategoryName') displayKey = '识别品类名称';
+                        if (key === 'discoveredPromptOverrides') displayKey = '品类专属提示词覆盖';
+
+                        const isObj = typeof val === 'object';
+                        const label = isObj ? JSON.stringify(val, null, 2) : String(val);
                         return (
-                            <div key={`ext-${i}`} style={{ background: 'rgba(245, 158, 11, 0.2)', border: '1px solid rgba(245, 158, 11, 0.5)', color: '#fbbf24', padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 'bold' }}>
-                                💡 {key}: {label}
+                            <div key={`ext-${i}`} style={{ width: isObj ? '100%' : 'auto', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#fcd34d', padding: isObj ? '12px 16px' : '6px 14px', borderRadius: isObj ? '12px' : '20px', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                                {isObj ? (
+                                    <>
+                                        <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>💡 {displayKey}:</div>
+                                        <div style={{ fontFamily: 'monospace', background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px' }}>{label}</div>
+                                    </>
+                                ) : (
+                                    <span style={{ fontWeight: 'bold' }}>💡 {displayKey}: {label}</span>
+                                )}
                             </div>
                         )
                     })}

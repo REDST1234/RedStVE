@@ -90,7 +90,7 @@ public class CreationProjectController {
 
     @PostMapping
     public ApiResponse<CreateProjectResponse> createProject(@Valid @RequestBody CreateProjectRequest request) {
-        CreationProjectEntity entity = creationProjectService.createProject(request.getTitle(), request.getDescription());
+        CreationProjectEntity entity = creationProjectService.createProject(request.getTitle(), request.getDescription(), request.getAspectRatio());
         return ApiResponse.success(toCreateProjectResponse(entity));
     }
 
@@ -105,7 +105,7 @@ public class CreationProjectController {
             @PathVariable("projectId") String projectId,
             @Valid @RequestBody UpdateProjectRequest request
     ) {
-        CreationProjectEntity entity = creationProjectService.updateProjectBasics(projectId, request.getTitle(), request.getDescription());
+        CreationProjectEntity entity = creationProjectService.updateProjectBasics(projectId, request.getTitle(), request.getDescription(), request.getAspectRatio());
         return ApiResponse.success(toCreateProjectResponse(entity));
     }
 
@@ -292,6 +292,17 @@ public class CreationProjectController {
         response.setAdaptedCount((int) rows.stream().filter(item -> item.getAdaptedFilePath() != null && !item.getAdaptedFilePath().isBlank()).count());
         response.setFailedCount((int) rows.stream().filter(item -> item.getMatchedAssetId() == null || item.getMatchedAssetId().isBlank()).count());
         return ApiResponse.success(response);
+    }
+
+    @PostMapping("/{projectId}/segment/{segmentIndex}/regenerate-image")
+    public ApiResponse<Boolean> regenerateImage(
+            @PathVariable("projectId") String projectId,
+            @PathVariable("segmentIndex") Integer segmentIndex,
+            @RequestBody Map<String, String> payload
+    ) {
+        String prompt = payload.get("prompt");
+        adaptationOrchestratorService.regenerateImageAsync(projectId, segmentIndex, prompt);
+        return ApiResponse.success(Boolean.TRUE);
     }
 
     @GetMapping("/{projectId}/timeline")
@@ -521,9 +532,14 @@ public class CreationProjectController {
         item.setVetoReason(row.getVetoReason());
         item.setAdaptationPlanJson(row.getAdaptationPlanJson());
         item.setAdaptedFilePath(row.getAdaptedFilePath());
-        item.setAdaptedFileUrl(toStorageUrl(row.getAdaptedFilePath()));
+        String url = toStorageUrl(row.getAdaptedFilePath());
+        if (url != null && row.getUpdatedAt() != null) {
+            url += "?t=" + row.getUpdatedAt().toEpochSecond(ZoneOffset.UTC);
+        }
+        item.setAdaptedFileUrl(url);
         item.setImageGenEligible(row.getImageGenEligible());
         item.setImageGenCategory(row.getImageGenCategory());
+        item.setImageGenPrompt(row.getImageGenPrompt());
         item.setImageGenDescription(row.getImageGenDescription());
         item.setImageGenStatus(row.getImageGenStatus());
         item.setImageGenUrl(row.getImageGenUrl());

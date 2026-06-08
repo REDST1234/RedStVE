@@ -261,11 +261,11 @@ public class CreativeMaterialServiceImpl extends ServiceImpl<CreativeMaterialMap
         if (MATERIAL_TYPE_VIDEO.equals(materialType) && count >= 1) {
             throw new BizException(ErrorCode.INVALID_REQUEST, "当前项目最多只能上传 1 个视频素材");
         }
-        if (MATERIAL_TYPE_IMAGE.equals(materialType) && count >= 3) {
-            throw new BizException(ErrorCode.INVALID_REQUEST, "当前项目最多只能上传 3 张图片素材");
+        if (MATERIAL_TYPE_IMAGE.equals(materialType) && count >= 5) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "当前项目最多只能上传 5 张图片素材");
         }
-        if (MATERIAL_TYPE_TEXT.equals(materialType) && count >= 3) {
-            throw new BizException(ErrorCode.INVALID_REQUEST, "当前项目最多只能上传 3 段文本素材");
+        if (MATERIAL_TYPE_TEXT.equals(materialType) && count >= 10) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "当前项目最多只能上传 10 段文本/卖点信息");
         }
     }
 

@@ -4,9 +4,7 @@
  */
 import React from 'react';
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/NotoSansSC';
-
-const { fontFamily } = loadFont();
+import { getFontFamily, FontTier } from '../../fontSystem';
 
 interface BadgePopOverlayProps {
   text: string;
@@ -23,6 +21,8 @@ interface BadgePopOverlayProps {
   borderRadius?: number;
   shadowColor?: string;
   borderColor?: string;
+  /** 字体分层，默认 'ui'（Inter 现代无衬线） */
+  fontTier?: FontTier;
 }
 
 export const BadgePopOverlay: React.FC<BadgePopOverlayProps> = ({
@@ -40,7 +40,9 @@ export const BadgePopOverlay: React.FC<BadgePopOverlayProps> = ({
   borderRadius = 999,
   shadowColor = 'rgba(0,0,0,0.22)',
   borderColor = 'rgba(255,255,255,0.28)',
+  fontTier = 'ui',
 }) => {
+  const fontFamily = getFontFamily(fontTier);
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const enterFrames = Math.min(16, Math.max(6, Math.floor(durationInFrames * 0.28)));

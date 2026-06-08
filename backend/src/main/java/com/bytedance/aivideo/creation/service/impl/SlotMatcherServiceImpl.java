@@ -80,8 +80,10 @@ public class SlotMatcherServiceImpl implements SlotMatcherService {
         SlotMatchLlmResult llmResult = slotMatchLlmService.matchSlots(
                 projectId,
                 resolvedVersionId,
+                project.getDescription(),
                 project.getTemplateSnapshotJson(),
-                materials
+                materials,
+                project.getRenderAspectRatio()
         );
 
         slotMatchResultMapper.delete(new LambdaQueryWrapper<SlotMatchResultEntity>()

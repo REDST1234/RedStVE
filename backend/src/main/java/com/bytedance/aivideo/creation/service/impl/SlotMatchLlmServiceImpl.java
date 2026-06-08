@@ -52,8 +52,7 @@ public class SlotMatchLlmServiceImpl implements SlotMatchLlmService {
             "LIGHTING_ADJUST",
             "LOCAL_BLUR",
             "LOOP_SEQUENCE",
-            "KEN_BURNS_MOTION",
-            "AUDIO_DUCKING"
+            "KEN_BURNS_MOTION"
     );
     private static final Set<String> ALLOWED_IMAGE_GEN_CATEGORIES = Set.of(
             "UI_ELEMENT", "STICKER", "LOGO", "ILLUSTRATION", "BACKGROUND", "NONE"
@@ -80,16 +79,21 @@ public class SlotMatchLlmServiceImpl implements SlotMatchLlmService {
     public SlotMatchLlmResult matchSlots(
             String projectId,
             String versionId,
+            String projectDescription,
             String templateSnapshotJson,
-            List<CreativeMaterialEntity> materials
+            List<CreativeMaterialEntity> materials,
+            String targetAspectRatio
     ) {
         String materialProfilesJson = buildMaterialProfilesJson(materials);
         String prompt = String.format(
                 ArkPromptTemplates.CREATION_SLOT_MATCH_JSON,
                 projectId,
                 versionId,
+                targetAspectRatio != null ? targetAspectRatio : "未知比例",
+                projectDescription != null ? projectDescription : "未提供详细描述",
                 templateSnapshotJson,
-                materialProfilesJson
+                materialProfilesJson,
+                targetAspectRatio != null ? targetAspectRatio : "未知比例"
         );
 
         ArkResponseRequest request = new ArkResponseRequest();
@@ -179,12 +183,12 @@ public class SlotMatchLlmServiceImpl implements SlotMatchLlmService {
                     decision.setAdaptationPlan(emptyPlan);
                 }
 
-                // ---- Parse image generation eligibility (MISSING slots only) ----
+                // ---- Parse image generation eligibility (MISSING or PARTIAL slots) ----
                 decision.setImageGenEligible(
                         decisionNode.has("imageGenEligible") && !decisionNode.path("imageGenEligible").isNull()
                                 ? decisionNode.path("imageGenEligible").asBoolean(false) : false);
                 if (Boolean.TRUE.equals(decision.getImageGenEligible())
-                        && "MISSING".equals(decision.getMatchStatus())) {
+                        && ("MISSING".equals(decision.getMatchStatus()) || "PARTIAL".equals(decision.getMatchStatus()))) {
                     decision.setImageGenCategory(
                             validateImageGenCategory(decisionNode.path("imageGenCategory").asText("NONE")));
                     decision.setImageGenPrompt(decisionNode.path("imageGenPrompt").asText(""));

@@ -51,15 +51,15 @@ export default function App() {
   const [currentView, setCurrentView] = useState<'list' | 'detail'>('list');
   const [isAiAnalyzed, setIsAiAnalyzed] = useState(false);
   const [creationStep, setCreationStep] = useState<'info' | 'workspace'>('info');
-  
+
   const [activeMenu, setActiveMenu] = useState('项目看板');
-  
+
   // Data State
   const [deconstructProjects, setDeconstructProjects] = useState<Project[]>(MOCK_DECONSTRUCT_PROJECTS);
   const [creationProjects, setCreationProjects] = useState<Project[]>(MOCK_CREATION_PROJECTS);
-  
+
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  
+
   // Search state
   const [searchFilter, setSearchFilter] = useState('全部状态');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -148,17 +148,17 @@ export default function App() {
   const renderProjectGrid = (projects: Project[], isCreation: boolean) => (
     <div className="project-grid">
       {projects.map(proj => (
-        <div 
-          key={proj.id} 
-          className={`project-card ${isCreation ? 'creation' : ''}`} 
+        <div
+          key={proj.id}
+          className={`project-card ${isCreation ? 'creation' : ''}`}
           onClick={() => handleEditProject(proj)}
         >
           <div className="card-cover">
             <img src={proj.cover} alt="cover" />
             <div className={`status-badge ${proj.status}`}>
-              {proj.status === 'working' ? '工作中' : 
-               proj.status === 'completed' ? '已完成' : 
-               proj.status === 'ai-fill' ? 'AI补全中' : '待设定'}
+              {proj.status === 'working' ? '工作中' :
+                proj.status === 'completed' ? '已完成' :
+                  proj.status === 'ai-fill' ? 'AI补全中' : '待设定'}
             </div>
           </div>
           <div className="card-info">
@@ -167,10 +167,10 @@ export default function App() {
           </div>
         </div>
       ))}
-      
+
       {/* Create Card at the end */}
-      <div 
-        className={`create-project-card ${isCreation ? 'creation-mode' : ''}`} 
+      <div
+        className={`create-project-card ${isCreation ? 'creation-mode' : ''}`}
         onClick={handleCreateNew}
       >
         <div className="plus-icon-circle">
@@ -208,7 +208,7 @@ export default function App() {
 
         <div className="nav-section-title">🎯 结构拆解中心</div>
         <nav className="nav-menu">
-          <div 
+          <div
             className={`nav-item ${workflow === 'deconstruct' && activeMenu === '项目看板' ? 'active' : ''}`}
             onClick={() => handleMenuClick('deconstruct', '项目看板')}
           >
@@ -218,9 +218,9 @@ export default function App() {
           <div className="nav-item"><svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M2 15h10"></path><path d="M9 18l3-3-3-3"></path></svg> 拆解资产库</div>
         </nav>
 
-        <div className="nav-section-title" style={{marginTop: '24px'}}>🎬 视频创作工坊</div>
+        <div className="nav-section-title" style={{ marginTop: '24px' }}>🎬 视频创作工坊</div>
         <nav className="nav-menu">
-          <div 
+          <div
             className={`nav-item ${workflow === 'create' && activeMenu === '创作看板' ? 'active' : ''}`}
             onClick={() => handleMenuClick('create', '创作看板')}
           >
@@ -239,27 +239,27 @@ export default function App() {
             <svg className="search-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input type="text" placeholder="全网搜索关键词、匹配视频..." />
-            
+            <input type="text" placeholder="搜索关键词、匹配视频..." />
+
             <div className="search-divider"></div>
-            
+
             <div className="search-filter" onClick={() => setIsFilterOpen(!isFilterOpen)}>
               <div className="filter-display-content">
                 {searchFilter !== '全部状态' && <div className={`status-dot ${searchFilter === '工作中' ? 'working' : searchFilter === '已完成' ? 'completed' : 'pending'}`}></div>}
                 <span>{searchFilter}</span>
               </div>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-              
+
               {isFilterOpen && (
                 <div className="filter-dropdown">
                   {['全部状态', '待设定', '工作中', '已完成', '已归档'].map(f => (
-                    <div 
-                      key={f} 
+                    <div
+                      key={f}
                       className={`filter-option ${searchFilter === f ? 'selected' : ''}`}
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        setSearchFilter(f); 
-                        setIsFilterOpen(false); 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSearchFilter(f);
+                        setIsFilterOpen(false);
                       }}
                     >
                       {f !== '全部状态' && <div className={`status-dot ${f === '工作中' ? 'working' : f === '已完成' ? 'completed' : 'pending'}`}></div>}
@@ -270,14 +270,14 @@ export default function App() {
               )}
             </div>
           </div>
-          
+
           <div className="header-actions">
             <button className="action-btn">
               <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
               </svg>
             </button>
-            <img className="avatar" style={{width: 32, height: 32}} src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-4.0.3&auto=format&fit=facearea&facepad=2&w=100&h=100&q=80" alt="User" />
+            <img className="avatar" style={{ width: 32, height: 32 }} src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-4.0.3&auto=format&fit=facearea&facepad=2&w=100&h=100&q=80" alt="User" />
           </div>
         </header>
 
@@ -307,8 +307,8 @@ export default function App() {
                   </svg>
                 </button>
                 <h2 className="detail-title">{editingProject ? '编辑拆解详情' : '新建结构拆解项目'}</h2>
-                
-                <button className="btn-jump-flat" style={{marginLeft: 'auto'}} title="前往提取核心要素">
+
+                <button className="btn-jump-flat" style={{ marginLeft: 'auto' }} title="前往提取核心要素">
                   <span>结构提取</span>
                   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                 </button>
@@ -326,7 +326,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  
+
                   <div className="params-box">
                     <div className="params-title">详细参数 (Details)</div>
                     <div className="param-row"><span className="param-label">时长</span><span className="param-val">00:00:00</span></div>
@@ -336,19 +336,19 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="detail-mid" style={{flexDirection: 'row', gap: '32px'}}>
-                  <div className="input-group" style={{flex: 1}}>
+                <div className="detail-mid" style={{ flexDirection: 'row', gap: '32px' }}>
+                  <div className="input-group" style={{ flex: 1 }}>
                     <div className="input-group">
                       <label className="input-label">项目标题 (Title)</label>
                       <input type="text" className="input-field" placeholder="输入爆款视频解析项目标题..." defaultValue={editingProject?.title} />
                     </div>
-                    
-                    <div className="input-group" style={{marginTop: '24px'}}>
+
+                    <div className="input-group" style={{ marginTop: '24px' }}>
                       <label className="input-label">项目描述 (Description)</label>
                       <textarea className="input-field" placeholder="记录提取与结构拆解的核心目标..." defaultValue={editingProject?.description}></textarea>
                     </div>
 
-                    <div className="input-group" style={{marginTop: '24px'}}>
+                    <div className="input-group" style={{ marginTop: '24px' }}>
                       <label className="input-label">品类标签 (Tags)</label>
                       <div className="tags-container">
                         {['混剪', '营销', '影视', '从零', '电商', 'Vlog'].map(tag => (
@@ -402,7 +402,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="detail-footer" style={{justifyContent: 'flex-end'}}>
+              <div className="detail-footer" style={{ justifyContent: 'flex-end' }}>
                 <div className="footer-actions">
                   <button className="btn-primary" onClick={handleSaveAndReturn}>保存拆解项目</button>
                 </div>
@@ -412,8 +412,8 @@ export default function App() {
 
           {currentView === 'detail' && workflow === 'create' && (
             /* --- P_Create_003 视频创作工坊专属面板 --- */
-            <div className="detail-page fade-in" style={{borderColor: '#e0e7ff'}}>
-              <div className="detail-header" style={{background: '#f8fafc', paddingBottom: '20px'}}>
+            <div className="detail-page fade-in" style={{ borderColor: '#e0e7ff' }}>
+              <div className="detail-header" style={{ background: '#f8fafc', paddingBottom: '20px' }}>
                 <button className="back-btn" onClick={() => {
                   if (creationStep === 'workspace') {
                     setCreationStep('info');
@@ -426,33 +426,33 @@ export default function App() {
                 <h2 className="detail-title">{editingProject ? '编辑装配生成项目' : '新建结构装配项目'}</h2>
               </div>
 
-              <div className="detail-body" style={{paddingTop: '20px', display: 'block'}}>
-                
+              <div className="detail-body" style={{ paddingTop: '20px', display: 'block' }}>
+
                 {creationStep === 'info' ? (
                   /* --- 阶段一：创作基本信息态 --- */
-                  <div style={{display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '800px', margin: '0 auto', paddingTop: '20px'}}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '800px', margin: '0 auto', paddingTop: '20px' }}>
                     <div className="input-group">
                       <label className="input-label">创作项目标题 (Title)</label>
                       <input type="text" className="input-field" placeholder="例如：某品牌降噪耳机新品发售..." defaultValue={editingProject?.title} />
                     </div>
-                    
+
                     <div className="input-group">
                       <label className="input-label">创作目标描述 (Description)</label>
-                      <textarea className="input-field" style={{minHeight: '120px'}} placeholder="记录本次装配生成的核心目标..." defaultValue={editingProject?.description}></textarea>
+                      <textarea className="input-field" style={{ minHeight: '120px' }} placeholder="记录本次装配生成的核心目标..." defaultValue={editingProject?.description}></textarea>
                     </div>
 
                     <div className="input-group">
                       <label className="input-label">选择目标视频比例 (Aspect Ratio)</label>
-                      <div className="ratio-group" style={{width: 'fit-content', background: '#f1f5f9', padding: '6px', borderRadius: '8px'}}>
-                        <button className="ratio-btn" style={{padding: '8px 24px'}}>1:1</button>
-                        <button className="ratio-btn" style={{padding: '8px 24px'}}>3:4</button>
-                        <button className="ratio-btn active" style={{padding: '8px 24px', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.1)'}}>9:16 (竖屏)</button>
+                      <div className="ratio-group" style={{ width: 'fit-content', background: '#f1f5f9', padding: '6px', borderRadius: '8px' }}>
+                        <button className="ratio-btn" style={{ padding: '8px 24px' }}>1:1</button>
+                        <button className="ratio-btn" style={{ padding: '8px 24px' }}>3:4</button>
+                        <button className="ratio-btn active" style={{ padding: '8px 24px', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>9:16 (竖屏)</button>
                       </div>
                     </div>
 
-                    <div style={{marginTop: '40px', display: 'flex', justifyContent: 'flex-end', gap: '16px'}}>
+                    <div style={{ marginTop: '40px', display: 'flex', justifyContent: 'flex-end', gap: '16px' }}>
                       <button className="btn-outline" onClick={handleSaveAndReturn}>保存信息</button>
-                      <button className="btn-primary" style={{background: '#6366f1', padding: '12px 32px', fontSize: '1.05rem'}} onClick={() => setCreationStep('workspace')}>
+                      <button className="btn-primary" style={{ background: '#6366f1', padding: '12px 32px', fontSize: '1.05rem' }} onClick={() => setCreationStep('workspace')}>
                         🚀 开启创作视频工作流
                       </button>
                     </div>
@@ -462,133 +462,133 @@ export default function App() {
                   <div className="creation-workspace fade-in">
                     <div className="creation-layout">
                       {/* Left: Structure Timeline Slots (AI Strategy Tree) */}
-                    <div className="creation-timeline" style={{width: '380px'}}>
-                      <div style={{fontSize: '0.9rem', fontWeight: 600, color: '#0f172a', marginBottom: '16px'}}>
-                        {isAiAnalyzed ? '✨ AI 智能匹配与补全方案' : '📐 模板骨架 (等待填充)'}
-                      </div>
-                      
-                      {!isAiAnalyzed ? (
-                        /* 初始状态：只展示空骨架 */
-                        <>
-                          <div className="timeline-slot">
-                            <div className="slot-header"><span className="slot-title">1. 悬念引入</span><span className="slot-duration">00:00 - 00:03</span></div>
-                            <span className="slot-desc">高燃节奏，提出痛点问题。</span>
-                            <div className="slot-content-indicator" style={{color: '#94a3b8'}}>等待匹配...</div>
-                          </div>
-                          <div className="timeline-slot">
-                            <div className="slot-header"><span className="slot-title">2. 痛点放大</span><span className="slot-duration">00:03 - 00:10</span></div>
-                            <span className="slot-desc">结合特定场景，展示负面现状。</span>
-                            <div className="slot-content-indicator" style={{color: '#94a3b8'}}>等待匹配...</div>
-                          </div>
-                          <div className="timeline-slot">
-                            <div className="slot-header"><span className="slot-title">3. 卖点反转</span><span className="slot-duration">00:10 - 00:15</span></div>
-                            <span className="slot-desc">产品出场，快速混剪核心功能。</span>
-                            <div className="slot-content-indicator" style={{color: '#94a3b8'}}>等待匹配...</div>
-                          </div>
-                        </>
-                      ) : (
-                        /* 分析后状态：展示匹配结果与 AI 生成方案 */
-                        <>
-                          <div className="timeline-slot filled">
-                            <div className="slot-header"><span className="slot-title">1. 悬念引入</span><span className="slot-duration">00:00 - 00:03</span></div>
-                            <span className="slot-desc">高燃节奏，提出痛点问题。</span>
-                            <div className="slot-content-indicator success">
-                              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                              已匹配: VID_001_开场悬念.mp4
+                      <div className="creation-timeline" style={{ width: '380px' }}>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0f172a', marginBottom: '16px' }}>
+                          {isAiAnalyzed ? '✨ AI 智能匹配与补全方案' : '📐 模板骨架 (等待填充)'}
+                        </div>
+
+                        {!isAiAnalyzed ? (
+                          /* 初始状态：只展示空骨架 */
+                          <>
+                            <div className="timeline-slot">
+                              <div className="slot-header"><span className="slot-title">1. 悬念引入</span><span className="slot-duration">00:00 - 00:03</span></div>
+                              <span className="slot-desc">高燃节奏，提出痛点问题。</span>
+                              <div className="slot-content-indicator" style={{ color: '#94a3b8' }}>等待匹配...</div>
                             </div>
-                          </div>
-                          
-                          <div className="timeline-slot gap">
-                            <div className="slot-header"><span className="slot-title">2. 痛点放大</span><span className="slot-duration">00:03 - 00:10</span></div>
-                            <span className="slot-desc">结合特定场景，展示负面现状。</span>
-                            <div className="slot-content-indicator gap-warning">
-                              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                              素材不足，已部署 AI 补全策略
+                            <div className="timeline-slot">
+                              <div className="slot-header"><span className="slot-title">2. 痛点放大</span><span className="slot-duration">00:03 - 00:10</span></div>
+                              <span className="slot-desc">结合特定场景，展示负面现状。</span>
+                              <div className="slot-content-indicator" style={{ color: '#94a3b8' }}>等待匹配...</div>
                             </div>
-                            <div className="ai-plan-box">
-                              <div className="ai-plan-title">
-                                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                                AIGC 生成任务
+                            <div className="timeline-slot">
+                              <div className="slot-header"><span className="slot-title">3. 卖点反转</span><span className="slot-duration">00:10 - 00:15</span></div>
+                              <span className="slot-desc">产品出场，快速混剪核心功能。</span>
+                              <div className="slot-content-indicator" style={{ color: '#94a3b8' }}>等待匹配...</div>
+                            </div>
+                          </>
+                        ) : (
+                          /* 分析后状态：展示匹配结果与 AI 生成方案 */
+                          <>
+                            <div className="timeline-slot filled">
+                              <div className="slot-header"><span className="slot-title">1. 悬念引入</span><span className="slot-duration">00:00 - 00:03</span></div>
+                              <span className="slot-desc">高燃节奏，提出痛点问题。</span>
+                              <div className="slot-content-indicator success">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                已匹配: VID_001_开场悬念.mp4
                               </div>
-                              基于您的核心卖点，将调用视频模型生成一段 7s 的产品环境痛点展示特写，并配以压抑情绪的音效。
                             </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
 
-                    {/* Right: User Input and Assets Assembly */}
-                    <div className="creation-canvas">
-                      <div className="canvas-header" style={{marginBottom: '16px'}}>
-                        <div className="canvas-title">基础素材与核心卖点配置</div>
-                        <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                          <span style={{fontSize: '0.85rem', color: '#64748b'}}>目标模板:</span>
-                          <select className="input-field" style={{padding: '6px 12px', minWidth: '200px'}}>
-                            <option>苹果春季发布会 (混剪)</option>
-                            <option>百大UP主解说结构 (影视)</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="upload-dropzone">
-                        <div className="upload-icon">
-                          <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                        </div>
-                        <div>
-                          <div style={{fontWeight: 600, color: '#0f172a', marginBottom: '4px'}}>拖拽上传基础素材</div>
-                          <div style={{fontSize: '0.85rem'}}>支持 视频 / 图片 / 文案片段 (上限 500MB)</div>
-                        </div>
-                      </div>
-
-                      <div className="creation-form">
-                        <div className="input-group">
-                          <label className="input-label">核心卖点 (Core Selling Points)</label>
-                          <textarea className="input-field" style={{minHeight: '80px'}} placeholder="请列出最希望视频突出的卖点，AI将在缺口补全时深度结合这些信息..."></textarea>
-                        </div>
-                        
-                        {!isAiAnalyzed && (
-                          <button className="btn-magic" style={{marginTop: 'auto', alignSelf: 'flex-start'}} onClick={() => setIsAiAnalyzed(true)}>
-                            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                            运行 AI 智能匹配与缺口识别
-                          </button>
+                            <div className="timeline-slot gap">
+                              <div className="slot-header"><span className="slot-title">2. 痛点放大</span><span className="slot-duration">00:03 - 00:10</span></div>
+                              <span className="slot-desc">结合特定场景，展示负面现状。</span>
+                              <div className="slot-content-indicator gap-warning">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                素材不足，已部署 AI 补全策略
+                              </div>
+                              <div className="ai-plan-box">
+                                <div className="ai-plan-title">
+                                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                  AIGC 生成任务
+                                </div>
+                                基于您的核心卖点，将调用视频模型生成一段 7s 的产品环境痛点展示特写，并配以压抑情绪的音效。
+                              </div>
+                            </div>
+                          </>
                         )}
                       </div>
 
-                      <div className="creation-footer">
-                        <div className="creation-stats">
-                          {isAiAnalyzed && (
-                            <>
-                              <div className="stat-chip">预计总时长: <strong>00:45</strong></div>
-                              <div className="stat-chip">需补全槽位: <strong style={{color:'#d97706'}}>1</strong></div>
-                            </>
+                      {/* Right: User Input and Assets Assembly */}
+                      <div className="creation-canvas">
+                        <div className="canvas-header" style={{ marginBottom: '16px' }}>
+                          <div className="canvas-title">基础素材与核心卖点配置</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>目标模板:</span>
+                            <select className="input-field" style={{ padding: '6px 12px', minWidth: '200px' }}>
+                              <option>苹果春季发布会 (混剪)</option>
+                              <option>百大UP主解说结构 (影视)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="upload-dropzone">
+                          <div className="upload-icon">
+                            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#0f172a', marginBottom: '4px' }}>拖拽上传基础素材</div>
+                            <div style={{ fontSize: '0.85rem' }}>支持 视频 / 图片 / 文案片段 (上限 500MB)</div>
+                          </div>
+                        </div>
+
+                        <div className="creation-form">
+                          <div className="input-group">
+                            <label className="input-label">核心卖点 (Core Selling Points)</label>
+                            <textarea className="input-field" style={{ minHeight: '80px' }} placeholder="请列出最希望视频突出的卖点，AI将在缺口补全时深度结合这些信息..."></textarea>
+                          </div>
+
+                          {!isAiAnalyzed && (
+                            <button className="btn-magic" style={{ marginTop: 'auto', alignSelf: 'flex-start' }} onClick={() => setIsAiAnalyzed(true)}>
+                              <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                              运行 AI 智能匹配与缺口识别
+                            </button>
                           )}
                         </div>
-                        
-                        <div className="footer-actions">
-                          <button className="btn-outline" onClick={handleSaveAndReturn}>保存草稿</button>
-                          <button 
-                            className="btn-primary" 
-                            style={{background: isAiAnalyzed ? '#10b981' : '#cbd5e1', cursor: isAiAnalyzed ? 'pointer' : 'not-allowed'}} 
-                            onClick={() => { if(isAiAnalyzed) handleSaveAndReturn(); }}
-                          >
-                            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                            前往生成视频阶段
-                          </button>
+
+                        <div className="creation-footer">
+                          <div className="creation-stats">
+                            {isAiAnalyzed && (
+                              <>
+                                <div className="stat-chip">预计总时长: <strong>00:45</strong></div>
+                                <div className="stat-chip">需补全槽位: <strong style={{ color: '#d97706' }}>1</strong></div>
+                              </>
+                            )}
+                          </div>
+
+                          <div className="footer-actions">
+                            <button className="btn-outline" onClick={handleSaveAndReturn}>保存草稿</button>
+                            <button
+                              className="btn-primary"
+                              style={{ background: isAiAnalyzed ? '#10b981' : '#cbd5e1', cursor: isAiAnalyzed ? 'pointer' : 'not-allowed' }}
+                              onClick={() => { if (isAiAnalyzed) handleSaveAndReturn(); }}
+                            >
+                              <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                              前往生成视频阶段
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Bottom: Uploaded Materials Library */}
-                  <div className="assets-library-section">
+                    {/* Bottom: Uploaded Materials Library */}
+                    <div className="assets-library-section">
                       <div className="assets-library-header">
-                        <div style={{fontSize: '1rem', fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                        <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
                           本地素材库 (Uploaded Assets)
                         </div>
-                        <span style={{fontSize: '0.85rem', color: '#64748b', background: '#f1f5f9', padding: '4px 10px', borderRadius: '12px'}}>共计 3 个可用素材</span>
+                        <span style={{ fontSize: '0.85rem', color: '#64748b', background: '#f1f5f9', padding: '4px 10px', borderRadius: '12px' }}>共计 3 个可用素材</span>
                       </div>
-                      
+
                       <div className="assets-grid">
                         <div className="asset-card">
                           <div className="asset-thumb">

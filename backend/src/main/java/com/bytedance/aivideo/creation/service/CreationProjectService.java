@@ -7,7 +7,7 @@ import com.bytedance.aivideo.creation.entity.CreationProjectEntity;
 public interface CreationProjectService extends IService<CreationProjectEntity> {
     
     // 初始化创作项目
-    CreationProjectEntity createProject(String title, String description);
+    CreationProjectEntity createProject(String title, String description, String aspectRatio);
     
     // 绑定项目与解构模板
     CreationProjectEntity bindTemplate(String projectId, String templateId, Integer templateVersion);
@@ -19,7 +19,7 @@ public interface CreationProjectService extends IService<CreationProjectEntity> 
     Page<CreationProjectEntity> listProjects(int page, int size, String keyword);
 
     // 更新项目基础信息
-    CreationProjectEntity updateProjectBasics(String projectId, String title, String description);
+    CreationProjectEntity updateProjectBasics(String projectId, String title, String description, String aspectRatio);
 
     // 删除项目（逻辑删除）
     void deleteProject(String projectId);

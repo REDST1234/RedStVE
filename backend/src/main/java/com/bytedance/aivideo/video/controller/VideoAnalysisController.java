@@ -159,6 +159,18 @@ public class VideoAnalysisController {
     }
 
     /**
+     * 重新拆解模版（仅重置并执行 LLM 阶段）。
+     */
+    @PostMapping("/tasks/{taskId}/retry-llm")
+    public ApiResponse<Boolean> retryLlmOnly(@PathVariable("taskId") String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "taskId 不能为空");
+        }
+        videoAnalysisRetryService.retryLlmOnly(taskId);
+        return ApiResponse.success(Boolean.TRUE);
+    }
+
+    /**
      * Debug 模式手动触发 TimelineMatcher（多路时间轴归一）。
      */
     @PostMapping("/tasks/{taskId}/debug/timeline-match")

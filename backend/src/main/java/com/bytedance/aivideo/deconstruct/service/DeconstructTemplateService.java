@@ -7,6 +7,8 @@ import com.bytedance.aivideo.deconstruct.entity.DeconstructTemplateEntity;
 import com.bytedance.aivideo.deconstruct.mapper.DeconstructTemplateMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.bytedance.aivideo.infrastructure.vector.VectorInitService;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,13 +28,16 @@ public class DeconstructTemplateService {
 
     private final DeconstructTemplateMapper deconstructTemplateMapper;
     private final ObjectMapper objectMapper;
+    private final VectorInitService vectorInitService;
 
     public DeconstructTemplateService(
             DeconstructTemplateMapper deconstructTemplateMapper,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            @Lazy VectorInitService vectorInitService
     ) {
         this.deconstructTemplateMapper = deconstructTemplateMapper;
         this.objectMapper = objectMapper;
+        this.vectorInitService = vectorInitService;
     }
 
     /**
@@ -75,6 +80,10 @@ public class DeconstructTemplateService {
         entity.setTemplateJson(templateJson);
         entity.setSnapshotHash(snapshotHash);
         deconstructTemplateMapper.insert(entity);
+        
+        // 实时同步到向量库供推荐引擎使用
+        vectorInitService.syncSingleTemplate(entity);
+        
         return entity;
     }
 

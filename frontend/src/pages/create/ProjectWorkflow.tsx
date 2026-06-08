@@ -139,7 +139,7 @@ export default function CreateProjectWorkflow() {
     <div className="detail-page fade-in" style={{ borderColor: '#e0e7ff' }}>
       <div className="detail-header" style={{ background: '#f8fafc', justifyContent: 'space-between', borderBottom: 'none', paddingBottom: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button className="back-btn" onClick={() => navigate(`/create/detail/${projectId}`)} title="返回">
+          <button className="back-btn" onClick={() => navigate('/create')} title="返回项目列表">
             <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
             </svg>
@@ -175,7 +175,7 @@ export default function CreateProjectWorkflow() {
               </div>
 
               <div className="creation-upload-panel">
-                <div className="creation-upload-title">文本素材</div>
+                <div className="creation-upload-title">文本/卖点信息</div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <textarea
                     className="input-field"
@@ -223,7 +223,7 @@ export default function CreateProjectWorkflow() {
             <div className="creation-assets-columns">
               <AssetColumn title="视频" count={groupedAssets.video.length} items={groupedAssets.video} onDelete={deleteAsset} deletingAssetId={deletingAssetId} onAnalyze={() => confirmAssets('VIDEO')} isAnalyzing={confirmingAssets} selectedAssetId={selectedAsset?.materialBizId} onSelect={setSelectedAsset} />
               <AssetColumn title="图片" count={groupedAssets.image.length} items={groupedAssets.image} onDelete={deleteAsset} deletingAssetId={deletingAssetId} onAnalyze={() => confirmAssets('IMAGE')} isAnalyzing={confirmingAssets} selectedAssetId={selectedAsset?.materialBizId} onSelect={setSelectedAsset} />
-              <AssetColumn title="文本" count={groupedAssets.text.length} items={groupedAssets.text} onDelete={deleteAsset} deletingAssetId={deletingAssetId} onAnalyze={() => confirmAssets('TEXT')} isAnalyzing={confirmingAssets} selectedAssetId={selectedAsset?.materialBizId} onSelect={setSelectedAsset} />
+              <AssetColumn title="文本/卖点信息" count={groupedAssets.text.length} items={groupedAssets.text} onDelete={deleteAsset} deletingAssetId={deletingAssetId} onAnalyze={() => confirmAssets('TEXT')} isAnalyzing={confirmingAssets} selectedAssetId={selectedAsset?.materialBizId} onSelect={setSelectedAsset} />
             </div>
           </div>
         </div>
@@ -309,8 +309,23 @@ function AssetColumn({
             onClick={() => onSelect(item)}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-              <strong style={{ fontSize: '0.82rem', wordBreak: 'break-all', color: '#1e293b' }}>{extractFileName(item.originalFileName || item.filePath)}</strong>
-              <span style={{ fontSize: '0.72rem', color: '#64748b', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{item.status}</span>
+              <strong 
+                title={item.materialType === 'TEXT' ? item.textContent : extractFileName(item.originalFileName || item.filePath)}
+                style={{ 
+                  fontSize: '0.82rem', 
+                  wordBreak: 'break-all', 
+                  color: '#1e293b',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden'
+                }}
+              >
+                {item.materialType === 'TEXT' && item.textContent 
+                  ? item.textContent 
+                  : extractFileName(item.originalFileName || item.filePath)}
+              </strong>
+              <span style={{ fontSize: '0.72rem', color: '#64748b', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>{item.status}</span>
             </div>
             {item.fileSize ? <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '6px' }}>大小: {formatBytes(item.fileSize)}</div> : null}
             {item.duration ? <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '2px' }}>时长: {formatDuration(item.duration)}</div> : null}

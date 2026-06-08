@@ -1,0 +1,72 @@
+{
+  "audioName" : "晴日漫旅",
+  "globalMetrics" : {
+    "bpm" : 100,
+    "overallStyle" : "light_acoustic_folk",
+    "durationSeconds" : 86
+  },
+  "loudnessMetrics" : {
+    "integratedLufs" : -16.2,
+    "truePeakDbtp" : -2.3,
+    "loudnessRangeLra" : 5.3
+  },
+  "auditoryTimeline" : [ {
+    "timeRange" : {
+      "start" : 0,
+      "end" : 19
+    },
+    "auditoryPerception" : {
+      "moodVibe" : "明快清新，松弛治愈",
+      "energyLevel" : "medium",
+      "acousticFeatures" : [ "指弹原声吉他", "轻柔合成器垫音" ]
+    },
+    "bestMatchedSlot" : "hook",
+    "recommendedMaterial" : "晨间阳光穿透树叶的光斑空镜，居家桌面慢扫镜头"
+  }, {
+    "timeRange" : {
+      "start" : 19,
+      "end" : 39
+    },
+    "auditoryPerception" : {
+      "moodVibe" : "舒缓闲适，氛围感柔和",
+      "energyLevel" : "low",
+      "acousticFeatures" : [ "低音贝斯线条", "轻量电子鼓点", "吉他分解和弦" ]
+    },
+    "bestMatchedSlot" : "body",
+    "recommendedMaterial" : "城市街巷慢走、手冲咖啡制作、日常家居整理的生活化镜头"
+  }, {
+    "timeRange" : {
+      "start" : 39,
+      "end" : 60
+    },
+    "auditoryPerception" : {
+      "moodVibe" : "愉悦舒展，活力轻快",
+      "energyLevel" : "high",
+      "acousticFeatures" : [ "主音吉他旋律", "完整轻鼓组", "电钢琴点缀音色" ]
+    },
+    "bestMatchedSlot" : "climax",
+    "recommendedMaterial" : "郊野野餐、宠物奔跑、自驾沿途风景、朋友小聚欢笑画面"
+  }, {
+    "timeRange" : {
+      "start" : 60,
+      "end" : 86
+    },
+    "auditoryPerception" : {
+      "moodVibe" : "渐缓平静，余韵柔和",
+      "energyLevel" : "low",
+      "acousticFeatures" : [ "原声吉他分解", "垫音缓缓收束" ]
+    },
+    "bestMatchedSlot" : "outro",
+    "recommendedMaterial" : "日落远景、人物静坐放空、镜头缓缓拉远的收尾画面"
+  } ],
+  "mixDefaults" : {
+    "defaultMixLevel" : "BALANCED",
+    "fadeInFrames" : 24,
+    "fadeOutFrames" : 72,
+    "duckingRatio" : 0.7,
+    "duckingRecommended" : true,
+    "loopRecommended" : true
+  },
+  "audioId" : "4899c71a90e00d4acff4c951712eab3f_788347__mrcatfishing__calm-background-music",
+  "filePath" : "788347__mrcatfishing__calm-background-music.mp3"
+}

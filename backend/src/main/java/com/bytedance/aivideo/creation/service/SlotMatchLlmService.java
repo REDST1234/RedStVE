@@ -10,7 +10,9 @@ public interface SlotMatchLlmService {
     SlotMatchLlmResult matchSlots(
             String projectId,
             String versionId,
+            String projectDescription,
             String templateSnapshotJson,
-            List<CreativeMaterialEntity> materials
+            List<CreativeMaterialEntity> materials,
+            String targetAspectRatio
     );
 }

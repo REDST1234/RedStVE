@@ -180,6 +180,35 @@ export default function CreateProjectGapDetection() {
     }
   };
 
+  const handleRegenerateImage = async (segmentIndex: number, prompt: string) => {
+    if (!projectId) return;
+    try {
+      await creationApi.regenerateImage(projectId, segmentIndex, prompt);
+      showToast('已下发重绘任务，请稍候', 'success');
+      await loadMatchResult(true);
+
+      const poll = setInterval(async () => {
+        try {
+          const result = await creationApi.getMatchResult(projectId, matchResult?.versionId);
+          setMatchResult(result.data);
+          const currentItem = result.data.items.find(i => i.segmentIndex === segmentIndex);
+          if (currentItem && currentItem.imageGenStatus !== 'PENDING' && currentItem.imageGenStatus !== 'PROCESSING') {
+            clearInterval(poll);
+            if (currentItem.imageGenStatus === 'COMPLETED') {
+              showToast('该段落生图已重绘完成', 'success');
+            } else if (currentItem.imageGenStatus === 'FAILED') {
+              showToast('重绘失败: ' + currentItem.imageGenErrorMessage, 'error');
+            }
+          }
+        } catch (e) {
+          clearInterval(poll);
+        }
+      }, 3000);
+    } catch (error: any) {
+      showToast(error?.message || '触发重绘失败', 'error');
+    }
+  };
+
   return (
     <div className="detail-page fade-in" style={{ borderColor: '#dbeafe', background: 'linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)' }}>
       <div className="detail-header" style={{ background: 'rgba(248, 250, 252, 0.86)', justifyContent: 'space-between', backdropFilter: 'blur(18px)', borderBottom: 'none', paddingBottom: 0 }}>
@@ -293,6 +322,7 @@ export default function CreateProjectGapDetection() {
                   key={`${item.segmentIndex}-${item.segmentRole}`}
                   item={item}
                   onRetry={confirmAdaptation}
+                  onRegenerate={handleRegenerateImage}
                   adapting={adaptingSlots}
                 />
               ))}
@@ -315,9 +345,10 @@ export default function CreateProjectGapDetection() {
   );
 }
 
-function SegmentMatchCard({ item, onRetry, adapting }: {
+function SegmentMatchCard({ item, onRetry, onRegenerate, adapting }: {
   item: CreationMatchResultItem;
   onRetry: () => void;
+  onRegenerate: (segmentIndex: number, prompt: string) => void;
   adapting: boolean;
 }) {
   const status = (item.matchStatus || 'MISSING').toUpperCase();
@@ -391,10 +422,11 @@ function SegmentMatchCard({ item, onRetry, adapting }: {
           <EmptyStrategyState item={item} />
         )}
 
-        {status === 'MISSING' && item.imageGenEligible && (
+        {(status === 'MISSING' || status === 'PARTIAL') && item.imageGenEligible && (
           <ImageGenStatusPanel
             item={item}
             onRetry={onRetry}
+            onRegenerate={onRegenerate}
             adapting={adapting}
           />
         )}
@@ -416,7 +448,7 @@ function StrategyCardView({ strategy, index }: { strategy: StrategyCard; index: 
       {entries.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {entries.map(([key, value]) => (
-            <div key={key} style={{ display: 'grid', gridTemplateColumns: '92px 1fr', gap: '8px', fontSize: '0.78rem', lineHeight: 1.55 }}>
+            <div key={key} style={{ display: 'grid', gridTemplateColumns: 'minmax(92px, max-content) 1fr', gap: '8px', fontSize: '0.78rem', lineHeight: 1.55 }}>
               <span style={{ color: '#64748b' }}>{beautifyFieldName(key)}</span>
               <span style={{ color: '#0f172a', wordBreak: 'break-word' }}>{renderCompactValue(value)}</span>
             </div>
@@ -460,13 +492,20 @@ function EmptyStrategyState({ item }: { item: CreationMatchResultItem }) {
   );
 }
 
-function ImageGenStatusPanel({ item, onRetry, adapting }: {
+function ImageGenStatusPanel({ item, onRetry, onRegenerate, adapting }: {
   item: CreationMatchResultItem;
   onRetry: () => void;
+  onRegenerate: (segmentIndex: number, prompt: string) => void;
   adapting: boolean;
 }) {
   const genStatus = item.imageGenStatus || 'PENDING';
   const genMeta = IMAGE_GEN_STATUS_META[genStatus] || IMAGE_GEN_STATUS_META.PENDING;
+  const [editPrompt, setEditPrompt] = useState(item.imageGenPrompt || '');
+  
+  // Sync prop to state if it changes externally
+  useEffect(() => {
+    if (item.imageGenPrompt) setEditPrompt(item.imageGenPrompt);
+  }, [item.imageGenPrompt]);
 
   return (
     <div style={{
@@ -482,9 +521,33 @@ function ImageGenStatusPanel({ item, onRetry, adapting }: {
           <InfoPill label={item.imageGenCategory} />
         )}
       </div>
+      
+      <div style={{ marginBottom: '12px' }}>
+        <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '4px', fontWeight: 600 }}>提示词 (Prompt):</div>
+        <textarea
+          value={editPrompt}
+          onChange={(e) => setEditPrompt(e.target.value)}
+          disabled={genStatus === 'PROCESSING'}
+          style={{
+            width: '100%',
+            minHeight: '60px',
+            fontSize: '0.83rem',
+            color: '#334155',
+            lineHeight: 1.6,
+            padding: '8px 10px',
+            borderRadius: '8px',
+            border: '1px solid #cbd5e1',
+            background: 'rgba(255, 255, 255, 0.7)',
+            resize: 'vertical',
+            outline: 'none'
+          }}
+          placeholder="请输入或编辑生图提示词..."
+        />
+      </div>
+
       {item.imageGenDescription && (
         <div style={{ fontSize: '0.83rem', color: '#334155', lineHeight: 1.7, marginBottom: '8px' }}>
-          {item.imageGenDescription}
+          补充说明: {item.imageGenDescription}
         </div>
       )}
       {(genStatus === 'COMPLETED' && item.adaptedFileUrl) && (
@@ -517,15 +580,26 @@ function ImageGenStatusPanel({ item, onRetry, adapting }: {
           点击下方「重试生图」或页面顶部「确认并重新执行适配」将异步触发 AI 图片生成。
         </div>
       )}
-      {(genStatus === 'PENDING' || genStatus === 'FAILED') && (
+      {(genStatus === 'PENDING' || genStatus === 'FAILED' || genStatus === 'COMPLETED') && (
         <div style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
+          {genStatus !== 'COMPLETED' && (
+            <button
+              className="btn-outline"
+              onClick={onRetry}
+              disabled={adapting}
+              style={{ fontSize: '0.78rem', padding: '5px 14px' }}
+            >
+              {adapting ? '处理中...' : '重试生图'}
+            </button>
+          )}
           <button
-            className="btn-outline"
-            onClick={onRetry}
-            disabled={adapting}
+            className="btn-primary"
+            onClick={() => onRegenerate(item.segmentIndex!, editPrompt)}
+            disabled={adapting || !editPrompt.trim()}
             style={{ fontSize: '0.78rem', padding: '5px 14px' }}
+            title="执行重绘"
           >
-            {adapting ? '处理中...' : '重试生图'}
+            {adapting ? '处理中...' : '执行重绘'}
           </button>
         </div>
       )}
@@ -639,7 +713,15 @@ function beautifyFieldName(name: string) {
     x: '横向',
     y: '纵向',
     w: '宽度',
-    h: '高度'
+    h: '高度',
+    startTime: '开始时间',
+    endTime: '结束时间',
+    speed: '播放速度',
+    targetTotalDuration: '目标总时长',
+    targetWidth: '目标宽度',
+    targetHeight: '目标高度',
+    duckingLevel: '压混强度',
+    syncBeatCount: '同步节拍数'
   };
   return alias[name] || name;
 }

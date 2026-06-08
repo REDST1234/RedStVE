@@ -4,10 +4,8 @@
  */
 import React from 'react';
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig, Easing } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/NotoSansSC';
+import { getFontFamily, FontTier } from '../../fontSystem';
 import { LayoutMode, resolveTextLayout, TextPositionPreset } from './layout';
-
-const { fontFamily } = loadFont();
 
 interface FadeTitleProps {
   text: string;
@@ -20,6 +18,8 @@ interface FadeTitleProps {
   easing?: [number, number, number, number];
   textShadow?: string;
   maxWidth?: string | number;
+  /** 字体分层，默认 'title'（ZCOOL XiaoWei） */
+  fontTier?: FontTier;
 }
 
 export const FadeTitle: React.FC<FadeTitleProps> = ({
@@ -33,7 +33,9 @@ export const FadeTitle: React.FC<FadeTitleProps> = ({
   easing = [0.16, 1, 0.3, 1],
   textShadow = '0 2px 10px rgba(0,0,0,0.5)',
   maxWidth,
+  fontTier = 'title',
 }) => {
+  const fontFamily = getFontFamily(fontTier);
   const frame = useCurrentFrame();
   const { fps, durationInFrames, width, height } = useVideoConfig();
   const layout = resolveTextLayout({

@@ -4,10 +4,8 @@
  */
 import React from 'react';
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/NotoSansSC';
+import { getFontFamily, FontTier } from '../../fontSystem';
 import { LayoutMode, resolveTextLayout, TextPositionPreset } from './layout';
-
-const { fontFamily } = loadFont();
 
 interface MaskRevealTextProps {
   text: string;
@@ -24,6 +22,8 @@ interface MaskRevealTextProps {
   textAlign?: 'left' | 'center' | 'right';
   maxWidth?: string | number;
   maskPadding?: number;
+  /** 字体分层，默认 'subtitle'（Noto Sans SC） */
+  fontTier?: FontTier;
 }
 
 export const MaskRevealText: React.FC<MaskRevealTextProps> = ({
@@ -41,7 +41,9 @@ export const MaskRevealText: React.FC<MaskRevealTextProps> = ({
   textAlign,
   maxWidth = '88%',
   maskPadding = 16,
+  fontTier = 'subtitle',
 }) => {
+  const fontFamily = getFontFamily(fontTier);
   const frame = useCurrentFrame();
   const { durationInFrames, width, height } = useVideoConfig();
   const layout = resolveTextLayout({

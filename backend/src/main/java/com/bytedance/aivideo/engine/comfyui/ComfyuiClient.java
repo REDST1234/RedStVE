@@ -73,7 +73,7 @@ public class ComfyuiClient {
         } catch (BizException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new BizException(ErrorCode.ARK_API_ERROR, "ComfyUI upload 失败: " + ex.getMessage());
+            throw new BizException(ErrorCode.ARK_API_ERROR, "ComfyUI upload 失败: " + ex.toString());
         }
     }
 
@@ -112,7 +112,7 @@ public class ComfyuiClient {
         } catch (BizException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new BizException(ErrorCode.ARK_API_ERROR, "ComfyUI prompt 提交失败: " + ex.getMessage());
+            throw new BizException(ErrorCode.ARK_API_ERROR, "ComfyUI prompt 提交失败: " + ex.toString());
         }
     }
 
@@ -201,7 +201,7 @@ public class ComfyuiClient {
         } catch (BizException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new BizException(ErrorCode.ARK_API_ERROR, "ComfyUI 下载输出失败: " + ex.getMessage());
+            throw new BizException(ErrorCode.ARK_API_ERROR, "ComfyUI 下载输出失败: " + ex.toString());
         }
     }
 

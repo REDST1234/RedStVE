@@ -5,9 +5,7 @@
  */
 import React from 'react';
 import { Easing, interpolate, useCurrentFrame } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/NotoSansSC';
-
-const { fontFamily } = loadFont();
+import { getFontFamily, FontTier } from '../../fontSystem';
 
 type ChipVariant = 'filled' | 'outlined' | 'soft';
 
@@ -26,6 +24,8 @@ interface LabelChipProps {
   icon?: string;
   enterFrames?: number;
   textShadow?: string;
+  /** 字体分层，默认 'ui'（Inter 现代无衬线） */
+  fontTier?: FontTier;
 }
 
 const withAlpha = (color: string, opacity: number): string => {
@@ -138,7 +138,9 @@ export const LabelChip: React.FC<LabelChipProps> = ({
   icon,
   enterFrames = 14,
   textShadow = '0 1px 6px rgba(0,0,0,0.18)',
+  fontTier = 'ui',
 }) => {
+  const fontFamily = getFontFamily(fontTier);
   const frame = useCurrentFrame();
 
   // 轻量 pop-in：scale 0.85 → 1.0，无旋转无弹跳

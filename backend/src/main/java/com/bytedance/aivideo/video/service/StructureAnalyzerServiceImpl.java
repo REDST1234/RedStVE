@@ -49,35 +49,29 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
     private static final String DEFAULT_CATEGORY_NAME = "通用内容类";
 
     private static final Set<String> MACRO_CATEGORY_WHITELIST = Set.of(
-            "short_drama", "tutorial", "product_review", "vlog", "gameplay", "marketing", "editing", "motion_graphics"
-    );
+            "short_drama", "tutorial", "product_review", "vlog", "gameplay", "marketing", "editing", "motion_graphics");
 
     private static final Map<String, String> CATEGORY_ALIAS_MAP = new HashMap<>();
 
     private static final Set<String> MACRO_FIELD_NAME_HINTS = Set.of(
             "threshold", "frequency", "ratio", "rate", "distribution", "density",
             "strategy", "style", "transition", "motion", "cut", "bpm", "sync",
-            "pace", "hook", "selling", "cta", "socialProof", "shot", "scene"
-    );
+            "pace", "hook", "selling", "cta", "socialProof", "shot", "scene");
     private static final Set<String> ALLOWED_DYNAMIC_FIELD_TYPES = Set.of(
-            "STRING", "DOUBLE", "INTEGER", "BOOLEAN", "JSON"
-    );
+            "STRING", "DOUBLE", "INTEGER", "BOOLEAN", "JSON");
     private static final int MIN_NEW_FIELD_DESCRIPTION_LENGTH = 8;
 
     private static final Set<String> SCENARIO_LEAK_KEYWORDS = Set.of(
             "食堂", "校园", "学校", "地铁站", "教室", "宿舍", "办公室", "商场", "停车场", "工地",
-            "canteen", "campus", "classroom", "dorm", "office", "mall", "station"
-    );
+            "canteen", "campus", "classroom", "dorm", "office", "mall", "station");
 
     private static final Set<String> PERSON_LEAK_KEYWORDS = Set.of(
             "阿姨", "老师", "同学", "博主", "up主", "店员", "老板", "妈妈", "爸爸", "朋友",
-            "author", "creator", "nickname", "account", "idol", "teacher", "classmate"
-    );
+            "author", "creator", "nickname", "account", "idol", "teacher", "classmate");
 
     private static final Set<String> PLOT_LEAK_KEYWORDS = Set.of(
             "打架", "吵架", "分手", "逆袭", "告白", "抢救", "剧情", "反转", "台词",
-            "fight", "breakup", "plot", "twist", "dialogue", "confession"
-    );
+            "fight", "breakup", "plot", "twist", "dialogue", "confession");
 
     static {
         CATEGORY_ALIAS_MAP.put("school_canteen_short_drama", "short_drama");
@@ -100,17 +94,17 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
     private final EmbeddingModel embeddingModel;
 
     public StructureAnalyzerServiceImpl(ArkPayloadFactory arkPayloadFactory,
-                                        ArkResponsesClient arkResponsesClient,
-                                        CategoryKnowledgeMapper categoryKnowledgeMapper,
-                                        TimelineMatcherService timelineMatcherService,
-                                        KeyFrameMapper keyFrameMapper,
-                                        VideoAnalysisResultService videoAnalysisResultService,
-                                        DeconstructTemplateService deconstructTemplateService,
-                                        VideoTaskStageService videoTaskStageService,
-                                        ObjectMapper objectMapper,
-                                        com.bytedance.aivideo.config.ArkProperties arkProperties,
-                                        VectorStore vectorStore,
-                                        EmbeddingModel embeddingModel) {
+            ArkResponsesClient arkResponsesClient,
+            CategoryKnowledgeMapper categoryKnowledgeMapper,
+            TimelineMatcherService timelineMatcherService,
+            KeyFrameMapper keyFrameMapper,
+            VideoAnalysisResultService videoAnalysisResultService,
+            DeconstructTemplateService deconstructTemplateService,
+            VideoTaskStageService videoTaskStageService,
+            ObjectMapper objectMapper,
+            com.bytedance.aivideo.config.ArkProperties arkProperties,
+            VectorStore vectorStore,
+            EmbeddingModel embeddingModel) {
         this.arkPayloadFactory = arkPayloadFactory;
         this.arkResponsesClient = arkResponsesClient;
         this.categoryKnowledgeMapper = categoryKnowledgeMapper;
@@ -126,7 +120,8 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
     }
 
     @Override
-    public AnalysisOutput analyzeAndRefine(String taskId, TimelineMatchResult fatTimelineResult, List<KeyFrameEntity> keyFrames) {
+    public AnalysisOutput analyzeAndRefine(String taskId, TimelineMatchResult fatTimelineResult,
+            List<KeyFrameEntity> keyFrames) {
         // 1. 加载图片 Base64，并构建与发送顺序一致的 IMAGE 标注映射
         List<String> base64Images = new ArrayList<>();
         Map<String, String> imageTagByPath = new LinkedHashMap<>();
@@ -160,9 +155,9 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
 
         // 4. 组装 prompt 并调用大模型
         String prompt = String.format(ArkPromptTemplates.STRUCTURE_ANALYZER_UNIFIED, timelineMarkdown, categoryContext);
-        
+
         List<ArkInputMessage> messages = arkPayloadFactory.buildMultimodalInput(base64Images, prompt);
-        
+
         ArkResponseRequest request = new ArkResponseRequest();
         request.setModel(arkProperties.getModel());
         request.setMessages(messages);
@@ -195,7 +190,7 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
                 JsonNode ext = sanitizeResult.categoryExtNode();
                 String catId = sanitizeResult.normalizedCategoryId();
                 String catName = sanitizeResult.normalizedCategoryName();
-                
+
                 CategoryKnowledgeEntity catEntity = categoryKnowledgeMapper.selectById(catId);
                 if (catEntity == null) {
                     catEntity = new CategoryKnowledgeEntity();
@@ -206,11 +201,10 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
                     catEntity.setUsageCount(1);
                     sceneThreshold = extractThreshold(ext);
                     catEntity.setSceneThreshold(sceneThreshold);
-                    
+
                     if (ext.has("dynamicExtensionFields")) {
                         catEntity.setDynamicFields(objectMapper.writeValueAsString(
-                                buildKnowledgeFieldDefinitions(ext.get("dynamicExtensionFields"), null)
-                        ));
+                                buildKnowledgeFieldDefinitions(ext.get("dynamicExtensionFields"), null)));
                     }
                     if (ext.has("discoveredPromptOverrides")) {
                         catEntity.setPromptOverrides(ext.get("discoveredPromptOverrides").toString());
@@ -226,8 +220,9 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
                 }
                 // 同步特征至 VectorStore
                 syncToVectorStore(catEntity);
-                
-            } else if (sanitizeResult.normalizedCategoryId() != null && !sanitizeResult.normalizedCategoryId().isBlank()) {
+
+            } else if (sanitizeResult.normalizedCategoryId() != null
+                    && !sanitizeResult.normalizedCategoryId().isBlank()) {
                 String catId = sanitizeResult.normalizedCategoryId();
                 CategoryKnowledgeEntity catEntity = categoryKnowledgeMapper.selectById(catId);
                 if (catEntity != null && catEntity.getSceneThreshold() != null) {
@@ -242,7 +237,7 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
 
         // 7. 使用获得的品类专属 sceneThreshold，二次提纯 Timeline
         TimelineMatchResult refinedTimeline = timelineMatcherService.match(taskId, sceneThreshold);
-        
+
         return AnalysisOutput.builder()
                 .videoStructureTemplateJson(sanitizedLlmContent) // 使用清洗后的 JSON 落库
                 .refinedTimeline(refinedTimeline)
@@ -278,13 +273,15 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
         if (fatTimelineResult == null || fatTimelineResult.getTimelineSegments() == null) {
             return "";
         }
-        
+
         double maxCuttingVelocity = 0.0;
         List<String> resonances = new ArrayList<>();
         StringBuilder asrBuilder = new StringBuilder();
-        
-        for (com.bytedance.aivideo.video.dto.timeline.TimelineSegment segment : fatTimelineResult.getTimelineSegments()) {
-            if (segment.getVisualDynamics() != null && segment.getVisualDynamics().getCuttingVelocity() > maxCuttingVelocity) {
+
+        for (com.bytedance.aivideo.video.dto.timeline.TimelineSegment segment : fatTimelineResult
+                .getTimelineSegments()) {
+            if (segment.getVisualDynamics() != null
+                    && segment.getVisualDynamics().getCuttingVelocity() > maxCuttingVelocity) {
                 maxCuttingVelocity = segment.getVisualDynamics().getCuttingVelocity();
             }
             if (segment.getAudioVisualResonance() != null && !segment.getAudioVisualResonance().isBlank()) {
@@ -298,21 +295,23 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
                 }
             }
         }
-        
+
         String resonanceStr = String.join("、", resonances);
         String asrStr = asrBuilder.toString();
         // 截断 ASR 防止单次查询文本过大
         if (asrStr.length() > 600) {
             asrStr = asrStr.substring(0, 600) + "...";
         }
-        
-        List<Double> waveform = fatTimelineResult.getSystemMeta() != null ? fatTimelineResult.getSystemMeta().getVisualWaveform() : null;
+
+        List<Double> waveform = fatTimelineResult.getSystemMeta() != null
+                ? fatTimelineResult.getSystemMeta().getVisualWaveform()
+                : null;
         String waveformStr = waveform != null ? waveform.toString() : "[]";
         String visualFeature = String.format("切分速率峰值 %.2f次/秒", maxCuttingVelocity);
         if (!resonanceStr.isEmpty()) {
             visualFeature += "，共振: " + resonanceStr;
         }
-        
+
         return String.format("[画面波形: %s] [视听特征: %s] [文本: %s]", waveformStr, visualFeature, asrStr);
     }
 
@@ -320,21 +319,20 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
         if (semanticQuery == null || semanticQuery.isBlank()) {
             return "当前暂无特征查询。";
         }
-        
+
         try {
-            // 通过 Spring AI VectorStore 检索 Top 3 品类特征
             List<Document> topDocs = vectorStore.similaritySearch(
-                SearchRequest.builder().query(semanticQuery).topK(3).build()
-            );
+                    SearchRequest.builder().query(semanticQuery).topK(10).build());
             if (topDocs == null || topDocs.isEmpty()) {
                 return "当前暂无匹配的知识库历史数据。";
             }
-            
+
             StringBuilder sb = new StringBuilder();
             for (Document doc : topDocs) {
                 String catId = (String) doc.getMetadata().get("categoryId");
                 String catName = (String) doc.getMetadata().get("categoryName");
-                sb.append("- ").append(catId != null ? catId : "未知").append(" (").append(catName != null ? catName : "未知").append(")\n");
+                sb.append("- ").append(catId != null ? catId : "未知").append(" (")
+                        .append(catName != null ? catName : "未知").append(")\n");
                 sb.append("  提取特征: ").append(doc.getText()).append("\n");
             }
             return sb.toString();
@@ -368,15 +366,15 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
 
             ArrayNode oldDefinitions = buildKnowledgeFieldDefinitions(
                     objectMapper.readTree(dbCat.getDynamicFields()),
-                    null
-            );
+                    null);
             List<JsonNode> oldFieldsList = new ArrayList<>();
             oldDefinitions.forEach(oldFieldsList::add);
 
             // 合并逻辑：同名字段按类型兼容更新；新字段追加；冲突字段跳过并记录
             for (JsonNode newField : newDefinitions) {
                 String newFieldName = newField.has("fieldName") ? newField.get("fieldName").asText() : null;
-                if (newFieldName == null) continue;
+                if (newFieldName == null)
+                    continue;
                 int existingIdx = -1;
                 for (int i = 0; i < oldFieldsList.size(); i++) {
                     JsonNode old = oldFieldsList.get(i);
@@ -428,7 +426,8 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
     }
 
     private CategorySanitizeResult sanitizeCategoryExtensions(String taskId, JsonNode unifiedJson) {
-        ObjectNode root = unifiedJson instanceof ObjectNode ? (ObjectNode) unifiedJson : objectMapper.createObjectNode();
+        ObjectNode root = unifiedJson instanceof ObjectNode ? (ObjectNode) unifiedJson
+                : objectMapper.createObjectNode();
         ObjectNode ext = root.has("categoryExtensions") && root.get("categoryExtensions").isObject()
                 ? (ObjectNode) root.get("categoryExtensions")
                 : objectMapper.createObjectNode();
@@ -454,17 +453,18 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
         ext.put("discoveredCategoryName", normalizedCategoryName);
 
         if (!normalizedCategoryId.equals(rawCategoryId)) {
-            log.info("category normalized: taskId={}, rawCategoryId={}, normalizedCategoryId={}", taskId, rawCategoryId, normalizedCategoryId);
+            log.info("category normalized: taskId={}, rawCategoryId={}, normalizedCategoryId={}", taskId, rawCategoryId,
+                    normalizedCategoryId);
         }
 
         Set<String> existingFieldNames = new HashSet<>();
         CategoryKnowledgeEntity existingCategory = categoryKnowledgeMapper.selectById(normalizedCategoryId);
-        if (existingCategory != null && existingCategory.getDynamicFields() != null && !existingCategory.getDynamicFields().isBlank()) {
+        if (existingCategory != null && existingCategory.getDynamicFields() != null
+                && !existingCategory.getDynamicFields().isBlank()) {
             try {
                 ArrayNode knownDefinitions = buildKnowledgeFieldDefinitions(
                         objectMapper.readTree(existingCategory.getDynamicFields()),
-                        null
-                );
+                        null);
                 for (JsonNode knownField : knownDefinitions) {
                     String knownName = normalizeFieldName(knownField.path("fieldName").asText(""));
                     if (!knownName.isBlank()) {
@@ -482,7 +482,8 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
         if (rawFields != null && rawFields.isArray()) {
             for (JsonNode field : rawFields) {
                 if (!(field instanceof ObjectNode fieldObj)) {
-                    rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, "", "FORMAT_INVALID", field));
+                    rejected.add(
+                            DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, "", "FORMAT_INVALID", field));
                     continue;
                 }
                 String fieldName = normalizeFieldName(fieldObj.path("fieldName").asText(""));
@@ -491,19 +492,24 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
                 String description = normalizeDescription(fieldObj.path("description").asText(""));
 
                 if (fieldName.isBlank() || fieldType.isBlank() || fieldValue == null) {
-                    rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, fieldName, "FORMAT_INVALID", fieldObj));
+                    rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, fieldName,
+                            "FORMAT_INVALID", fieldObj));
                     continue;
                 }
                 if (containsLeak(fieldName) || containsLeak(description) || containsLeak(fieldValue.toString())) {
-                    rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, fieldName, detectLeakReason(fieldObj), fieldObj));
+                    rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, fieldName,
+                            detectLeakReason(fieldObj), fieldObj));
                     continue;
                 }
                 if (!isMacroFeatureField(fieldName)) {
-                    rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, fieldName, "NON_MACRO_FEATURE", fieldObj));
+                    rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, fieldName,
+                            "NON_MACRO_FEATURE", fieldObj));
                     continue;
                 }
-                if (!existingFieldNames.contains(fieldName) && description.replaceAll("\\s+", "").length() < MIN_NEW_FIELD_DESCRIPTION_LENGTH) {
-                    rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, fieldName, "NEW_FIELD_DESCRIPTION_REQUIRED", fieldObj));
+                if (!existingFieldNames.contains(fieldName)
+                        && description.replaceAll("\\s+", "").length() < MIN_NEW_FIELD_DESCRIPTION_LENGTH) {
+                    rejected.add(DiscoveryFieldCandidate.reject(taskId, normalizedCategoryId, fieldName,
+                            "NEW_FIELD_DESCRIPTION_REQUIRED", fieldObj));
                     continue;
                 }
 
@@ -524,8 +530,10 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
 
         if (!rejected.isEmpty()) {
             for (DiscoveryFieldCandidate candidate : rejected) {
-                log.info("category field rejected: taskId={}, categoryId={}, fieldName={}, conflictReason={}, status={}",
-                        candidate.taskId(), candidate.categoryId(), candidate.fieldName(), candidate.conflictReason(), candidate.status());
+                log.info(
+                        "category field rejected: taskId={}, categoryId={}, fieldName={}, conflictReason={}, status={}",
+                        candidate.taskId(), candidate.categoryId(), candidate.fieldName(), candidate.conflictReason(),
+                        candidate.status());
             }
         }
         log.info("category sanitize finished: taskId={}, categoryId={}, acceptedFieldCount={}, rejectedFieldCount={}",
@@ -603,11 +611,9 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
     }
 
     private String detectLeakReason(ObjectNode fieldObj) {
-        String all = (
-                fieldObj.path("fieldName").asText("") + " " +
+        String all = (fieldObj.path("fieldName").asText("") + " " +
                 fieldObj.path("description").asText("") + " " +
-                String.valueOf(fieldObj.path("fieldValue"))
-        ).toLowerCase(Locale.ROOT);
+                String.valueOf(fieldObj.path("fieldValue"))).toLowerCase(Locale.ROOT);
         if (hitKeyword(all, SCENARIO_LEAK_KEYWORDS)) {
             return "SCENARIO_LEAK";
         }
@@ -632,8 +638,7 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
     private record CategorySanitizeResult(
             String normalizedCategoryId,
             String normalizedCategoryName,
-            ObjectNode categoryExtNode
-    ) {
+            ObjectNode categoryExtNode) {
     }
 
     private record DiscoveryFieldCandidate(
@@ -642,9 +647,9 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
             String fieldName,
             String conflictReason,
             String status,
-            JsonNode rawPayload
-    ) {
-        static DiscoveryFieldCandidate reject(String taskId, String categoryId, String fieldName, String conflictReason, JsonNode rawPayload) {
+            JsonNode rawPayload) {
+        static DiscoveryFieldCandidate reject(String taskId, String categoryId, String fieldName, String conflictReason,
+                JsonNode rawPayload) {
             return new DiscoveryFieldCandidate(taskId, categoryId, fieldName, conflictReason, "REJECTED", rawPayload);
         }
     }
@@ -667,19 +672,20 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
             if (catEntity.getDynamicFields() == null || catEntity.getDynamicFields().isBlank()) {
                 return;
             }
-            
+
             StringBuilder contentBuilder = new StringBuilder();
             contentBuilder.append("品类: ").append(catEntity.getCategoryName()).append("\n");
             if (catEntity.getSceneThreshold() != null) {
                 contentBuilder.append("- scene_threshold (DOUBLE): 运行时视频拆解可参考的镜头切分阈值 hint = ")
                         .append(catEntity.getSceneThreshold()).append("\n");
             }
-            
+
             JsonNode fields = buildKnowledgeFieldDefinitions(objectMapper.readTree(catEntity.getDynamicFields()), null);
             if (fields.isArray()) {
                 for (JsonNode field : fields) {
                     String name = field.has("fieldName") ? field.get("fieldName").asText() : "";
-                    String type = field.has("fieldType") ? field.get("fieldType").asText("").toUpperCase(Locale.ROOT) : "UNKNOWN";
+                    String type = field.has("fieldType") ? field.get("fieldType").asText("").toUpperCase(Locale.ROOT)
+                            : "UNKNOWN";
                     String desc = field.has("description") ? field.get("description").asText() : "";
                     if (!name.isBlank()) {
                         contentBuilder.append("- ").append(name)
@@ -693,12 +699,11 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
                     }
                 }
             }
-            
+
             Map<String, Object> metadata = Map.of(
-                "categoryId", catEntity.getCategoryId(),
-                "categoryName", catEntity.getCategoryName() != null ? catEntity.getCategoryName() : ""
-            );
-            
+                    "categoryId", catEntity.getCategoryId(),
+                    "categoryName", catEntity.getCategoryName() != null ? catEntity.getCategoryName() : "");
+
             // Chroma 会自动覆盖具有相同 ID 的文档（取决于 VectorStore 的具体实现，通常以 id 为主键）
             Document doc = new Document(catEntity.getCategoryId(), contentBuilder.toString(), metadata);
             vectorStore.add(List.of(doc));
@@ -846,7 +851,7 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
     public AnalysisOutput triggerLlmAnalysis(String taskId) {
         videoTaskStageService.initStageIfAbsent(taskId, VideoTaskStageService.STAGE_TYPE_TIMELINE);
         videoTaskStageService.initStageIfAbsent(taskId, VideoTaskStageService.STAGE_TYPE_LLM);
-        
+
         videoTaskStageService.markRunning(taskId, VideoTaskStageService.STAGE_TYPE_TIMELINE);
         // 1. 获取胖数据
         TimelineMatchResult fatTimeline;
@@ -858,7 +863,8 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
             videoTaskStageService.markSuccess(taskId, VideoTaskStageService.STAGE_TYPE_TIMELINE);
         } catch (Exception e) {
             videoTaskStageService.markFailed(taskId, VideoTaskStageService.STAGE_TYPE_TIMELINE, e.getMessage());
-            videoAnalysisResultService.markTaskFailed(taskId, VideoTaskStageService.STAGE_TYPE_TIMELINE, e.getMessage());
+            videoAnalysisResultService.markTaskFailed(taskId, VideoTaskStageService.STAGE_TYPE_TIMELINE,
+                    e.getMessage());
             throw e;
         }
 
@@ -925,8 +931,7 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
                 new LambdaQueryWrapper<KeyFrameEntity>()
                         .eq(KeyFrameEntity::getTaskId, taskId)
                         .isNull(KeyFrameEntity::getDeletedAt)
-                        .orderByAsc(KeyFrameEntity::getFrameIndex)
-        );
+                        .orderByAsc(KeyFrameEntity::getFrameIndex));
     }
 
     private void saveAndPublishLlmResult(String taskId, TimelineMatchResult fatTimeline, AnalysisOutput output) {
@@ -937,8 +942,7 @@ public class StructureAnalyzerServiceImpl implements StructureAnalyzerService {
                     taskId,
                     fatTimelineJson,
                     refinedTimelineJson,
-                    output.getVideoStructureTemplateJson()
-            );
+                    output.getVideoStructureTemplateJson());
             log.info("llm timeline saved: taskId={}", taskId);
         } catch (Exception e) {
             log.error("llm timeline save failed: taskId={}", taskId, e);

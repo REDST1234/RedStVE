@@ -6,7 +6,7 @@
 
 1. BGM 推荐结果如何进入创作主链，而不是停留在独立调试能力；
 2. 项目级“已选 BGM”如何落库、如何回查、如何参与编排；
-3. FFmpeg 适配链如何消费 BGM，特别是 `AUDIO_DUCKING`、纯 BGM 覆盖、无原音视频兜底等场景；
+3. 纯 BGM 覆盖、无原音视频兜底等场景的处理策略；
 4. Remotion 最终渲染如何使用同一份 BGM 事实源；
 5. 如何避免“推荐协议一套、编排协议一套、渲染协议又一套”的多口径漂移。
 
@@ -30,9 +30,9 @@
    - TypeScript 侧 `CompositionScriptSchema` 已定义顶层 `bgm`；
    - `DynamicVideoRenderer` 会将 `script.bgm` 渲染为全局音轨。
 
-3. **FFmpeg 侧具备 BGM 相关执行器基础**
-   - `AUDIO_DUCKING` 已具备 `sidechaincompress + amix` 的协议能力；
-   - 无原音轨素材时已有 `anullsrc` 兜底思路。
+3. **FFmpeg 侧不再承担全局 BGM 混音**
+   - 早期 `AUDIO_DUCKING` 设计引发了单段渲染无全局 BGM 事实源的架构冲突；
+   - 现已将压混策略降级为 NO-OP，并从 LLM 提示词中彻底移除。
 
 ### 6.2.2 当前缺口
 
@@ -47,9 +47,9 @@
    - `VideoOrchestrationService` 目前主要基于 `projectDescription + assetsJson` 编排；
    - 没有明确将“已选 BGM”注入 `CompositionScript.bgm`。
 
-3. **FFmpeg 适配链尚未显式接入 BGM 文件源**
-   - `AUDIO_DUCKING` 假设存在第二路 `[1:a]`；
-   - 但当前编排器并未统一维护“所选 BGM 文件路径 -> 第二音轨输入”的接线逻辑。
+3. **FFmpeg 适配链已彻底剥离 BGM 消费**
+   - 早期 `AUDIO_DUCKING` 假设存在第二路 `[1:a]` 导致崩溃；
+   - 现已停止在预处理阶段注入 BGM，全局配乐全部交给 Remotion。
 
 4. **协议口径存在漂移风险**
    - Remotion 编排 Prompt 中存在 `media.audio` 语义；
@@ -123,7 +123,7 @@
 
 ### 6.3.5 “先项目绑定，再策略消费”
 
-任何 `AUDIO_DUCKING`、BGM loop、fade、最终渲染都不应该直接依赖临时请求参数，而应该依赖：
+任何全局 BGM 混音、loop、fade、最终渲染都不应该直接依赖临时请求参数，而应该依赖：
 
 - 项目已绑定的 BGM 记录；
 - 或者明确版本化的 BGM 绑定快照。
@@ -149,9 +149,8 @@ BGM 接入必须满足：
                                                     ▼
                                     槽位匹配 / 缺口识别 / 策略生成
                                                     │
-                                                    ├── FFmpeg 适配链消费 BGM
-                                                    │     - AUDIO_DUCKING
-                                                    │     - 无原音视频叠加 BGM
+                                                    ├── FFmpeg 适配链 (不再消费 BGM)
+                                                    │     - 仅作基础裁切、光感、画幅调整
                                                     │
                                                     ▼
                                     CompositionScript 生成时注入 top-level bgm
@@ -406,8 +405,8 @@ BGM 接入必须满足：
    - 已实现：对 `CompositionScript.bgm` 做最终覆盖，确保 `src` 以项目当前已选 BGM 为准；
 
 2. `AdaptationOrchestratorServiceImpl`
-   - 若策略链中存在 `AUDIO_DUCKING` 或“纯 BGM 覆盖”策略，则读取已选 BGM；
-   - 当前状态：**尚未完成与项目级 BGM 绑定表的正式接线**，仍属于下一阶段；
+   - 不再负责 BGM 消费；
+   - 预处理阶段与全局配乐解耦。
 
 3. `VideoOrchestrationService`
    - 生成 `CompositionScript` 时注入 `bgm` 顶层对象；
@@ -426,56 +425,22 @@ BGM 接入必须满足：
 
 ## 6.8 FFmpeg 适配链接入方案
 
-### 6.8.1 统一原则
+### 6.8.1 统一解耦原则
 
-FFmpeg 阶段对 BGM 的使用只分两类：
+FFmpeg 阶段**彻底剥离**对全局 BGM 的处理。
+早期引入的 `AUDIO_DUCKING`（通过 `sidechaincompress` 压混 BGM）因缺乏全局时间线输入，导致架构断层，引发 `Invalid file index 1` 错误。
 
-1. **局部混音处理**
-   - 例如 `AUDIO_DUCKING`
-   - 目标是在片段级输出里先做基础混音
+现已确立规则：
+- 预处理阶段的适配器（Orchestrator）仅负责处理**视觉增强**（如裁切、光感、局部模糊）和**内建音轨保护**。
+- 不传入 BGM 参数。
+- 一切 BGM 混音、压混（ducking）、无音轨兜底全部推迟到 Remotion 阶段进行。
 
-2. **全局成片配乐**
-   - 由 Remotion 顶层 `bgm` 负责
+### 6.8.2 命令审计要求
 
-P0 推荐策略：**不要在每个片段都硬叠完整 BGM**。  
-片段适配阶段只在“确有必要”时做局部混音，否则保留源视频音轨，最终全局配乐交给 Remotion。
+所有预处理 FFmpeg 命令必须落库到 `creation_ffmpeg_command_log`，至少记录：
 
-### 6.8.2 `AUDIO_DUCKING` 的完整接法
-
-当前 `AUDIO_DUCKING` 已假设：
-
-- `[0:a]` = 原视频口播音轨
-- `[1:a]` = BGM
-
-要让它真正闭环，编排器必须在命令组装阶段：
-
-1. 读取当前项目已选 BGM 的 `src_path`
-2. 将该 BGM 作为**额外输入**注入 ffmpeg 命令
-3. 保证 `filter_complex` 中 `[1:a]` 真实存在
-
-推荐命令形态：
-
-```bash
-ffmpeg -i input_video.mp4 -i selected_bgm.mp3 \
-  -filter_complex "[1:a][0:a]sidechaincompress=threshold=0.08:ratio=5.0:attack=200:release=1000[bgm_ducked];[0:a][bgm_ducked]amix=inputs=2:duration=first:dropout_transition=2[outa]" \
-  -map 0:v? -map [outa] output.mp4
-```
-
-### 6.8.3 无原音轨视频
-
-若素材本身无音轨：
-
-- `AUDIO_DUCKING` 不应被视为失败；
-- 直接退化为“保留 BGM 原声输出”；
-- 或改由最终 Remotion 全局 BGM 处理。
-
-### 6.8.4 命令审计要求
-
-所有使用 BGM 的 FFmpeg 命令必须落库到 `creation_ffmpeg_command_log`，至少记录：
-
-- 真实输入路径（包含 BGM 路径）
+- 真实输入路径
 - 最终完整命令
-- 是否启用 ducking
 - 出错原因
 
 ---
@@ -651,7 +616,6 @@ P0 不建议为 BGM 单独引入复杂项目状态机。只需要：
 - `select/get/delete bgm` API：**已实现**
 - `generateVideo()` 读取当前项目已选 BGM 并注入编排主链：**已实现**
 - `CompositionScript.bgm` 的 `mixLevel -> volume` 归一化：**已实现**
-- `AUDIO_DUCKING` 与项目级 BGM 绑定表正式接线：**未完成**
 
 交付结果：
 
@@ -660,9 +624,8 @@ P0 不建议为 BGM 单独引入复杂项目状态机。只需要：
 
 ### P1：混音与适配深化
 
-1. `AUDIO_DUCKING` 真正接上第二音轨输入
-2. 支持原音 + BGM 智能闪避
-3. 命令审计补充 BGM 输入信息
+1. 推进 Remotion 端的全局音量调度
+2. 支持原音 + BGM 在前端智能闪避
 
 交付结果：
 
@@ -684,8 +647,8 @@ P0 不建议为 BGM 单独引入复杂项目状态机。只需要：
 1. **保留现有 BGM 推荐子系统，不重做召回层**
 2. **新增项目级 BGM 绑定记录，作为唯一事实源**
 3. **统一顶层 `CompositionScript.bgm` 为全局配乐协议**
-4. **FFmpeg 片段适配阶段仅在必要时消费 BGM，主配乐以 Remotion 为准**
-5. **先做“推荐 -> 选择 -> 绑定 -> 渲染”最小闭环，再接入 `AUDIO_DUCKING` 完整混音**
+4. **FFmpeg 片段适配阶段彻底剥离 BGM 消费，主配乐以 Remotion 为唯一终点**
+5. **废弃 AUDIO_DUCKING 策略，由前端基于轨道音量控制解决压混需求**
 
 这套设计能最大化复用当前已有成果，又能避免：
 
@@ -718,10 +681,7 @@ P0 不建议为 BGM 单独引入复杂项目状态机。只需要：
    负责将带有 `bgm` 的脚本提交给渲染服务
 
 7. `AdaptationOrchestratorServiceImpl`  
-   负责在 `AUDIO_DUCKING` 场景下将 BGM 作为第二输入接入 FFmpeg
+   负责纯视觉与简单音轨兜底适配，已解耦 BGM 注入。
 
-8. `AudioDuckingExecutor`  
-   负责具体混音滤镜片段构造
-
-9. `remotion-service/src/DynamicVideoRenderer.tsx`  
-   负责最终顶层 `bgm` 的 Remotion 消费与播放
+8. `remotion-service/src/DynamicVideoRenderer.tsx`  
+   负责最终顶层 `bgm` 的 Remotion 消费、播放以及动态混音调度。

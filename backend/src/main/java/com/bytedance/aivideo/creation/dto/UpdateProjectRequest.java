@@ -13,4 +13,6 @@ public class UpdateProjectRequest {
     private String title;
 
     private String description;
+
+    private String aspectRatio;
 }

@@ -1,0 +1,97 @@
+{
+  "audioId": "bgm_ukulele_happy_001",
+  "audioName": "阳光午后",
+  "filePath": "854594__sergequadrado__the-best-day-ever-loop.mp3",
+  "globalMetrics": {
+    "bpm": 128,
+    "overallStyle": "acoustic_folk_happy",
+    "durationSeconds": 36.0
+  },
+  "mixDefaults": {
+    "defaultMixLevel": "BALANCED",
+    "loopRecommended": true,
+    "fadeInFrames": 15,
+    "fadeOutFrames": 15,
+    "duckingRecommended": true,
+    "duckingRatio": 0.25
+  },
+  "loudnessMetrics": {
+    "integratedLufs": -15.8,
+    "truePeakDbtp": -1.2,
+    "loudnessRangeLra": 4.0
+  },
+  "auditoryTimeline": [
+    {
+      "timelineId": "t_01",
+      "timeRange": {
+        "start": 0.0,
+        "end": 9.0
+      },
+      "auditoryPerception": {
+        "energyLevel": 4,
+        "moodVibe": "轻松愉快，温暖治愈",
+        "acousticFeatures": [
+          "尤克里里扫弦",
+          "清亮的原声乐器质感"
+        ],
+        "perceivedPace": "medium"
+      },
+      "recommendedMaterial": "户外草坪野餐的慢动作特写、阳光透过树叶的斑驳光影、宠物在草地上奔跑的视角",
+      "bestMatchedSlot": "hook"
+    },
+    {
+      "timelineId": "t_02",
+      "timeRange": {
+        "start": 9.0,
+        "end": 18.0
+      },
+      "auditoryPerception": {
+        "energyLevel": 6,
+        "moodVibe": "悠闲行进，生活气息",
+        "acousticFeatures": [
+          "加入轻巧的打击乐",
+          "柔和的口哨声点缀"
+        ],
+        "perceivedPace": "medium"
+      },
+      "recommendedMaterial": "友人谈笑风生的中景镜头、单车在林荫道滑过的第一视角、手拿冷饮漫步的跟随运镜",
+      "bestMatchedSlot": "body"
+    },
+    {
+      "timelineId": "t_03",
+      "timeRange": {
+        "start": 18.0,
+        "end": 27.0
+      },
+      "auditoryPerception": {
+        "energyLevel": 8,
+        "moodVibe": "欢欣鼓舞，快乐达到顶点",
+        "acousticFeatures": [
+          "多声部乐器叠加",
+          "拍手声节奏强化"
+        ],
+        "perceivedPace": "fast"
+      },
+      "recommendedMaterial": "多人欢聚跳跃的慢动作特写、高频切镜展示多处快乐场景、绚丽的户外游乐设施全景",
+      "bestMatchedSlot": "climax"
+    },
+    {
+      "timelineId": "t_04",
+      "timeRange": {
+        "start": 27.0,
+        "end": 36.0
+      },
+      "auditoryPerception": {
+        "energyLevel": 3,
+        "moodVibe": "宁静回味，惬意收尾",
+        "acousticFeatures": [
+          "乐器声逐渐稀疏",
+          "保留最后的一串余韵扫弦"
+        ],
+        "perceivedPace": "slow"
+      },
+      "recommendedMaterial": "夕阳下远山的剪影、空旷的海滩空镜头、渐入模糊的人物背影，留白感强",
+      "bestMatchedSlot": "outro"
+    }
+  ]
+}

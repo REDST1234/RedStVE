@@ -57,7 +57,16 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   if (!response.ok) {
     const errorText = await response.text()
-    throw new Error(`HTTP ${response.status}: ${errorText}`)
+    let errorMessage = `HTTP ${response.status}: ${errorText}`
+    try {
+      const errorJson = JSON.parse(errorText)
+      if (errorJson.message) {
+        errorMessage = errorJson.message
+      }
+    } catch (e) {
+      // ignore
+    }
+    throw new Error(errorMessage)
   }
 
   return (await response.json()) as T

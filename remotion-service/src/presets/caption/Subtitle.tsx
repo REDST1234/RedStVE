@@ -3,9 +3,7 @@
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/NotoSansSC';
-
-const { fontFamily } = loadFont();
+import { getFontFamily, FontTier } from '../../fontSystem';
 
 interface SubtitleProps {
   text: string;
@@ -13,6 +11,8 @@ interface SubtitleProps {
   color?: string;
   bgColor?: string;
   position?: 'bottom_center' | 'top_center' | 'center';
+  /** 字体分层，默认 'subtitle'（Noto Sans SC 高可读性） */
+  fontTier?: FontTier;
 }
 
 export const Subtitle: React.FC<SubtitleProps> = ({
@@ -21,7 +21,9 @@ export const Subtitle: React.FC<SubtitleProps> = ({
   color = '#FFFFFF',
   bgColor = 'rgba(0,0,0,0.6)',
   position = 'bottom_center',
+  fontTier = 'subtitle',
 }) => {
+  const fontFamily = getFontFamily(fontTier);
   if (!text) return null;
 
   const positionStyle: React.CSSProperties = (() => {

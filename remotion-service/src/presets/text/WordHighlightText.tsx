@@ -4,10 +4,8 @@
  */
 import React from 'react';
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/NotoSansSC';
+import { getFontFamily, FontTier } from '../../fontSystem';
 import { LayoutMode, resolveTextLayout, TextPositionPreset } from './layout';
-
-const { fontFamily } = loadFont();
 
 interface WordHighlightTextProps {
   text?: string;
@@ -26,6 +24,8 @@ interface WordHighlightTextProps {
   gap?: number;
   textAlign?: 'left' | 'center' | 'right';
   highlightScale?: number;
+  /** 字体分层，默认 'subtitle'（Noto Sans SC） */
+  fontTier?: FontTier;
 }
 
 const normalizeToken = (value: string): string => value.trim().toLowerCase();
@@ -47,7 +47,9 @@ export const WordHighlightText: React.FC<WordHighlightTextProps> = ({
   gap = 10,
   textAlign,
   highlightScale = 1.08,
+  fontTier = 'subtitle',
 }) => {
+  const fontFamily = getFontFamily(fontTier);
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
   const layout = resolveTextLayout({

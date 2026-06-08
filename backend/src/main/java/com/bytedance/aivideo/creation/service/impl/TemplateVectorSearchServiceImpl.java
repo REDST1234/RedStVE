@@ -28,7 +28,12 @@ public class TemplateVectorSearchServiceImpl implements TemplateVectorSearchServ
     public List<TemplateCandidate> searchCandidates(String queryText, int topK) {
         log.info("开始在 creation_template 集合中检索模板候选，topK={}", topK);
         
-        SearchRequest searchRequest = SearchRequest.builder().query(queryText).topK(topK).build();
+        // Spring AI 默认有 similarityThreshold 截断（例如 0.75），导致即使指定了 topK 也会被过滤
+        SearchRequest searchRequest = SearchRequest.builder()
+                .query(queryText)
+                .topK(topK)
+                .similarityThreshold(0.0) // 也可以用 similarityThresholdAll()，这里直接传 0.0 避免版本差异
+                .build();
         List<Document> documents = vectorStore.similaritySearch(searchRequest);
         
         List<TemplateCandidate> candidates = new ArrayList<>();
