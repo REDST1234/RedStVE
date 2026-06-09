@@ -6,6 +6,7 @@ target/
 *.war
 *.ear
 /backend/.m2-repo/
+/backend/storage/*
 
 # === Node / Frontend ===
 node_modules/

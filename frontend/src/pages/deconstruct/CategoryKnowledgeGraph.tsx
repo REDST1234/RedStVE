@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useToast } from '../../contexts/ToastContext';
 

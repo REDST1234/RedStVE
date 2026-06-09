@@ -23,6 +23,8 @@ import com.bytedance.aivideo.creation.dto.MatchTriggerResponse;
 import com.bytedance.aivideo.creation.dto.ProjectBgmBindingResponse;
 import com.bytedance.aivideo.creation.dto.ProjectBgmSelectRequest;
 import com.bytedance.aivideo.creation.dto.RenderFromJsonResponse;
+import com.bytedance.aivideo.creation.dto.CreationGenerateScriptRequest;
+import com.bytedance.aivideo.creation.dto.CreationRenderScriptRequest;
 import com.bytedance.aivideo.creation.dto.TimelineSegmentResponse;
 import com.bytedance.aivideo.creation.dto.UpdateProjectRequest;
 import com.bytedance.aivideo.creation.dto.UploadCreativeAssetResponse;
@@ -39,6 +41,7 @@ import com.bytedance.aivideo.creation.service.CreativeMaterialService;
 import com.bytedance.aivideo.creation.service.SlotMatcherService;
 import com.bytedance.aivideo.creation.service.TemplateRecommendService;
 import jakarta.validation.Valid;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.*;
@@ -65,6 +68,7 @@ public class CreationProjectController {
     private final TemplateRecommendService templateRecommendService;
     private final com.bytedance.aivideo.creation.service.BgmRecommendService bgmRecommendService;
     private final com.bytedance.aivideo.creation.service.CreationProjectBgmBindingService creationProjectBgmBindingService;
+    private final ObjectMapper objectMapper;
 
     public CreationProjectController(
             CreationProjectService creationProjectService,
@@ -75,7 +79,8 @@ public class CreationProjectController {
             CreativeMaterialGridMapper creativeMaterialGridMapper,
             TemplateRecommendService templateRecommendService,
             com.bytedance.aivideo.creation.service.BgmRecommendService bgmRecommendService,
-            com.bytedance.aivideo.creation.service.CreationProjectBgmBindingService creationProjectBgmBindingService
+            com.bytedance.aivideo.creation.service.CreationProjectBgmBindingService creationProjectBgmBindingService,
+            ObjectMapper objectMapper
     ) {
         this.creationProjectService = creationProjectService;
         this.creativeMaterialService = creativeMaterialService;
@@ -86,6 +91,7 @@ public class CreationProjectController {
         this.templateRecommendService = templateRecommendService;
         this.bgmRecommendService = bgmRecommendService;
         this.creationProjectBgmBindingService = creationProjectBgmBindingService;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping
@@ -376,6 +382,32 @@ public class CreationProjectController {
         return ApiResponse.success(Boolean.TRUE);
     }
 
+    @PostMapping("/{projectId}/generate-script")
+    public ApiResponse<Boolean> generateScript(
+            @PathVariable("projectId") String projectId,
+            @RequestBody(required = false) CreationGenerateScriptRequest request
+    ) {
+        creationProjectService.generateScript(
+                projectId, 
+                request == null ? null : request.getVersionStrategy(), 
+                request == null ? null : request.getAspectRatio()
+        );
+        return ApiResponse.success(Boolean.TRUE);
+    }
+
+    @PostMapping("/{projectId}/render-script")
+    public ApiResponse<Boolean> renderScript(
+            @PathVariable("projectId") String projectId,
+            @RequestBody CreationRenderScriptRequest request
+    ) {
+        creationProjectService.renderScript(
+                projectId, 
+                objectMapper.convertValue(request.getCompositionScript(), CompositionScript.class), 
+                request.getAspectRatio()
+        );
+        return ApiResponse.success(Boolean.TRUE);
+    }
+
     @GetMapping("/{projectId}/render-status")
     public ApiResponse<com.bytedance.aivideo.engine.remotion.dto.RenderResponse> getRenderStatus(@PathVariable("projectId") String projectId) {
         com.bytedance.aivideo.engine.remotion.dto.RenderResponse status = creationProjectService.getRenderStatus(projectId);
@@ -459,6 +491,7 @@ public class CreationProjectController {
         response.setTemplateId(entity.getTemplateId());
         response.setTemplateSnapshotId(entity.getTemplateSnapshotId());
         response.setAspectRatio(entity.getRenderAspectRatio());
+        response.setDraftScriptJson(entity.getDraftScriptJson());
         response.setCreatedAt(toUtc(entity.getCreatedAt()));
         response.setUpdatedAt(toUtc(entity.getUpdatedAt()));
         return response;

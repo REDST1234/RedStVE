@@ -29,6 +29,8 @@ public class CreationProjectEntity {
 
     private String latestRenderId;
     
+    private String draftScriptJson;
+    
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
     

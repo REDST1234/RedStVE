@@ -17,6 +17,7 @@ public class CreateProjectResponse {
     private String templateId;
     private String templateSnapshotId;
     private String aspectRatio;
+    private String draftScriptJson;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 }

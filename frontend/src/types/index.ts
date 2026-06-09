@@ -119,6 +119,7 @@ export interface CreationProjectData {
   templateId?: string;
   aspectRatio?: string;
   renderAspectRatio?: string;
+  draftScriptJson?: string;
   createdAt?: string;
   updatedAt?: string;
 }

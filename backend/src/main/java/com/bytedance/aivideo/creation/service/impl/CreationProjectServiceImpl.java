@@ -260,13 +260,14 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         String canvasBrief = buildCanvasBrief(normalizedAspectRatio, targetCanvas);
 
         if (script == null) {
-            // 调用 LLM 智能编排
+            // 调用 LLM 智能编排 (保留原有老链路默认策略)
             VideoOrchestrationResult orchestrationResult = videoOrchestrationService.orchestrateVideoResult(
                     description,
                     templateBrief,
                     assetBrief,
                     selectedBgmBrief,
-                    canvasBrief
+                    canvasBrief,
+                    "balanced"
             );
             script = orchestrationResult.getScript();
             script.setProjectId(projectId);
@@ -300,6 +301,146 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         project.setStatus("GENERATING");
         project.setLatestRenderId(renderId);
         this.baseMapper.updateById(project);
+    }
+
+    @Override
+    public void generateScript(String projectId, String versionStrategy, String aspectRatio) {
+        CreationProjectEntity project = requireActiveProject(projectId);
+        String normalizedAspectRatio = normalizeAspectRatio(
+                aspectRatio != null && !aspectRatio.isBlank() ? aspectRatio : project.getRenderAspectRatio()
+        );
+        if (normalizedAspectRatio != null && !normalizedAspectRatio.equals(project.getRenderAspectRatio())) {
+            project.setRenderAspectRatio(normalizedAspectRatio);
+        }
+        String description = project.getDescription() != null && !project.getDescription().isBlank()
+                ? project.getDescription() : project.getTitle();
+
+        // 插入 GENERATING_SCRIPT 状态记录
+        String renderId = projectId + "_" + System.currentTimeMillis();
+        RenderRecordEntity record = new RenderRecordEntity();
+        record.setRenderId(renderId);
+        record.setProjectId(projectId);
+        record.setStatus("GENERATING_SCRIPT");
+        record.setAspectRatio(normalizedAspectRatio);
+        renderRecordMapper.insert(record);
+
+        project.setStatus("GENERATING_SCRIPT");
+        project.setLatestRenderId(renderId);
+        this.baseMapper.updateById(project);
+
+        // 异步执行生成
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                List<CreativeMaterialEntity> materials = creativeMaterialMapper.selectList(
+                        new LambdaQueryWrapper<CreativeMaterialEntity>()
+                                .eq(CreativeMaterialEntity::getProjectId, projectId)
+                                .eq(CreativeMaterialEntity::getStatus, "PROFILED")
+                                .isNull(CreativeMaterialEntity::getDeletedAt)
+                );
+                CanvasConfig inferredCanvas = inferCanvasConfig(materials);
+                CanvasConfig targetCanvas = resolveTargetCanvas(normalizedAspectRatio, inferredCanvas);
+
+                CreationProjectBgmBindingEntity selectedBgm = creationProjectBgmBindingService.findCurrentBindingEntity(projectId);
+                List<Map<String, Object>> assetList = buildRenderAssetList(projectId, materials);
+                String templateBrief = buildTemplateBrief(project);
+                String assetBrief = buildAssetBrief(assetList);
+                String selectedBgmBrief = buildSelectedBgmBrief(selectedBgm);
+                String canvasBrief = buildCanvasBrief(normalizedAspectRatio, targetCanvas);
+
+                VideoOrchestrationResult orchestrationResult = videoOrchestrationService.orchestrateVideoResult(
+                        description,
+                        templateBrief,
+                        assetBrief,
+                        selectedBgmBrief,
+                        canvasBrief,
+                        versionStrategy != null ? versionStrategy : "balanced"
+                );
+                CompositionScript script = orchestrationResult.getScript();
+                script.setProjectId(projectId);
+                applySelectedBgm(script, selectedBgm);
+                applyCanvas(script, targetCanvas);
+                persistOrchestrationArtifacts(projectId, renderId, orchestrationResult, script);
+                normalizeMediaSources(script);
+
+                // 更新实体和记录
+                CreationProjectEntity p = this.baseMapper.selectById(project.getId());
+                p.setDraftScriptJson(objectMapper.writeValueAsString(script));
+                p.setStatus("SCRIPT_DONE");
+                this.baseMapper.updateById(p);
+
+                RenderRecordEntity r = renderRecordMapper.selectOne(
+                        new LambdaQueryWrapper<RenderRecordEntity>().eq(RenderRecordEntity::getRenderId, renderId)
+                );
+                if (r != null) {
+                    r.setStatus("SCRIPT_DONE");
+                    renderRecordMapper.updateById(r);
+                }
+            } catch (Exception e) {
+                log.error("Failed to generate script asynchronously", e);
+                try {
+                    RenderRecordEntity r = renderRecordMapper.selectOne(
+                            new LambdaQueryWrapper<RenderRecordEntity>().eq(RenderRecordEntity::getRenderId, renderId)
+                    );
+                    if (r != null) {
+                        r.setStatus("FAILED");
+                        renderRecordMapper.updateById(r);
+                    }
+                    CreationProjectEntity p = this.baseMapper.selectById(project.getId());
+                    p.setStatus("FAILED");
+                    this.baseMapper.updateById(p);
+                } catch (Exception ex) {
+                    log.error("Failed to update error status", ex);
+                }
+            }
+        });
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void renderScript(String projectId, CompositionScript script, String aspectRatio) {
+        CreationProjectEntity project = requireActiveProject(projectId);
+        String renderId = project.getLatestRenderId();
+        if (renderId == null || renderId.isBlank()) {
+            throw new BizException(ErrorCode.INVALID_REQUEST, "当前没有待渲染的剧本任务");
+        }
+        String normalizedAspectRatio = normalizeAspectRatio(
+                aspectRatio != null && !aspectRatio.isBlank() ? aspectRatio : project.getRenderAspectRatio()
+        );
+        if (normalizedAspectRatio != null && !normalizedAspectRatio.equals(project.getRenderAspectRatio())) {
+            project.setRenderAspectRatio(normalizedAspectRatio);
+        }
+
+        try {
+            // 保存修改后的剧本并记录
+            project.setDraftScriptJson(objectMapper.writeValueAsString(script));
+            this.baseMapper.updateById(project);
+
+            // 清理并提交 Remotion
+            CompositionScript sanitizedScript = videoOrchestrationService.sanitizeScript(script);
+            normalizeMediaSources(sanitizedScript);
+            
+            RenderResponse response = remotionServiceClient.submitRenderTask(renderId, sanitizedScript);
+            response.setRenderId(renderId);
+
+            if ("FAILED".equals(response.getStatus())) {
+                throw new BizException(ErrorCode.INTERNAL_ERROR, "提交渲染任务失败: " + response.getError());
+            }
+
+            RenderRecordEntity record = renderRecordMapper.selectOne(
+                    new LambdaQueryWrapper<RenderRecordEntity>().eq(RenderRecordEntity::getRenderId, renderId)
+            );
+            if (record != null) {
+                record.setStatus("QUEUED");
+                renderRecordMapper.updateById(record);
+            }
+            project.setStatus("GENERATING");
+            this.baseMapper.updateById(project);
+
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(ErrorCode.INTERNAL_ERROR, "处理提交渲染失败: " + e.getMessage());
+        }
     }
 
     private String buildSelectedBgmBrief(CreationProjectBgmBindingEntity selectedBgm) {
@@ -1140,6 +1281,12 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             if (renderId != null) {
                 response.setOutputPath(buildOutputUrl(renderId));
             }
+        } else if ("GENERATING_SCRIPT".equals(project.getStatus())) {
+            response.setStatus("GENERATING_SCRIPT");
+        } else if ("SCRIPT_DONE".equals(project.getStatus())) {
+            response.setStatus("SCRIPT_DONE");
+        } else if ("FAILED".equals(project.getStatus())) {
+            response.setStatus("FAILED");
         } else {
             response.setStatus("NOT_STARTED");
         }

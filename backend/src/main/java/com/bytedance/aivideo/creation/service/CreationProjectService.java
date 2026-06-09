@@ -30,6 +30,12 @@ public interface CreationProjectService extends IService<CreationProjectEntity> 
     // 强制重新编排并生成视频（清除缓存，不复用上次脚本）
     void regenerateVideo(String projectId, String aspectRatio);
 
+    // 新增：分离式流程 - 生成剧本（异步执行并返回立刻响应）
+    void generateScript(String projectId, String versionStrategy, String aspectRatio);
+
+    // 新增：分离式流程 - 提交剧本渲染
+    void renderScript(String projectId, com.bytedance.aivideo.creation.dto.remotion.CompositionScript script, String aspectRatio);
+
     // 查询视频渲染进度 (结合 Redis 与 MySQL)
     com.bytedance.aivideo.engine.remotion.dto.RenderResponse getRenderStatus(String projectId);
 

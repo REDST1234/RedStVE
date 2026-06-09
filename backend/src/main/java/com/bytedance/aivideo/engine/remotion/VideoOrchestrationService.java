@@ -49,8 +49,8 @@ public class VideoOrchestrationService {
         this.objectMapper = objectMapper;
     }
 
-    public CompositionScript orchestrateVideo(String projectDescription, String templateBrief, String assetBrief, String selectedBgmBrief, String canvasBrief) {
-        return orchestrateVideoResult(projectDescription, templateBrief, assetBrief, selectedBgmBrief, canvasBrief).getScript();
+    public CompositionScript orchestrateVideo(String projectDescription, String templateBrief, String assetBrief, String selectedBgmBrief, String canvasBrief, String versionStrategy) {
+        return orchestrateVideoResult(projectDescription, templateBrief, assetBrief, selectedBgmBrief, canvasBrief, versionStrategy).getScript();
     }
 
     public CompositionScript sanitizeScript(CompositionScript script) {
@@ -83,8 +83,18 @@ public class VideoOrchestrationService {
             String templateBrief,
             String assetBrief,
             String selectedBgmBrief,
-            String canvasBrief
+            String canvasBrief,
+            String versionStrategy
     ) {
+        String styleInstruction = "";
+        if ("fast_paced".equals(versionStrategy)) {
+            styleInstruction = "【多版本生成策略：高频卡点版】要求：大幅缩短各文字层的持续时间(durationInFrames，建议30-60帧)，场景间强制使用 wipe 等快速转场，整体节奏极快，视觉冲击力强！将 bgm.mixLevel 强制写为 DRIVE。\n";
+        } else if ("brand_quality".equals(versionStrategy)) {
+            styleInstruction = "【多版本生成策略：品牌质感版】要求：减少字幕的密度，镜头停留时间适当延长，场景间多用 fade 淡入淡出转场，整体节奏舒缓、有高端质感！强制将 bgm.mixLevel 设置为 QUIET 或 BALANCED，强制配置 60 帧以上的 fadeInFrames（缓慢淡入），并在全局风格 globalStyle.fontTier 中偏向于使用 subtitle 或优雅的字体。\n";
+        } else {
+            styleInstruction = "【多版本生成策略：均衡原版】要求：保持原素材的自然节奏，信息传达与视觉呈现平衡。\n";
+        }
+
         String promptText = String.format(
                 ArkPromptTemplates.REMOTION_ORCHESTRATOR_JSON,
                 projectDescription,
@@ -93,6 +103,7 @@ public class VideoOrchestrationService {
                 selectedBgmBrief,
                 canvasBrief
         );
+        promptText = styleInstruction + "\n" + promptText;
 
         ArkResponseRequest request = new ArkResponseRequest();
         request.setModel(arkProperties.getModel());

@@ -177,6 +177,18 @@ export const creationApi = {
       body: payload ?? {}
     }),
 
+  generateScript: (projectId: string, payload?: { versionStrategy?: string; aspectRatio?: string }) =>
+    request<ApiResponse<boolean>>(`/v1/creation/projects/${projectId}/generate-script`, {
+      method: 'POST',
+      body: payload ?? {}
+    }),
+
+  renderScript: (projectId: string, payload: { compositionScript: Record<string, any>; aspectRatio?: string }) =>
+    request<ApiResponse<boolean>>(`/v1/creation/projects/${projectId}/render-script`, {
+      method: 'POST',
+      body: payload
+    }),
+
   regenerateImage: (projectId: string, segmentIndex: number, prompt: string) =>
     request<ApiResponse<boolean>>(`/v1/creation/projects/${projectId}/segment/${segmentIndex}/regenerate-image`, {
       method: 'POST',

@@ -459,10 +459,6 @@ export default function ProjectDetail() {
   };
   const currentProgress = calculateProgress();
 
-  const toggleTag = (tag: string) => {
-    setProjectTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
-  };
-
   const handleSaveProject = async (): Promise<boolean> => {
     if (!projectTitle.trim()) {
       showToast('请输入项目标题，不能为空', 'error');
