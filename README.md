@@ -1,4 +1,4 @@
-# RedStVE (Red Structure Video Engine)
+# RedStVE (Red Structure Video Engine) [个人参赛项目]
 
 RedStVE 是一个视频结构提取与重组系统。系统包含视频结构解析、素材匹配编排以及基于代码驱动的视频渲染功能。主要流程包括：提取参考视频的元数据（分镜时长、转场、文本）、用户上传或生成新素材、以及通过渲染服务合成为新视频。
 
