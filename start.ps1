@@ -207,7 +207,7 @@ if (-Not (Test-Path "node_modules")) {
     npm install
 }
 Write-Host "[*] 触发启动 Remotion Service (已最小化至任务栏)..." -ForegroundColor Green
-Start-Process "pwsh.exe" -WindowStyle Minimized -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'RedStVE - Remotion Service'; Write-Host '正在启动 Remotion Service (npm run server)...'; npm run server"
+Start-Process "powershell.exe" -WindowStyle Minimized -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'RedStVE - Remotion Service'; Write-Host '正在启动 Remotion Service (npm run server)...'; npm run server"
 Set-Location -Path ".."
 
 # 启动 Frontend
@@ -218,7 +218,7 @@ if (-Not (Test-Path "node_modules")) {
     npm install
 }
 Write-Host "[*] 触发启动 Frontend (已最小化至任务栏)..." -ForegroundColor Green
-Start-Process "pwsh.exe" -WindowStyle Minimized -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'RedStVE - Frontend'; Write-Host '正在启动 Frontend...'; npm run dev"
+Start-Process "powershell.exe" -WindowStyle Minimized -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'RedStVE - Frontend'; Write-Host '正在启动 Frontend...'; npm run dev"
 Set-Location -Path ".."
 
 # 启动 Backend
@@ -226,7 +226,7 @@ Write-Host "[*] 正在处理 Backend 服务..." -ForegroundColor Cyan
 Set-Location -Path "backend"
 
 Write-Host "[*] 触发启动 Backend (已最小化至任务栏)..." -ForegroundColor Green
-Start-Process "pwsh.exe" -WindowStyle Minimized -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'RedStVE - Backend (Spring Boot)'; Write-Host '正在启动 Spring Boot 后端...'; mvn spring-boot:run"
+Start-Process "powershell.exe" -WindowStyle Minimized -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'RedStVE - Backend (Spring Boot)'; Write-Host '正在启动 Spring Boot 后端...'; mvn spring-boot:run"
 Set-Location -Path ".."
 
 Write-Host ""

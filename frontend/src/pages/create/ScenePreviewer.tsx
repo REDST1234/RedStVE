@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 
 interface ScenePreviewerProps {
   script: any;
@@ -7,17 +7,54 @@ interface ScenePreviewerProps {
 }
 
 export const ScenePreviewer: React.FC<ScenePreviewerProps> = ({ script, sceneIndex, aspectRatio }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
   if (!script || !script.scenes || !script.scenes[sceneIndex]) {
-    return <div style={{ color: '#94a3b8' }}>暂无分镜数据</div>;
+    return <div className="text-slate-400">暂无分镜数据</div>;
   }
 
   const scene = script.scenes[sceneIndex];
   const globalStyle = script.globalStyle || {};
-  const mixLevel = script.bgm?.mixLevel || 'BALANCED';
   
-  // 预览区容器宽高比
-  const width = aspectRatio === '16:9' ? 320 : aspectRatio === '1:1' ? 240 : 200;
-  const height = aspectRatio === '16:9' ? 180 : aspectRatio === '1:1' ? 240 : 350;
+  const width = aspectRatio === '16:9' ? 640 : aspectRatio === '1:1' ? 400 : 360;
+  const height = aspectRatio === '16:9' ? 360 : aspectRatio === '1:1' ? 400 : 640;
+
+  const totalFrames = scene.durationInFrames || 90;
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+
+  // 自动播放逻辑
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(() => {
+      setCurrentFrame(prev => {
+        if (prev >= totalFrames) return 0;
+        return prev + 1;
+      });
+    }, 1000 / 30); // ~33ms per frame
+    return () => clearInterval(interval);
+  }, [isPlaying, totalFrames]);
+
+  useEffect(() => {
+    const observer = new ResizeObserver((entries) => {
+      if (entries[0]) {
+        // 计算可用空间，减去底部文字的高度预留
+        const { width: containerWidth, height: containerHeight } = entries[0].contentRect;
+        const availableHeight = containerHeight - 40; 
+        const scaleX = containerWidth / width;
+        const scaleY = availableHeight / height;
+        const newScale = Math.min(scaleX, scaleY);
+        // 留出 5% 的安全边距
+        setScale(newScale > 0 ? newScale * 0.95 : 1);
+      }
+    });
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+    return () => observer.disconnect();
+  }, [width, height]);
 
   // 辅助函数：根据字分层映射实际字体
   const getFontFamily = (tier: string) => {
@@ -46,24 +83,29 @@ export const ScenePreviewer: React.FC<ScenePreviewerProps> = ({ script, sceneInd
   };
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <h4 style={{ marginBottom: '16px', color: '#64748b' }}>👁️ 动态分镜预览镜 (Scene Previewer)</h4>
-      
-      {/* 画面预览框 */}
-      <div style={{
-        width: `${width}px`,
-        height: `${height}px`,
-        backgroundColor: globalStyle.backgroundColor || '#050F1E',
-        borderRadius: '12px',
-        position: 'relative',
-        overflow: 'hidden',
-        boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-        border: '1px solid #e2e8f0',
-        transition: 'background-color 0.3s ease',
-      }}>
+    <div className="w-full h-full flex flex-col items-center justify-center p-4 overflow-hidden relative group" ref={containerRef}>
+      {/* 画面预览框 - 开启 scale 缩放 */}
+      <div 
+        className="relative overflow-hidden transition-colors duration-300 rounded-lg shadow-md shrink-0 mb-8"
+        style={{
+          width: `${width}px`,
+          height: `${height}px`,
+          backgroundColor: globalStyle.backgroundColor || '#050F1E',
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center'
+        }}
+      >
         {/* 图层按顺序叠加 */}
         {scene.layers?.map((layer: any, idx: number) => {
-          const { preset, params } = layer;
+          const { preset, params, enterAtFrame = 0, durationInFrames = totalFrames } = layer;
+          const isVisible = currentFrame >= enterAtFrame && currentFrame <= (enterAtFrame + durationInFrames);
+          
+          if (!isVisible && preset !== 'backing.glass_plate' && preset !== 'bg.mesh_gradient' && preset !== 'bg.tech_grid' && preset !== 'bg.noise_grain') {
+             // 对于文字和媒体图层，如果不处于活跃帧区间，将其设为透明 (也可直接返回 null 提升性能)
+             // 返回 null 会打断动画，透明度更好
+             // 为了简化，由于只是静态草图，这里如果不可见直接返回 null
+             return null;
+          }
           
           // 渲染衬底层 backing.*
           if (preset?.startsWith('backing.')) {
@@ -111,7 +153,7 @@ export const ScenePreviewer: React.FC<ScenePreviewerProps> = ({ script, sceneInd
                         padding: '4px 8px',
                         borderRadius: `${params?.borderRadius || 16}px`,
                         fontFamily,
-                        fontSize: `${(params?.fontSize || 24) / 3}px`,
+                        fontSize: `${(params?.fontSize || 24) / 1.5}px`,
                         fontWeight: params?.fontWeight || 'normal',
                         textAlign: params?.textAlign || 'center',
                         whiteSpace: 'pre-wrap',
@@ -130,7 +172,7 @@ export const ScenePreviewer: React.FC<ScenePreviewerProps> = ({ script, sceneInd
                 position: 'absolute',
                 ...posStyles,
                 color: params?.color || '#ffffff',
-                fontSize: `${(params?.fontSize || 40) / 3}px`, // 缩小比例展示
+                fontSize: `${(params?.fontSize || 40) / 1.5}px`, // 缩小比例展示
                 fontFamily,
                 fontWeight: params?.fontWeight || 'bold',
                 textAlign: params?.textAlign || 'center',
@@ -146,35 +188,47 @@ export const ScenePreviewer: React.FC<ScenePreviewerProps> = ({ script, sceneInd
           // 如果是背景或素材图层，仅做一个标记
           if (preset?.startsWith('media.') && preset !== 'media.audio') {
              return (
-                 <div key={idx} style={{
-                    position: 'absolute',
-                    top: '10px',
-                    left: '10px',
-                    backgroundColor: 'rgba(255,255,255,0.8)',
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    fontSize: '10px',
-                    color: '#333'
-                 }}>
-                     🖼️ {preset === 'media.video' ? '视频' : '图像'}
+                 <div key={idx} className="absolute top-2 left-2 bg-white/80 px-2 py-0.5 rounded text-[10px] text-slate-800 shadow-sm backdrop-blur-sm font-medium">
+                     {preset === 'media.video' ? '视频素材' : '图像素材'}
                  </div>
              )
           }
 
           return null;
         })}
+
+        {/* 顶部信息栏已移除 */}
       </div>
       
-      {/* 底部信息栏 */}
-      <div style={{ marginTop: '16px', fontSize: '0.85rem', color: '#64748b', display: 'flex', gap: '12px' }}>
-        <span>分镜 {sceneIndex + 1}</span>
-        <span>·</span>
-        <span>{(scene.durationInFrames / 30).toFixed(1)}s</span>
-        <span>·</span>
-        <span style={{ color: '#8b5cf6' }}>🎵 {mixLevel}</span>
-      </div>
-      <div style={{ marginTop: '8px', fontSize: '0.75rem', color: '#94a3b8' }}>
-        * 左侧修改参数，右侧画面实时渲染
+      {/* 迷你时间轴控件 */}
+      <div className="absolute bottom-4 left-6 right-6 bg-slate-900/80 backdrop-blur-md px-4 py-2 rounded-xl flex items-center gap-3 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 border border-slate-700">
+        <button 
+           onClick={() => setIsPlaying(!isPlaying)}
+           className="w-8 h-8 rounded-full bg-blue-500 hover:bg-blue-400 text-white flex items-center justify-center shrink-0 shadow-md transition-colors"
+           title={isPlaying ? "暂停" : "播放"}
+        >
+           {isPlaying ? (
+             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+           ) : (
+             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+           )}
+        </button>
+        
+        <input 
+          type="range" 
+          min="0" 
+          max={totalFrames} 
+          value={currentFrame} 
+          onChange={(e) => {
+            setIsPlaying(false);
+            setCurrentFrame(parseInt(e.target.value));
+          }}
+          className="flex-1 h-1.5 bg-slate-700 rounded-full appearance-none cursor-pointer accent-blue-500"
+        />
+        
+        <div className="text-white text-[10px] font-mono shrink-0 w-[80px] text-right">
+          {currentFrame} / {totalFrames} 帧
+        </div>
       </div>
     </div>
   );

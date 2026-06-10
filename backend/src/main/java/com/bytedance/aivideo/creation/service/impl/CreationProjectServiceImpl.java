@@ -633,6 +633,9 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
                         "segmentRole=" + stringValue(asset.get("segmentRole"))
                 ));
             }
+            if (asset.containsKey("duration")) {
+                appendBriefLine(sb, "最大可用时长", asset.get("duration") + " 秒");
+            }
             if (asset.containsKey("adaptationSummary")) {
                 appendBriefLine(sb, "已完成处理", stringValue(asset.get("adaptationSummary")));
             }
@@ -664,6 +667,9 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
 
         if (material.getFilePath() != null && !material.getFilePath().isBlank()) {
             asset.put("src", toRemotionMediaSrc(material.getFilePath()));
+        }
+        if (material.getDuration() != null) {
+            asset.put("duration", material.getDuration());
         }
         if (material.getTextContent() != null && !material.getTextContent().isBlank()) {
             asset.put("textContent", material.getTextContent());
@@ -712,6 +718,27 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             }
             if (sourceMaterial.getTextContent() != null && !sourceMaterial.getTextContent().isBlank()) {
                 asset.put("textContent", sourceMaterial.getTextContent());
+            }
+            if (row.getAdaptationPlanJson() != null && !row.getAdaptationPlanJson().isBlank()) {
+                try {
+                    JsonNode root = objectMapper.readTree(row.getAdaptationPlanJson());
+                    if (root.hasNonNull("actualDuration")) {
+                        asset.put("duration", root.get("actualDuration").asDouble());
+                    } else {
+                        JsonNode strategyChain = root.path("strategyChain");
+                        if (strategyChain.isArray()) {
+                            for (JsonNode node : strategyChain) {
+                                JsonNode params = node.path("parameters");
+                                if (params.hasNonNull("targetDuration")) {
+                                    asset.put("duration", params.get("targetDuration").asDouble());
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to parse duration from adaptationPlanJson for matchId {}", row.getMatchId());
+                }
             }
             mergeProfile(asset, sourceMaterial);
             asset.put("adaptationSummary", summarizeAdaptation(row.getAdaptationPlanJson()));
@@ -1208,13 +1235,9 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
     private Path resolveLocalMediaPath(String rawPath) {
         try {
             if (rawPath.startsWith("file:///")) {
-                return Paths.get(URI.create(rawPath)).toAbsolutePath().normalize();
+                rawPath = Paths.get(URI.create(rawPath)).toAbsolutePath().normalize().toString();
             }
-            Path asPath = Paths.get(rawPath);
-            if (asPath.isAbsolute()) {
-                return asPath.normalize();
-            }
-            return asPath.toAbsolutePath().normalize();
+            return com.bytedance.aivideo.creation.util.StoragePathResolver.resolveToCurrentAbsolutePath(rawPath);
         } catch (Exception e) {
             log.warn("Failed to resolve local media path: {}", rawPath, e);
             return null;
@@ -1222,15 +1245,7 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
     }
 
     private Path resolveStorageRoot() {
-        Path cwdStorage = Paths.get(STORAGE_DIR_NAME).toAbsolutePath().normalize();
-        if (cwdStorage.toFile().exists()) {
-            return cwdStorage;
-        }
-        Path parentStorage = Paths.get("..", STORAGE_DIR_NAME).toAbsolutePath().normalize();
-        if (parentStorage.toFile().exists()) {
-            return parentStorage;
-        }
-        return cwdStorage;
+        return com.bytedance.aivideo.creation.util.StoragePathResolver.resolveStorageRoot();
     }
 
     private String trimTrailingSlash(String url) {

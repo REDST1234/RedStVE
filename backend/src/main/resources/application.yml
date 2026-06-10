@@ -56,7 +56,7 @@ media:
     grid-max-pages: ${FFMPEG_GRID_MAX_PAGES:12}
     audio-timeout-seconds: ${FFMPEG_AUDIO_TIMEOUT_SECONDS:120}
   upload:
-    directory: ${MEDIA_UPLOAD_DIR:storage/analysis-video}
+    directory: ${MEDIA_UPLOAD_DIR:../storage/analysis-video}
     max-file-size-bytes: ${MEDIA_MAX_FILE_SIZE_BYTES:2147483648}
     allowed-extensions:
       - mp4
@@ -72,7 +72,7 @@ ark:
 
 asr:
   max-audio-bytes: ${ASR_MAX_AUDIO_BYTES:20971520}
-  audio-output-dir: ${ASR_AUDIO_OUTPUT_DIR:storage/analysis-audio}
+  audio-output-dir: ${ASR_AUDIO_OUTPUT_DIR:../storage/analysis-audio}
   doubao:
     model: ${ASR_DOUBAO_MODEL:doubao-seed-2-0-lite-260428}
 

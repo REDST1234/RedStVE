@@ -138,33 +138,27 @@ public class CreationProjectBgmBindingServiceImpl extends ServiceImpl<CreationPr
     }
 
     private String resolveRenderableSrc(String filePath) {
-        if (filePath.startsWith("file:///") || filePath.startsWith("http://") || filePath.startsWith("https://")) {
-            return filePath;
+        if (filePath == null || filePath.isBlank()) {
+            return null;
         }
-        Path storageRoot = resolveStorageRoot();
-        if (filePath.startsWith("/api/storage/audio-database/")) {
-            String relative = filePath.substring("/api/storage/audio-database/".length());
-            Path absolute = storageRoot.resolve(Paths.get("audio-database", relative)).normalize();
-            return "file:///" + absolute.toString().replace("\\", "/");
+        String normalized = filePath.replace("\\", "/");
+        if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+            return normalized;
         }
-        Path asPath = Paths.get(filePath);
-        if (asPath.isAbsolute()) {
-            return "file:///" + asPath.normalize().toString().replace("\\", "/");
+        
+        // 抹平可能带有的旧绝对路径，转化为统一的 storage/... 相对形式
+        int storageIdx = normalized.indexOf("/storage/");
+        if (storageIdx == -1 && normalized.startsWith("storage/")) {
+            normalized = "/" + normalized;
+            storageIdx = 0;
         }
-        Path absolute = storageRoot.resolve(Paths.get("audio-database", filePath)).normalize();
-        return "file:///" + absolute.toString().replace("\\", "/");
-    }
-
-    private Path resolveStorageRoot() {
-        Path cwdStorage = Paths.get(STORAGE_DIR_NAME).toAbsolutePath().normalize();
-        if (cwdStorage.toFile().exists()) {
-            return cwdStorage;
+        
+        if (storageIdx != -1) {
+            String relativePart = normalized.substring(storageIdx + "/storage/".length());
+            return "storage/" + relativePart;
         }
-        Path parentStorage = Paths.get("..", STORAGE_DIR_NAME).toAbsolutePath().normalize();
-        if (parentStorage.toFile().exists()) {
-            return parentStorage;
-        }
-        return cwdStorage;
+        
+        return filePath;
     }
 
     private String writeMetadataJson(Map<String, Object> metadata) {

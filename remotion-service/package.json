@@ -6,6 +6,13 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "@fontsource/bebas-neue": "^5.2.7",
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/lxgw-wenkai-tc": "^5.2.9",
+    "@fontsource/ma-shan-zheng": "^5.2.9",
+    "@fontsource/noto-sans-sc": "^5.2.9",
+    "@fontsource/noto-serif-sc": "^5.2.8",
+    "@fontsource/zcool-xiaowei": "^5.2.8",
     "@remotion/bundler": "4.0.469",
     "@remotion/cli": "4.0.469",
     "@remotion/google-fonts": "4.0.469",

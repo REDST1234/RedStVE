@@ -92,5 +92,5 @@ creation:
     collection-name: ${CREATION_TEMPLATE_COLLECTION:creation_template}
   bgm-vector:
     collection-name: ${CREATION_BGM_COLLECTION:creation_bgm}
-    audio-database-dir: ${AUDIO_DATABASE_DIR:storage/audio-database}
+    audio-database-dir: ${AUDIO_DATABASE_DIR:../storage/audio-database}
 vector.auto-init.enabled: true

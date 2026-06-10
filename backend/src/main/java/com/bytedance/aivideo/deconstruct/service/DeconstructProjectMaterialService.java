@@ -163,7 +163,7 @@ public class DeconstructProjectMaterialService {
         if (path == null || path.isBlank()) {
             return null;
         }
-        String normalized = path.trim();
+        String normalized = path.trim().replace("\\", "/");
         String lower = normalized.toLowerCase(Locale.ROOT);
         
         // 视频源文件不能作为图片封面，直接返回 null 以便触发前端的 fallback 封面
@@ -171,15 +171,21 @@ public class DeconstructProjectMaterialService {
             return null;
         }
 
-        if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("file://")) {
+        if (lower.startsWith("http://") || lower.startsWith("https://")) {
             return normalized;
         }
-        if (normalized.matches("^[a-zA-Z]:[\\\\/].+")) {
-            return "file:///" + normalized.replace("\\", "/");
+        
+        // 抹平绝对路径，转为前端可访问的 /api/storage/...
+        int storageIdx = normalized.indexOf("/storage/");
+        if (storageIdx == -1 && normalized.startsWith("storage/")) {
+            normalized = "/" + normalized;
+            storageIdx = 0;
         }
-        if (normalized.startsWith("/")) {
-            return "file://" + normalized;
+        if (storageIdx != -1) {
+            String relativePart = normalized.substring(storageIdx + "/storage/".length());
+            return "/api/storage/" + relativePart;
         }
-        return "file:///" + normalized.replace("\\", "/");
+        
+        return null;
     }
 }

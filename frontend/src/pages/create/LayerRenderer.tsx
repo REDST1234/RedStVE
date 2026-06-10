@@ -6,9 +6,10 @@ interface LayerRendererProps {
   layerIdx: number;
   updateLayerParam: (sceneIndex: number, layerIndex: number, paramKey: string, value: any) => void;
   updateLayerText: (sceneIndex: number, layerIndex: number, text: string) => void;
+  updateLayerBaseProp: (sceneIndex: number, layerIndex: number, propKey: string, value: number) => void;
 }
 
-export const LayerRenderer: React.FC<LayerRendererProps> = ({ layer, sceneIdx, layerIdx, updateLayerParam, updateLayerText }) => {
+export const LayerRenderer: React.FC<LayerRendererProps> = ({ layer, sceneIdx, layerIdx, updateLayerParam, updateLayerText, updateLayerBaseProp }) => {
   const { preset, params } = layer;
 
   // -- 提取公共属性 --
@@ -25,6 +26,15 @@ export const LayerRenderer: React.FC<LayerRendererProps> = ({ layer, sceneIdx, l
       <select value={params?.fontTier || 'subtitle'} onChange={e => updateLayerParam(sceneIdx, layerIdx, 'fontTier', e.target.value)} style={{ fontSize: '0.75rem', padding: '4px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
         <option value="title">艺术大字 (Title)</option><option value="subtitle">常规字幕 (Subtitle)</option><option value="accent">手写强调 (Accent)</option><option value="ui">无衬线标签 (UI)</option><option value="number">数字展示 (Number)</option><option value="bodySerif">文学衬线 (Serif)</option><option value="kaiStyle">复古楷体 (Kai)</option>
       </select>
+      
+      <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '4px' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#475569' }}>
+          入场帧: <input type="number" value={layer.enterAtFrame || 0} onChange={e => updateLayerBaseProp(sceneIdx, layerIdx, 'enterAtFrame', parseInt(e.target.value) || 0)} style={{ width: '45px', padding: '2px', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#475569' }}>
+          持续帧: <input type="number" value={layer.durationInFrames || 30} onChange={e => updateLayerBaseProp(sceneIdx, layerIdx, 'durationInFrames', parseInt(e.target.value) || 30)} style={{ width: '45px', padding: '2px', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+        </label>
+      </div>
     </div>
   );
 

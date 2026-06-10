@@ -1,14 +1,14 @@
 "use strict";
 (self["webpackChunkremotion_service"] = self["webpackChunkremotion_service"] || []).push([[208],{
 
-/***/ 5208
+/***/ 75208
 (__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   registerAacEncoder: () => (/* binding */ registerAacEncoder)
 /* harmony export */ });
 /* harmony import */ var mediabunny__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(3936);
-/* harmony import */ var mediabunny__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(8647);
+/* harmony import */ var mediabunny__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(68647);
 /*!
  * Copyright (c) 2026-present, Vanilagy and contributors
  *

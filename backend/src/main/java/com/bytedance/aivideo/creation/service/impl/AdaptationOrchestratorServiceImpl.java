@@ -83,6 +83,7 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
     private final FfmpegCommandProperties ffmpegCommandProperties;
     private final SeedreamImageService seedreamImageService;
     private final ComfyuiBgRemovalService comfyuiBgRemovalService;
+    private final com.bytedance.aivideo.engine.ffmpeg.api.MediaProbeEngine ffprobeEngine;
     private final ObjectMapper objectMapper;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
@@ -95,6 +96,7 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
             FfmpegCommandProperties ffmpegCommandProperties,
             SeedreamImageService seedreamImageService,
             ComfyuiBgRemovalService comfyuiBgRemovalService,
+            com.bytedance.aivideo.engine.ffmpeg.api.MediaProbeEngine ffprobeEngine,
             ObjectMapper objectMapper,
             org.springframework.context.ApplicationEventPublisher eventPublisher
     ) {
@@ -106,6 +108,7 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
         this.ffmpegCommandProperties = ffmpegCommandProperties;
         this.seedreamImageService = seedreamImageService;
         this.comfyuiBgRemovalService = comfyuiBgRemovalService;
+        this.ffprobeEngine = ffprobeEngine;
         this.objectMapper = objectMapper;
         this.eventPublisher = eventPublisher;
     }
@@ -167,6 +170,21 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
                 }
                 String outputPath = applyStrategyChain(projectId, resolvedVersionId, item, material);
                 item.setAdaptedFilePath(outputPath);
+
+                try {
+                    com.bytedance.aivideo.engine.ffmpeg.model.MediaProbeResult probeResult = ffprobeEngine.probe(Paths.get(outputPath));
+                    if (probeResult != null && probeResult.getDuration() != null) {
+                        String currentPlan = item.getAdaptationPlanJson();
+                        JsonNode root = objectMapper.readTree(currentPlan == null || currentPlan.isBlank() ? "{}" : currentPlan);
+                        if (root.isObject()) {
+                            ((com.fasterxml.jackson.databind.node.ObjectNode) root).put("actualDuration", probeResult.getDuration());
+                            item.setAdaptationPlanJson(root.toString());
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.warn("Failed to probe adapted file duration for item {}", item.getMatchId(), ex);
+                }
+
                 slotMatchResultMapper.updateById(item);
                 log.info("adapt row finished: projectId={}, versionId={}, segmentIndex={}, outputPath={}, elapsedMs={}",
                         projectId, resolvedVersionId, item.getSegmentIndex(), outputPath, System.currentTimeMillis() - rowStartedAt);
@@ -240,8 +258,8 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
             CreativeMaterialEntity material
     ) throws IOException {
         JsonNode strategyChain = parseStrategyChain(row.getAdaptationPlanJson());
-        Path sourcePath = Paths.get(material.getFilePath()).toAbsolutePath();
-        Path outputDir = Paths.get("storage", "creation-adapt", projectId, versionId).toAbsolutePath();
+        Path sourcePath = com.bytedance.aivideo.creation.util.StoragePathResolver.resolveToCurrentAbsolutePath(material.getFilePath());
+        Path outputDir = resolveStorageRoot().resolve("creation-adapt").resolve(projectId).resolve(versionId);
         Files.createDirectories(outputDir);
 
         if (isProtectedVisualAsset(material)) {
@@ -909,7 +927,7 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
      * Seedream URLs may expire; local persistence ensures render availability.
      */
     private String downloadGeneratedImage(String projectId, String versionId, int segmentIndex, String imageUrl) {
-        Path outputDir = Paths.get("storage", "creation-adapt", projectId, versionId).toAbsolutePath();
+        Path outputDir = resolveStorageRoot().resolve("creation-adapt").resolve(projectId).resolve(versionId);
         try {
             Files.createDirectories(outputDir);
         } catch (IOException ex) {
@@ -967,6 +985,10 @@ public class AdaptationOrchestratorServiceImpl implements AdaptationOrchestrator
             return "low quality, blurry, distorted, extra limbs, bad anatomy, watermark, signature";
         }
         return "solid background, white background, black background, colored background, opaque, JPEG artifacts, watermark text, cluttered background, gradient background, backdrop";
+    }
+
+    private Path resolveStorageRoot() {
+        return com.bytedance.aivideo.creation.util.StoragePathResolver.resolveStorageRoot();
     }
 
     private void writeImageGenLog(

@@ -102,7 +102,11 @@ public class BgmKnowledgeService {
             if (!data.containsKey("audioName") || data.get("audioName").toString().isBlank()) {
                 data.put("audioName", file.getOriginalFilename());
             }
-            data.put("filePath", file.getOriginalFilename());
+            
+            // 构造正确的相对于项目的相对路径
+            String relativePath = bgmVectorProperties.getAudioDatabaseDir() + "/" + audioId + "/" + file.getOriginalFilename();
+            relativePath = relativePath.replace('\\', '/');
+            data.put("filePath", relativePath);
 
             // 6. 保存为 audio_data.json
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(jsonFile, data);

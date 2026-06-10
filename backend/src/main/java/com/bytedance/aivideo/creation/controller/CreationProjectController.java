@@ -580,19 +580,21 @@ public class CreationProjectController {
         return item;
     }
 
-    /**
-     * 将服务端绝对文件路径转为前端可访问的相对 URL。
-     * d:\...\storage\creation-adapt\{projId}\{verId}\img_gen_seg_002.png
-     * → /api/storage/creation-adapt/{projId}/{verId}/img_gen_seg_002.png
-     */
     private String toStorageUrl(String absolutePath) {
         if (absolutePath == null || absolutePath.isBlank()) {
             return null;
         }
         String normalized = absolutePath.replace('\\', '/');
         int idx = normalized.lastIndexOf("/storage/");
+        if (idx == -1 && normalized.startsWith("storage/")) {
+            normalized = "/" + normalized;
+            idx = 0;
+        }
         if (idx >= 0) {
             return "/api/storage/" + normalized.substring(idx + "/storage/".length());
+        }
+        if (normalized.startsWith("/api/storage/")) {
+            return normalized;
         }
         return normalized;
     }

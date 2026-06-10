@@ -26,8 +26,15 @@ export function resolvePresentation(trans: Transition): TransitionPresentation<R
 /** 解析转场时序 */
 export function resolveTiming(trans: Transition) {
   const dur = trans.params.durationInFrames || 15;
+  
+  // Fade（淡入淡出）不支持弹簧物理过冲，否则会导致透明度瞬间截断（opacity 超过 1 没意义），强制回退到线性
+  if (trans.preset === 'transition.fade' || trans.preset === 'fade') {
+    return linearTiming({ durationInFrames: dur });
+  }
+
   if (trans.params.timing === 'spring') {
-    return springTiming({ config: { damping: 200 }, durationInFrames: dur });
+    // damping: 200 is severely overdamped. We change it to a standard bouncy spring config.
+    return springTiming({ config: { damping: 12, mass: 1, stiffness: 120 }, durationInFrames: dur });
   }
   return linearTiming({ durationInFrames: dur });
 }

@@ -137,6 +137,7 @@ async function processRender(taskId: string, script: CompositionScript, bundleUr
       serveUrl: bundleUrl,
       id: 'DynamicVideo',
       inputProps: script,
+      timeoutInMilliseconds: 120000,
     });
 
     const outputLocation = path.join(BUNDLE_DIR, `${taskId}.mp4`);
@@ -147,6 +148,7 @@ async function processRender(taskId: string, script: CompositionScript, bundleUr
       codec: 'h264',
       outputLocation,
       inputProps: script,
+      timeoutInMilliseconds: 120000, // 延长到 2 分钟，防止下载 Google 字体时网络超时
       onProgress: ({ progress }) => {
         task.progress = progress;
         // 高频更新 Redis 中的进度信息，前端通过轮询 Redis 获取进度
