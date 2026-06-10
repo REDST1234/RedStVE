@@ -624,7 +624,23 @@ RedStVE 是一个面向短视频领域的**结构迁移与自动化创作系统*
 | **Ollama** | — | 向量嵌入模型（nomic-embed-text） | 可选（拆解链路向量同步需要） |
 | **ComfyUI** | — | AI 背景移除 | 可选（抠图功能需要） |
 
-### 6.2 方案一：Windows 一键启动（推荐）
+### 6.2 必备配置准备（环境变量）
+
+在任何启动方案之前，**必须**先配置后端的大模型 API 密钥。
+
+1. 进入 `backend` 目录，找到 `.env.template` 文件。
+2. 复制该文件并重命名为 `.env`。
+3. 编辑 `.env` 文件，填入火山引擎（字节方舟）的 API 凭证：
+
+| 变量名 | 必填说明 |
+|--------|------|
+| `ARK_API_KEY` | 必填，字节方舟大模型 API Key |
+| `ARK_MODEL_ENDPOINT` | 必填，方舟模型端点 ID（推荐使用 doubao-pro 等高级模型） |
+| `SEEDREAM_API_KEY` | 选填，用于素材缺口补全（文生图） |
+
+> **提示：** 如果你是通过 Windows 一键脚本（`start.ps1`）启动，脚本会在首次运行时自动为你生成 `.env` 文件并暂停，等待你填写。
+
+### 6.3 方案一：Windows 一键启动（推荐）
 
 项目根目录提供了经过全面测试的 PowerShell 一键启动脚本：
 
@@ -646,7 +662,7 @@ RedStVE 是一个面向短视频领域的**结构迁移与自动化创作系统*
 
 > **注意**：脚本基于 Windows PowerShell 5.1（系统自带）编写，使用 `powershell.exe` 启动子进程。若环境中安装了 PowerShell Core (`pwsh.exe`) 同样兼容。
 
-### 6.3 方案二：手动分步启动（跨平台兜底方案）
+### 6.4 方案二：手动分步启动（跨平台兜底方案）
 
 适用于 macOS / Linux 或 Windows 上无法运行 PowerShell 脚本的场景。
 
@@ -714,7 +730,7 @@ mvn spring-boot:run
 | Redis | localhost:6379 |
 | ChromaDB | localhost:8000 |
 
-### 6.4 方案三：Docker Compose 全容器化部署
+### 6.5 方案三：Docker Compose 全容器化部署
 
 适用于生产环境或不想在宿主机安装任何开发依赖的场景：
 
@@ -728,7 +744,7 @@ docker-compose up -d --build
 
 > **注意**：全容器化部署时，ComfyUI 和 Ollama 需在宿主机上运行，容器通过 `host.docker.internal` 访问。
 
-### 6.5 常见问题与排错
+### 6.6 常见问题与排错
 
 | 问题现象 | 可能原因 | 解决方案 |
 |----------|----------|----------|
