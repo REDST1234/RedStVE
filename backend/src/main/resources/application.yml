@@ -2,6 +2,12 @@ server:
   port: ${SERVER_PORT:8080}
 
 spring:
+  application:
+    name: aivideo-backend
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 100.79.235.109:8848
   profiles:
     active: dev
   servlet:

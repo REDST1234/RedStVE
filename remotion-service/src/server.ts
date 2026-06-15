@@ -131,7 +131,7 @@ app.get('/render/:taskId/status', async (req, res) => {
 async function processRender(taskId: string, script: CompositionScript, bundleUrl: string) {
   const task = tasks.get(taskId)!;
   task.status = 'RENDERING';
-  
+
   try {
     const composition = await selectComposition({
       serveUrl: bundleUrl,
@@ -170,6 +170,43 @@ async function processRender(taskId: string, script: CompositionScript, bundleUr
 }
 
 const PORT = 3001;
-app.listen(PORT, () => {
+// Nacos 服务地址 (假设和你的 Spring Boot 连的是同一个本地 Nacos)
+const NACOS_SERVER = 'http://100.79.235.109:8848';
+const SERVICE_NAME = 'remotion-service';
+const IP = '100.93.68.52';
+
+app.listen(PORT, async () => {
   console.log(`🚀 Remotion Render Service listening on port ${PORT}`);
+
+  try {
+    // 1. 向 Nacos 注册当前服务实例
+    const registerUrl = `${NACOS_SERVER}/nacos/v1/ns/instance?serviceName=${SERVICE_NAME}&ip=${IP}&port=${PORT}`;
+    await fetch(registerUrl, { method: 'POST' });
+    console.log(`✅ Successfully registered to Nacos as [${SERVICE_NAME}]`);
+
+    // 2. 维持心跳 (每隔 5 秒发一次，告诉 Nacos 我还活着)
+    setInterval(async () => {
+      const beatUrl = `${NACOS_SERVER}/nacos/v1/ns/instance/beat?serviceName=${SERVICE_NAME}`;
+      const beatData = {
+        cluster: 'DEFAULT',
+        ip: IP,
+        port: PORT,
+        serviceName: SERVICE_NAME,
+        weight: 1
+      };
+
+      try {
+        await fetch(beatUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `beat=${encodeURIComponent(JSON.stringify(beatData))}`
+        });
+      } catch (err) {
+        console.error('❌ Nacos heartbeat failed:', err);
+      }
+    }, 5000); // 5000ms 心跳间隔
+
+  } catch (error) {
+    console.error(`❌ Failed to register to Nacos:`, error);
+  }
 });

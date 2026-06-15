@@ -22,10 +22,28 @@
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
         <spring-ai.version>1.1.0</spring-ai.version>
         <flyway.version>10.22.0</flyway.version>
+        <spring-cloud.version>2024.0.0</spring-cloud.version>
+        <spring-cloud-alibaba.version>2023.0.3.2</spring-cloud-alibaba.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- Spring Cloud -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Spring Cloud Alibaba -->
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>${spring-cloud-alibaba.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
@@ -37,6 +55,22 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- 微服务：Nacos 服务注册发现 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <!-- 微服务：OpenFeign 远程调用 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        <!-- 微服务：LoadBalancer 负载均衡 (Feign底层依赖) -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
         <!-- Spring Boot Starters -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
