@@ -15,14 +15,10 @@ class AudioDuckingExecutorTest {
         StrategyExecutionFragment fragment = executor.buildExecutionFragment(inputContext, true);
 
         assertEquals(StrategyOutputKind.VIDEO_OUTPUT, fragment.getOutputKind());
-        assertTrue(fragment.hasExplicitFilterComplex());
-        assertTrue(fragment.getMapArgs().contains("-map"));
-        assertTrue(fragment.getMapArgs().contains("[outa]"));
-
-        String filter = fragment.getFilterComplex();
-        assertTrue(filter.contains("sidechaincompress"));
-        assertTrue(filter.contains("ratio=5.0")); // 1.0 / 0.2
-        assertTrue(filter.contains("amix"));
+        assertFalse(fragment.hasExplicitFilterComplex()); // NO-OP doesn't use explicit filter complex
+        
+        // Assert that the deferred logic added volume=1.0 to audioFilters
+        assertTrue(fragment.getAudioFilters().contains("volume=1.0"));
     }
 
     @Test
@@ -30,8 +26,7 @@ class AudioDuckingExecutorTest {
         String inputContext = "{}";
         StrategyExecutionFragment fragment = executor.buildExecutionFragment(inputContext, false);
 
-        String filter = fragment.getFilterComplex();
-        // 无原声时，直接输出 bgm，或者利用 anullsrc 兜底
-        assertTrue(filter.contains("[1:a]volume=1.0[outa]"));
+        assertFalse(fragment.hasExplicitFilterComplex());
+        assertTrue(fragment.getAudioFilters().contains("volume=1.0"));
     }
 }

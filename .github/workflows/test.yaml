@@ -27,7 +27,11 @@ jobs:
           distribution: "temurin"
           cache: maven # 开启 Maven 依赖缓存，下次跑就不用重新下包了
 
-      # Step 3: 进入 backend 目录，执行 Maven 构建
+      # Step 3: 安装 FFmpeg（解决测试代码中调用本地 ffmpeg 的问题）
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      # Step 4: 进入 backend 目录，执行 Maven 构建和测试
       - name: Build with Maven
         working-directory: ./backend
         # 这里执行 clean package，加上 -DskipTests 先跳过单元测试（加快速度）
