@@ -11,7 +11,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 @SpringBootTest
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class AiVideoApplicationTests {
 
     // 自动在 Docker 中启动一个临时的 MySQL 8.0 容器，并将其连接信息注入到 Spring 中
