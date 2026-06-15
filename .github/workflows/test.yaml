@@ -3,9 +3,10 @@ name: CI Pipeline
 # 触发条件：当有人向 main 分支 push 代码，或者提 PR 时，触发此流水线
 on:
   push:
-    branches: [ "main" ]
+    # 使用 '**' 代表匹配所有分支。这样你在本地新建一个测试分支 push 上去也能立刻触发
+    branches: [ "**" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "**" ]
 
 # jobs 是具体要执行的工作流任务，不同的 job 会在 GitHub 的多台服务器上**并发**执行
 jobs:
