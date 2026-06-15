@@ -5,9 +5,21 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.ai.chroma.vectorstore.ChromaApi;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 @SpringBootTest
+@Testcontainers
 class AiVideoApplicationTests {
+
+    // 自动在 Docker 中启动一个临时的 MySQL 8.0 容器，并将其连接信息注入到 Spring 中
+    @Container
+    @ServiceConnection
+    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.4")
+            .withDatabaseName("aivideo")
+            .withPassword("root");
 
     // 伪造（Mock）一个 ChromaApi，欺骗 Spring Boot，让它以为数据库已经连上了
     @MockitoBean
