@@ -97,7 +97,7 @@ public class ChromaBootstrapConfiguration {
                 log.info("chroma tenant created: {}", tenantName);
                 return;
             }
-            throw new IllegalStateException("chroma tenant unavailable: " + tenantName, ex);
+            log.warn("chroma tenant unavailable: {}", tenantName);
         }
     }
 
@@ -111,7 +111,7 @@ public class ChromaBootstrapConfiguration {
                 log.info("chroma database created: {}/{}", tenantName, databaseName);
                 return;
             }
-            throw new IllegalStateException("chroma database unavailable: " + tenantName + "/" + databaseName, ex);
+            log.warn("chroma database unavailable: {}/{}", tenantName, databaseName);
         }
     }
 
@@ -131,9 +131,7 @@ public class ChromaBootstrapConfiguration {
                 log.info("chroma collection created: {}/{}/{}", tenantName, databaseName, collectionName);
                 return;
             }
-            throw new IllegalStateException(
-                    "chroma collection unavailable: " + tenantName + "/" + databaseName + "/" + collectionName, ex
-            );
+            log.warn("chroma collection unavailable: {}/{}/{}", tenantName, databaseName, collectionName);
         }
     }
 

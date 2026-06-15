@@ -138,13 +138,25 @@ class LocalCreationFfmpegEngineTest {
 
     @Test
     void testDetectLuminance_fallbackWhenNoMatchOutput() throws IOException {
-        Path fakeCmd = testOutputDir.resolve("fake-ffmpeg.cmd");
-        Files.writeString(
-                fakeCmd,
-                "@echo off\r\necho no-luma-here\r\nexit /b 0\r\n",
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING
-        );
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+        Path fakeCmd = testOutputDir.resolve(isWindows ? "fake-ffmpeg.cmd" : "fake-ffmpeg.sh");
+        
+        if (isWindows) {
+            Files.writeString(
+                    fakeCmd,
+                    "@echo off\r\necho no-luma-here\r\nexit /b 0\r\n",
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING
+            );
+        } else {
+            Files.writeString(
+                    fakeCmd,
+                    "#!/bin/sh\necho no-luma-here\nexit 0\n",
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING
+            );
+            fakeCmd.toFile().setExecutable(true);
+        }
 
         FfmpegCommandProperties fakeProps = new FfmpegCommandProperties();
         fakeProps.setPath(fakeCmd.toAbsolutePath().toString());
