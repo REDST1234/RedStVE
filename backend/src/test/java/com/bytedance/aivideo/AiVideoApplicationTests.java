@@ -10,7 +10,9 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "vector.auto-init.enabled=false"
+})
 @Testcontainers(disabledWithoutDocker = true)
 class AiVideoApplicationTests {
 
