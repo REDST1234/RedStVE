@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.mockito.Answers;
 import org.springframework.ai.chroma.vectorstore.ChromaApi;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -24,7 +25,7 @@ class AiVideoApplicationTests {
             .withPassword("root");
 
     // 伪造（Mock）一个 ChromaApi，欺骗 Spring Boot，让它以为数据库已经连上了
-    @MockitoBean
+    @MockitoBean(answers = Answers.RETURNS_MOCKS)
     private ChromaApi chromaApi;
 
     // 伪造一个 Redis 连接工厂，防止它启动时去连本地 Redis 报错
