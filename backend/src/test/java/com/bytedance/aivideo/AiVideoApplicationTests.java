@@ -2,6 +2,7 @@ package com.bytedance.aivideo;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.ai.chroma.vectorstore.ChromaApi;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -10,11 +11,8 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@SpringBootTest(properties = {
-        "vector.auto-init.enabled=false",
-        "spring.cloud.nacos.discovery.enabled=false",
-        "spring.cloud.nacos.config.enabled=false"
-})
+@SpringBootTest
+@ActiveProfiles("test")
 @Testcontainers(disabledWithoutDocker = true)
 class AiVideoApplicationTests {
 
