@@ -7,7 +7,7 @@
 #   .\scripts\vector-init.ps1 http://host:port # 自定义服务地址
 # ============================================================================
 param(
-    [string]$BaseUrl = "http://localhost:8080"
+    [string]$BaseUrl = "http://100.79.235.109:8080"
 )
 
 $Endpoint = "${BaseUrl}/api/v1/admin/vector/init"

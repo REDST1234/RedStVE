@@ -6,6 +6,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.mockito.Answers;
 import org.springframework.ai.chroma.vectorstore.ChromaApi;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.testcontainers.containers.MySQLContainer;
@@ -31,6 +32,9 @@ class AiVideoApplicationTests {
     // 伪造一个 Redis 连接工厂，防止它启动时去连本地 Redis 报错
     @MockitoBean
     private LettuceConnectionFactory redisConnectionFactory;
+
+    @MockitoBean
+    private RabbitTemplate rabbitTemplate;
 
     @Test
     void contextLoads() {

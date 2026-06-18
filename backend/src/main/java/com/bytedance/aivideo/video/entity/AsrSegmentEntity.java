@@ -40,4 +40,12 @@ public class AsrSegmentEntity extends BaseEntity {
     private String bgmGenre;
 
     private String bgmInstruments;
+
+    /**
+     * 这是一个 MySQL 底层虚拟生成的计算列（Generated Column）。
+     * 专门用于配合唯一索引解决逻辑删除冲突问题。
+     * Java 代码绝对不能手动去 Insert 或 Update 它。
+     */
+    @com.baomidou.mybatisplus.annotation.TableField(insertStrategy = com.baomidou.mybatisplus.annotation.FieldStrategy.NEVER, updateStrategy = com.baomidou.mybatisplus.annotation.FieldStrategy.NEVER)
+    private Integer activeSegmentIndex;
 }

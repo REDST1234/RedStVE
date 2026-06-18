@@ -80,8 +80,7 @@ public class CreationProjectController {
             TemplateRecommendService templateRecommendService,
             com.bytedance.aivideo.creation.service.BgmRecommendService bgmRecommendService,
             com.bytedance.aivideo.creation.service.CreationProjectBgmBindingService creationProjectBgmBindingService,
-            ObjectMapper objectMapper
-    ) {
+            ObjectMapper objectMapper) {
         this.creationProjectService = creationProjectService;
         this.creativeMaterialService = creativeMaterialService;
         this.slotMatcherService = slotMatcherService;
@@ -96,7 +95,8 @@ public class CreationProjectController {
 
     @PostMapping
     public ApiResponse<CreateProjectResponse> createProject(@Valid @RequestBody CreateProjectRequest request) {
-        CreationProjectEntity entity = creationProjectService.createProject(request.getTitle(), request.getDescription(), request.getAspectRatio());
+        CreationProjectEntity entity = creationProjectService.createProject(request.getTitle(),
+                request.getDescription(), request.getAspectRatio());
         return ApiResponse.success(toCreateProjectResponse(entity));
     }
 
@@ -109,9 +109,9 @@ public class CreationProjectController {
     @PutMapping("/{projectId}")
     public ApiResponse<CreateProjectResponse> updateProject(
             @PathVariable("projectId") String projectId,
-            @Valid @RequestBody UpdateProjectRequest request
-    ) {
-        CreationProjectEntity entity = creationProjectService.updateProjectBasics(projectId, request.getTitle(), request.getDescription(), request.getAspectRatio());
+            @Valid @RequestBody UpdateProjectRequest request) {
+        CreationProjectEntity entity = creationProjectService.updateProjectBasics(projectId, request.getTitle(),
+                request.getDescription(), request.getAspectRatio());
         return ApiResponse.success(toCreateProjectResponse(entity));
     }
 
@@ -125,8 +125,7 @@ public class CreationProjectController {
     public ApiResponse<CreationProjectListResponse> listProjects(
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "size", defaultValue = "10") int size,
-            @RequestParam(value = "keyword", required = false) String keyword
-    ) {
+            @RequestParam(value = "keyword", required = false) String keyword) {
         var resultPage = creationProjectService.listProjects(page, size, keyword);
         CreationProjectListResponse response = new CreationProjectListResponse();
         response.setPage(resultPage.getCurrent());
@@ -141,8 +140,7 @@ public class CreationProjectController {
             @PathVariable("projectId") String projectId,
             @RequestParam("materialType") String materialType,
             @RequestParam(value = "file", required = false) MultipartFile file,
-            @RequestParam(value = "textContent", required = false) String textContent
-    ) {
+            @RequestParam(value = "textContent", required = false) String textContent) {
         CreativeMaterialEntity entity = creativeMaterialService.uploadAsset(projectId, materialType, file, textContent);
         return ApiResponse.success(toUploadResponse(entity));
     }
@@ -159,8 +157,8 @@ public class CreationProjectController {
                         new LambdaQueryWrapper<CreativeMaterialGridEntity>()
                                 .in(CreativeMaterialGridEntity::getMaterialBizId, materialBizIds)
                                 .isNull(CreativeMaterialGridEntity::getDeletedAt)
-                                .orderByAsc(CreativeMaterialGridEntity::getPageIndex)
-                ).stream().collect(Collectors.groupingBy(CreativeMaterialGridEntity::getMaterialBizId));
+                                .orderByAsc(CreativeMaterialGridEntity::getPageIndex))
+                        .stream().collect(Collectors.groupingBy(CreativeMaterialGridEntity::getMaterialBizId));
 
         List<CreativeAssetItemResponse> items = assets.stream()
                 .map(item -> toAssetItem(item, gridMap.getOrDefault(item.getBizId(), Collections.emptyList())))
@@ -171,8 +169,7 @@ public class CreationProjectController {
     @DeleteMapping("/{projectId}/assets/{materialBizId}")
     public ApiResponse<Boolean> deleteAsset(
             @PathVariable("projectId") String projectId,
-            @PathVariable("materialBizId") String materialBizId
-    ) {
+            @PathVariable("materialBizId") String materialBizId) {
         creativeMaterialService.deleteProjectAsset(projectId, materialBizId);
         return ApiResponse.success(Boolean.TRUE);
     }
@@ -180,8 +177,7 @@ public class CreationProjectController {
     @PostMapping("/{projectId}/assets/confirm")
     public ApiResponse<ConfirmAssetsResponse> confirmAssets(
             @PathVariable("projectId") String projectId,
-            @RequestParam(value = "type", required = false) String materialType
-    ) {
+            @RequestParam(value = "type", required = false) String materialType) {
         int totalAssets = creativeMaterialService.listProjectAssets(projectId).size();
         int triggered = creativeMaterialService.confirmAssetsForProfiling(projectId, materialType);
         ConfirmAssetsResponse response = new ConfirmAssetsResponse();
@@ -195,9 +191,9 @@ public class CreationProjectController {
     @PostMapping("/{projectId}/bind-template")
     public ApiResponse<CreateProjectResponse> bindTemplate(
             @PathVariable("projectId") String projectId,
-            @Valid @RequestBody BindTemplateRequest request
-    ) {
-        CreationProjectEntity entity = creationProjectService.bindTemplate(projectId, request.getTemplateId(), request.getTemplateVersion());
+            @Valid @RequestBody BindTemplateRequest request) {
+        CreationProjectEntity entity = creationProjectService.bindTemplate(projectId, request.getTemplateId(),
+                request.getTemplateVersion());
         return ApiResponse.success(toCreateProjectResponse(entity));
     }
 
@@ -230,8 +226,7 @@ public class CreationProjectController {
     @PostMapping("/{projectId}/bgm/select")
     public ApiResponse<ProjectBgmBindingResponse> selectBgm(
             @PathVariable("projectId") String projectId,
-            @RequestBody ProjectBgmSelectRequest request
-    ) {
+            @RequestBody ProjectBgmSelectRequest request) {
         return ApiResponse.success(creationProjectBgmBindingService.selectBgm(projectId, request));
     }
 
@@ -249,15 +244,15 @@ public class CreationProjectController {
     @PostMapping("/{projectId}/match")
     public ApiResponse<MatchTriggerResponse> triggerMatch(
             @PathVariable("projectId") String projectId,
-            @RequestBody(required = false) MatchTriggerRequest request
-    ) {
+            @RequestBody(required = false) MatchTriggerRequest request) {
         String versionId = slotMatcherService.matchSlots(projectId, request == null ? null : request.getVersionId());
         List<SlotMatchResultEntity> results = listMatchResults(projectId, versionId);
         MatchTriggerResponse response = new MatchTriggerResponse();
         response.setProjectId(projectId);
         response.setVersionId(versionId);
         response.setStatus("MATCHING");
-        response.setMatchedSegmentCount((int) results.stream().filter(row -> "MATCHED".equals(row.getMatchStatus())).count());
+        response.setMatchedSegmentCount(
+                (int) results.stream().filter(row -> "MATCHED".equals(row.getMatchStatus())).count());
         response.setMissingSegmentCount((int) results.stream()
                 .filter(row -> "MISSING".equals(row.getMatchStatus()) || "VETOED".equals(row.getMatchStatus()))
                 .count());
@@ -267,8 +262,7 @@ public class CreationProjectController {
     @GetMapping("/{projectId}/match-result")
     public ApiResponse<MatchResultResponse> getMatchResult(
             @PathVariable("projectId") String projectId,
-            @RequestParam(value = "versionId", required = false) String versionId
-    ) {
+            @RequestParam(value = "versionId", required = false) String versionId) {
         String resolvedVersionId = resolveVersionId(projectId, versionId);
         List<SlotMatchResultEntity> rows = listMatchResults(projectId, resolvedVersionId);
         if (rows.isEmpty()) {
@@ -287,16 +281,18 @@ public class CreationProjectController {
     @PostMapping("/{projectId}/adapt")
     public ApiResponse<AdaptTriggerResponse> triggerAdapt(
             @PathVariable("projectId") String projectId,
-            @RequestBody(required = false) AdaptTriggerRequest request
-    ) {
-        String versionId = adaptationOrchestratorService.orchestrateAdaptation(projectId, request == null ? null : request.getVersionId());
+            @RequestBody(required = false) AdaptTriggerRequest request) {
+        String versionId = adaptationOrchestratorService.orchestrateAdaptation(projectId,
+                request == null ? null : request.getVersionId());
         List<SlotMatchResultEntity> rows = listMatchResults(projectId, versionId);
         AdaptTriggerResponse response = new AdaptTriggerResponse();
         response.setProjectId(projectId);
         response.setVersionId(versionId);
         response.setStatus("ADAPTING");
-        response.setAdaptedCount((int) rows.stream().filter(item -> item.getAdaptedFilePath() != null && !item.getAdaptedFilePath().isBlank()).count());
-        response.setFailedCount((int) rows.stream().filter(item -> item.getMatchedAssetId() == null || item.getMatchedAssetId().isBlank()).count());
+        response.setAdaptedCount((int) rows.stream()
+                .filter(item -> item.getAdaptedFilePath() != null && !item.getAdaptedFilePath().isBlank()).count());
+        response.setFailedCount((int) rows.stream()
+                .filter(item -> item.getMatchedAssetId() == null || item.getMatchedAssetId().isBlank()).count());
         return ApiResponse.success(response);
     }
 
@@ -304,8 +300,7 @@ public class CreationProjectController {
     public ApiResponse<Boolean> regenerateImage(
             @PathVariable("projectId") String projectId,
             @PathVariable("segmentIndex") Integer segmentIndex,
-            @RequestBody Map<String, String> payload
-    ) {
+            @RequestBody Map<String, String> payload) {
         String prompt = payload.get("prompt");
         adaptationOrchestratorService.regenerateImageAsync(projectId, segmentIndex, prompt);
         return ApiResponse.success(Boolean.TRUE);
@@ -314,8 +309,7 @@ public class CreationProjectController {
     @GetMapping("/{projectId}/timeline")
     public ApiResponse<CompositionTimelineResponse> getTimeline(
             @PathVariable("projectId") String projectId,
-            @RequestParam(value = "versionId", required = false) String versionId
-    ) {
+            @RequestParam(value = "versionId", required = false) String versionId) {
         String resolvedVersionId = resolveVersionId(projectId, versionId);
         List<SlotMatchResultEntity> rows = listMatchResults(projectId, resolvedVersionId);
         if (rows.isEmpty()) {
@@ -330,10 +324,10 @@ public class CreationProjectController {
         Map<Long, CreativeMaterialEntity> materialMap = new java.util.HashMap<>();
         if (!bizIds.isEmpty()) {
             materialMap = creativeMaterialService.list(
-                            new LambdaQueryWrapper<CreativeMaterialEntity>()
-                                    .eq(CreativeMaterialEntity::getProjectId, projectId)
-                                    .in(CreativeMaterialEntity::getBizId, bizIds)
-                                    .isNull(CreativeMaterialEntity::getDeletedAt))
+                    new LambdaQueryWrapper<CreativeMaterialEntity>()
+                            .eq(CreativeMaterialEntity::getProjectId, projectId)
+                            .in(CreativeMaterialEntity::getBizId, bizIds)
+                            .isNull(CreativeMaterialEntity::getDeletedAt))
                     .stream()
                     .collect(Collectors.toMap(CreativeMaterialEntity::getBizId, item -> item, (a, b) -> a));
         }
@@ -367,8 +361,7 @@ public class CreationProjectController {
     @PostMapping("/{projectId}/generate")
     public ApiResponse<Boolean> generateVideo(
             @PathVariable("projectId") String projectId,
-            @RequestBody(required = false) GenerateVideoRequest request
-    ) {
+            @RequestBody(required = false) GenerateVideoRequest request) {
         creationProjectService.generateVideo(projectId, request == null ? null : request.getAspectRatio());
         return ApiResponse.success(Boolean.TRUE);
     }
@@ -376,8 +369,7 @@ public class CreationProjectController {
     @PostMapping("/{projectId}/regenerate")
     public ApiResponse<Boolean> regenerateVideo(
             @PathVariable("projectId") String projectId,
-            @RequestBody(required = false) GenerateVideoRequest request
-    ) {
+            @RequestBody(required = false) GenerateVideoRequest request) {
         creationProjectService.regenerateVideo(projectId, request == null ? null : request.getAspectRatio());
         return ApiResponse.success(Boolean.TRUE);
     }
@@ -385,38 +377,38 @@ public class CreationProjectController {
     @PostMapping("/{projectId}/generate-script")
     public ApiResponse<Boolean> generateScript(
             @PathVariable("projectId") String projectId,
-            @RequestBody(required = false) CreationGenerateScriptRequest request
-    ) {
+            @RequestBody(required = false) CreationGenerateScriptRequest request) {
         creationProjectService.generateScript(
-                projectId, 
-                request == null ? null : request.getVersionStrategy(), 
-                request == null ? null : request.getAspectRatio()
-        );
+                projectId,
+                request == null ? null : request.getVersionStrategy(),
+                request == null ? null : request.getAspectRatio());
         return ApiResponse.success(Boolean.TRUE);
     }
 
     @PostMapping("/{projectId}/render-script")
     public ApiResponse<Boolean> renderScript(
             @PathVariable("projectId") String projectId,
-            @RequestBody CreationRenderScriptRequest request
-    ) {
+            @RequestBody CreationRenderScriptRequest request) {
         creationProjectService.renderScript(
-                projectId, 
-                objectMapper.convertValue(request.getCompositionScript(), CompositionScript.class), 
-                request.getAspectRatio()
-        );
+                projectId,
+                objectMapper.convertValue(request.getCompositionScript(), CompositionScript.class),
+                request.getAspectRatio());
         return ApiResponse.success(Boolean.TRUE);
     }
 
     @GetMapping("/{projectId}/render-status")
-    public ApiResponse<com.bytedance.aivideo.engine.remotion.dto.RenderResponse> getRenderStatus(@PathVariable("projectId") String projectId) {
-        com.bytedance.aivideo.engine.remotion.dto.RenderResponse status = creationProjectService.getRenderStatus(projectId);
+    public ApiResponse<com.bytedance.aivideo.engine.remotion.dto.RenderResponse> getRenderStatus(
+            @PathVariable("projectId") String projectId) {
+        com.bytedance.aivideo.engine.remotion.dto.RenderResponse status = creationProjectService
+                .getRenderStatus(projectId);
         return ApiResponse.success(status);
     }
 
     @GetMapping("/{projectId}/render-history")
-    public ApiResponse<java.util.List<com.bytedance.aivideo.creation.entity.RenderRecordEntity>> getRenderHistory(@PathVariable("projectId") String projectId) {
-        java.util.List<com.bytedance.aivideo.creation.entity.RenderRecordEntity> history = creationProjectService.getRenderHistory(projectId);
+    public ApiResponse<java.util.List<com.bytedance.aivideo.creation.entity.RenderRecordEntity>> getRenderHistory(
+            @PathVariable("projectId") String projectId) {
+        java.util.List<com.bytedance.aivideo.creation.entity.RenderRecordEntity> history = creationProjectService
+                .getRenderHistory(projectId);
         return ApiResponse.success(history);
     }
 
@@ -441,8 +433,7 @@ public class CreationProjectController {
     public ApiResponse<com.bytedance.aivideo.engine.remotion.dto.RenderResponse> getJsonRenderStatus(
             @PathVariable("renderId") String renderId) {
         // renderFromJson 是 default 方法，需要通过 impl 实例调用
-        com.bytedance.aivideo.creation.service.impl.CreationProjectServiceImpl impl =
-                (com.bytedance.aivideo.creation.service.impl.CreationProjectServiceImpl) creationProjectService;
+        com.bytedance.aivideo.creation.service.impl.CreationProjectServiceImpl impl = (com.bytedance.aivideo.creation.service.impl.CreationProjectServiceImpl) creationProjectService;
         com.bytedance.aivideo.engine.remotion.dto.RenderResponse status = impl.getJsonRenderStatus(renderId);
         return ApiResponse.success(status);
     }
@@ -453,8 +444,7 @@ public class CreationProjectController {
                         .eq(SlotMatchResultEntity::getProjectId, projectId)
                         .eq(SlotMatchResultEntity::getVersionId, versionId)
                         .isNull(SlotMatchResultEntity::getDeletedAt)
-                        .orderByAsc(SlotMatchResultEntity::getSegmentIndex)
-        );
+                        .orderByAsc(SlotMatchResultEntity::getSegmentIndex));
     }
 
     private String resolveVersionId(String projectId, String versionId) {
@@ -466,8 +456,7 @@ public class CreationProjectController {
                         .eq(SlotMatchResultEntity::getProjectId, projectId)
                         .isNull(SlotMatchResultEntity::getDeletedAt)
                         .orderByDesc(SlotMatchResultEntity::getUpdatedAt)
-                        .last("LIMIT 1")
-        );
+                        .last("LIMIT 1"));
         if (latest == null) {
             throw new BizException(ErrorCode.INVALID_REQUEST, "未找到匹配版本，请先触发 match");
         }
@@ -523,7 +512,8 @@ public class CreationProjectController {
         return response;
     }
 
-    private CreativeAssetItemResponse toAssetItem(CreativeMaterialEntity entity, List<CreativeMaterialGridEntity> gridRows) {
+    private CreativeAssetItemResponse toAssetItem(CreativeMaterialEntity entity,
+            List<CreativeMaterialGridEntity> gridRows) {
         CreativeAssetItemResponse item = new CreativeAssetItemResponse();
         item.setMaterialBizId(String.valueOf(entity.getBizId()));
         item.setMaterialType(entity.getMaterialType());

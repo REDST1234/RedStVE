@@ -24,7 +24,8 @@ import java.time.ZoneOffset;
 import java.util.Map;
 
 @Service
-public class CreationProjectBgmBindingServiceImpl extends ServiceImpl<CreationProjectBgmBindingMapper, CreationProjectBgmBindingEntity>
+public class CreationProjectBgmBindingServiceImpl
+        extends ServiceImpl<CreationProjectBgmBindingMapper, CreationProjectBgmBindingEntity>
         implements CreationProjectBgmBindingService {
 
     private static final String STATUS_SELECTED = "SELECTED";
@@ -37,8 +38,7 @@ public class CreationProjectBgmBindingServiceImpl extends ServiceImpl<CreationPr
 
     public CreationProjectBgmBindingServiceImpl(
             CreationProjectMapper creationProjectMapper,
-            ObjectMapper objectMapper
-    ) {
+            ObjectMapper objectMapper) {
         this.creationProjectMapper = creationProjectMapper;
         this.objectMapper = objectMapper;
     }
@@ -70,7 +70,8 @@ public class CreationProjectBgmBindingServiceImpl extends ServiceImpl<CreationPr
         entity.setAudioName(trimToNull(request.getAudioName()));
         entity.setPreviewUrl(request.getFilePath().trim());
         entity.setSrcPath(resolveRenderableSrc(request.getFilePath().trim()));
-        entity.setSourceType(trimToNull(request.getSourceType()) == null ? "RECOMMENDED" : request.getSourceType().trim());
+        entity.setSourceType(
+                trimToNull(request.getSourceType()) == null ? "RECOMMENDED" : request.getSourceType().trim());
         entity.setRecommendScore(request.getRecommendScore());
         entity.setSemanticScore(request.getSemanticScore());
         entity.setEnergyCurveScore(request.getEnergyCurveScore());
@@ -117,8 +118,7 @@ public class CreationProjectBgmBindingServiceImpl extends ServiceImpl<CreationPr
                         .eq(CreationProjectBgmBindingEntity::getStatus, STATUS_SELECTED)
                         .isNull(CreationProjectBgmBindingEntity::getDeletedAt)
                         .orderByDesc(CreationProjectBgmBindingEntity::getUpdatedAt)
-                        .last("LIMIT 1")
-        );
+                        .last("LIMIT 1"));
     }
 
     private CreationProjectEntity requireActiveProject(String projectId) {
@@ -129,8 +129,7 @@ public class CreationProjectBgmBindingServiceImpl extends ServiceImpl<CreationPr
                 new LambdaQueryWrapper<CreationProjectEntity>()
                         .eq(CreationProjectEntity::getProjectId, projectId.trim())
                         .isNull(CreationProjectEntity::getDeletedAt)
-                        .last("LIMIT 1")
-        );
+                        .last("LIMIT 1"));
         if (project == null) {
             throw new BizException(ErrorCode.PROJECT_NOT_FOUND, "创作项目不存在: " + projectId);
         }
@@ -145,19 +144,19 @@ public class CreationProjectBgmBindingServiceImpl extends ServiceImpl<CreationPr
         if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
             return normalized;
         }
-        
+
         // 抹平可能带有的旧绝对路径，转化为统一的 storage/... 相对形式
         int storageIdx = normalized.indexOf("/storage/");
         if (storageIdx == -1 && normalized.startsWith("storage/")) {
             normalized = "/" + normalized;
             storageIdx = 0;
         }
-        
+
         if (storageIdx != -1) {
             String relativePart = normalized.substring(storageIdx + "/storage/".length());
             return "storage/" + relativePart;
         }
-        
+
         return filePath;
     }
 
@@ -177,7 +176,8 @@ public class CreationProjectBgmBindingServiceImpl extends ServiceImpl<CreationPr
             return null;
         }
         try {
-            return objectMapper.readValue(metadataJson, new TypeReference<Map<String, Object>>() {});
+            return objectMapper.readValue(metadataJson, new TypeReference<Map<String, Object>>() {
+            });
         } catch (Exception e) {
             return null;
         }

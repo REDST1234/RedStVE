@@ -1,11 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import { bundle } from '@remotion/bundler';
-import { renderMedia, selectComposition } from '@remotion/renderer';
+import { renderMedia, selectComposition, openBrowser } from '@remotion/renderer';
 import path from 'path';
 import fs from 'fs';
 import Redis from 'ioredis';
 import dotenv from 'dotenv';
+import amqp from 'amqplib';
 import { CompositionScriptSchema, type CompositionScript } from './schemas/CompositionScript';
 
 // 加载 Java 后端的 .env 环境变量
@@ -63,7 +64,23 @@ async function initBundler() {
   });
   console.log('✅ Bundle ready at:', bundleLocation);
 }
-initBundler();
+
+// 提前开启并复用无头浏览器实例，减少冷启动开销
+let globalBrowserExecutable: string | null = null;
+
+async function initBrowser() {
+  console.log('🌍 Launching headless browser for reuse...');
+  try {
+    const browser = await openBrowser('chrome');
+    globalBrowserExecutable = browser.browserExecutable;
+    console.log(`✅ Browser ready. Executable: ${globalBrowserExecutable}`);
+  } catch (err) {
+    console.warn('⚠️ Failed to open reusable browser. Will fallback to standard behavior.', err);
+  }
+}
+
+// 并发初始化
+Promise.all([initBundler(), initBrowser()]).catch(console.error);
 
 app.post('/render', async (req, res) => {
   if (!bundleLocation) {
@@ -138,6 +155,7 @@ async function processRender(taskId: string, script: CompositionScript, bundleUr
       id: 'DynamicVideo',
       inputProps: script,
       timeoutInMilliseconds: 120000,
+      chromiumOptions: globalBrowserExecutable ? { browserExecutable: globalBrowserExecutable } : undefined,
     });
 
     const outputLocation = path.join(BUNDLE_DIR, `${taskId}.mp4`);
@@ -149,6 +167,7 @@ async function processRender(taskId: string, script: CompositionScript, bundleUr
       outputLocation,
       inputProps: script,
       timeoutInMilliseconds: 120000, // 延长到 2 分钟，防止下载 Google 字体时网络超时
+      chromiumOptions: globalBrowserExecutable ? { browserExecutable: globalBrowserExecutable } : undefined,
       onProgress: ({ progress }) => {
         task.progress = progress;
         // 高频更新 Redis 中的进度信息，前端通过轮询 Redis 获取进度
@@ -208,5 +227,69 @@ app.listen(PORT, async () => {
 
   } catch (error) {
     console.error(`❌ Failed to register to Nacos:`, error);
+  }
+
+  // RabbitMQ 消费者初始化
+  try {
+    const rabbitHost = process.env.RABBITMQ_HOST || 'localhost';
+    const rabbitPort = process.env.RABBITMQ_PORT || '5672';
+    const rabbitUser = process.env.RABBITMQ_USERNAME || 'guest';
+    const rabbitPass = process.env.RABBITMQ_PASSWORD || 'guest';
+    
+    console.log(`🐰 Connecting to RabbitMQ at amqp://${rabbitUser}:***@${rabbitHost}:${rabbitPort}...`);
+    const connection = await amqp.connect(`amqp://${rabbitUser}:${rabbitPass}@${rabbitHost}:${rabbitPort}`);
+    const channel = await connection.createChannel();
+    
+    const queue = 'remotion.render.queue';
+    await channel.assertQueue(queue, { durable: true });
+    // 一次只处理一个渲染任务 (QoS)
+    await channel.prefetch(1);
+    
+    console.log(`✅ RabbitMQ connected. Waiting for tasks in queue: ${queue}`);
+    
+    channel.consume(queue, async (msg) => {
+      if (msg !== null) {
+        try {
+          const content = JSON.parse(msg.content.toString());
+          const { taskId, compositionScript } = content;
+          console.log(`📥 Received render task from RabbitMQ: ${taskId}`);
+
+          if (!bundleLocation) {
+             console.error('❌ Bundler not ready, rejecting task');
+             channel.nack(msg, false, true); // requeue
+             return;
+          }
+
+          const parsed = CompositionScriptSchema.safeParse(compositionScript);
+          if (!parsed.success) {
+            console.error(`❌ Invalid composition script for ${taskId}`);
+            channel.ack(msg); // 格式错误直接丢弃，不要一直重试
+            return;
+          }
+
+          const taskData: RenderTask = {
+            taskId,
+            status: 'QUEUED',
+            progress: 0,
+            outputPath: null,
+            error: null,
+          };
+          tasks.set(taskId, taskData);
+          await redis.setex(`render:task:${taskId}`, 3600, JSON.stringify(taskData));
+
+          // 处理渲染
+          await processRender(taskId, parsed.data, bundleLocation);
+          
+          // 渲染完成后手动 ACK 确认
+          channel.ack(msg);
+          console.log(`✅ Task ${taskId} acknowledged in RabbitMQ`);
+        } catch (err) {
+          console.error('❌ Failed to process RabbitMQ message:', err);
+          channel.nack(msg, false, false); // 不重入队列，或者放入死信队列
+        }
+      }
+    });
+  } catch (error) {
+    console.error('❌ RabbitMQ Connection Failed:', error);
   }
 });

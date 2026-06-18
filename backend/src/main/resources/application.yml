@@ -45,6 +45,12 @@ spring:
     validate-on-migrate: ${FLYWAY_VALIDATE_ON_MIGRATE:true}
     table: flyway_schema_history
     clean-disabled: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
 
 springdoc:
   api-docs:
