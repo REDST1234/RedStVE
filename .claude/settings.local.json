@@ -10,7 +10,14 @@
       "Bash(ffmpeg -i \"d:\\\\Develop\\\\code\\\\bytedance-ai-video\\\\storage\\\\audio-database\\\\sfx\\\\brand_logo_hit.wav\" -af \"silencedetect=n=-50dB:d=0.1\" -f null -)",
       "Bash(Select-String \"silence\")",
       "Bash(npx remotion *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "WebFetch(domain:open.feishu.cn)",
+      "PowerShell(npm install -g @larksuite/cli)",
+      "PowerShell(npx -y skills add https://open.feishu.cn --skill -y)",
+      "PowerShell(lark-cli auth status --format json 2>$null)",
+      "PowerShell(lark-cli auth qrcode \"https://accounts.feishu.cn/oauth/v1/device/verify?flow_id=ONcIWIKpu2FKOOOOOOOOOOtmygWqZx6QRcVG0zKGVzOB&user_code=D4KA-SJ3P\" --output ./feishu_qrcode.png --size 384 2>&1)",
+      "PowerShell(lark-cli whiteboard +update --whiteboard-token \"ZIA0wZTGUhG7CFbE8t5c75FNn9c\" --input_format mermaid --source - --overwrite --as user 2>&1)",
+      "PowerShell(lark-cli whiteboard +update --whiteboard-token \"R8U4wPUQXh7aOUbQxTFcFgvCnfe\" --input_format mermaid --source - --overwrite --as user 2>&1)"
     ]
   }
 }

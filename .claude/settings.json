@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(lark-cli whiteboard +update --whiteboard-token \"NcFqwdcz3hlC9ibTiIBcehBInJb\" --input_format mermaid --source - --overwrite --as user 2>&1)",
+      "PowerShell(lark-cli whiteboard +update --whiteboard-token \"DpZnwTGL1hNbowbJeiQcitWJnpb\" --input_format mermaid --source - --overwrite --as user 2>&1)",
+      "PowerShell(lark-cli docs +fetch --api-version v2 --doc \"UQ20daK5uotMHvxbKQXcv4denRe\" --as user --scope full --detail with-ids 2>&1)",
+      "Bash(lark-cli docs *)"
+    ],
+    "additionalDirectories": [
+      "D:\\Develop\\code\\bytedance-ai-video"
+    ]
+  }
+}
