@@ -1,0 +1,22 @@
+spring:
+  datasource:
+    # Testcontainers 会在运行时自动覆盖 URL/Username/Password
+    # 这里写死一个默认值作为占位符，防止某些极端的拦截器提前校验
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  flyway:
+    enabled: true
+    # 每次跑测试都把容器里的数据库格式化清空重来，保证测试绝对干净
+    clean-disabled: false 
+
+  redis:
+    # 防止测试意外连上本地的真实 Redis 造成污染
+    host: localhost
+    port: 63799 # 故意写错端口，结合 MockitoBean 确保不被连接
+    
+logging:
+  level:
+    # 屏蔽掉一些繁杂的日志，只保留我们需要看的 SQL 语句或者关键日志
+    org.springframework: INFO
+    org.testcontainers: INFO
+    com.bytedance.aivideo: DEBUG

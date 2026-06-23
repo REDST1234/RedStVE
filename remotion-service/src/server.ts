@@ -185,6 +185,7 @@ async function processRender(taskId: string, script: CompositionScript, bundleUr
     task.error = err.message;
     await redis.setex(`render:task:${taskId}`, 3600, JSON.stringify(task));
     console.error(`❌ Render failed for ${taskId}:`, err);
+    throw err; // 继续向上抛出异常，触发外层 RabbitMQ 的 Nack (死信队列)
   }
 }
 
@@ -241,7 +242,16 @@ app.listen(PORT, async () => {
     const channel = await connection.createChannel();
     
     const queue = 'remotion.render.queue';
-    await channel.assertQueue(queue, { durable: true });
+    // 必须与 Java 端的 QueueBuilder 参数保持完全一致，否则 RabbitMQ 会报 PRECONDITION_FAILED 错误
+    await channel.assertQueue(queue, { 
+      durable: true,
+      arguments: {
+        'x-dead-letter-exchange': 'remotion.dlx.exchange',
+        'x-dead-letter-routing-key': 'remotion.render.dlq.routing',
+        'x-message-ttl': 60000,
+        'x-max-length': 1000
+      }
+    });
     // 一次只处理一个渲染任务 (QoS)
     await channel.prefetch(1);
     
@@ -263,7 +273,8 @@ app.listen(PORT, async () => {
           const parsed = CompositionScriptSchema.safeParse(compositionScript);
           if (!parsed.success) {
             console.error(`❌ Invalid composition script for ${taskId}`);
-            channel.ack(msg); // 格式错误直接丢弃，不要一直重试
+            // 语法验证失败也是一种业务失败，拒绝并丢入死信队列退费
+            channel.nack(msg, false, false);
             return;
           }
 
@@ -284,8 +295,10 @@ app.listen(PORT, async () => {
           channel.ack(msg);
           console.log(`✅ Task ${taskId} acknowledged in RabbitMQ`);
         } catch (err) {
-          console.error('❌ Failed to process RabbitMQ message:', err);
-          channel.nack(msg, false, false); // 不重入队列，或者放入死信队列
+          console.error('❌ Failed to process RabbitMQ message, sending to DLQ:', err);
+          // 核心：发生任何异常导致渲染失败时，绝不重新入队 (requeue: false)
+          // 这样 RabbitMQ 会自动把它踢进配置好的 DLX 交换机
+          channel.nack(msg, false, false); 
         }
       }
     });
