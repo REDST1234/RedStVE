@@ -9,6 +9,20 @@ function Pause-And-Exit {
     exit 1
 }
 
+$pwshCommand = Get-Command "pwsh.exe" -ErrorAction SilentlyContinue
+if (-Not $pwshCommand) {
+    Write-Host "[异常] 未找到 pwsh.exe！请先安装 PowerShell 7+，再重新执行启动脚本。" -ForegroundColor Red
+    Pause-And-Exit
+}
+
+$pwshExe = $pwshCommand.Source
+
+if ($PSVersionTable.PSEdition -ne "Core") {
+    Write-Host "[*] 检测到当前不是 pwsh，正在自动切换到 PowerShell 7..." -ForegroundColor Cyan
+    & $pwshExe -NoLogo -NoProfile -File $PSCommandPath @args
+    exit $LASTEXITCODE
+}
+
 Write-Host "========================================================" -ForegroundColor Green
 Write-Host "     RedStVE - 一键环境检查与项目启动脚本" -ForegroundColor Green
 Write-Host "========================================================" -ForegroundColor Green
@@ -166,7 +180,7 @@ if ($EnvCreated) {
     Write-Host " 请您现在立刻使用编辑器打开以下文件，并填入您的 API-KEY 和端口：" -ForegroundColor Magenta
     Write-Host "  1. backend/.env" -ForegroundColor Yellow
     Write-Host "  2. frontend/.env.local" -ForegroundColor Yellow
-    Write-Host " 填写完毕并保存后，请再次双击 start.bat 真正启动服务。" -ForegroundColor Magenta
+    Write-Host " 填写完毕并保存后，请重新执行：pwsh -File .\start.ps1" -ForegroundColor Magenta
     Write-Host "========================================================" -ForegroundColor Magenta
     Pause-And-Exit
 }
@@ -207,7 +221,7 @@ if (-Not (Test-Path "node_modules")) {
     npm install
 }
 Write-Host "[*] 触发启动 Remotion Service (已最小化至任务栏)..." -ForegroundColor Green
-Start-Process "powershell.exe" -WindowStyle Minimized -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'RedStVE - Remotion Service'; Write-Host '正在启动 Remotion Service (npm run server)...'; npm run server"
+Start-Process $pwshExe -WindowStyle Minimized -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'RedStVE - Remotion Service'; Write-Host '正在启动 Remotion Service (npm run server)...'; npm run server"
 Set-Location -Path ".."
 
 # 启动 Frontend
@@ -218,7 +232,7 @@ if (-Not (Test-Path "node_modules")) {
     npm install
 }
 Write-Host "[*] 触发启动 Frontend (已最小化至任务栏)..." -ForegroundColor Green
-Start-Process "powershell.exe" -WindowStyle Minimized -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'RedStVE - Frontend'; Write-Host '正在启动 Frontend...'; npm run dev"
+Start-Process $pwshExe -WindowStyle Minimized -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'RedStVE - Frontend'; Write-Host '正在启动 Frontend...'; npm run dev"
 Set-Location -Path ".."
 
 # 启动 Backend
@@ -226,7 +240,7 @@ Write-Host "[*] 正在处理 Backend 服务..." -ForegroundColor Cyan
 Set-Location -Path "backend"
 
 Write-Host "[*] 触发启动 Backend (已最小化至任务栏)..." -ForegroundColor Green
-Start-Process "powershell.exe" -WindowStyle Minimized -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'RedStVE - Backend (Spring Boot)'; Write-Host '正在启动 Spring Boot 后端...'; mvn spring-boot:run"
+Start-Process $pwshExe -WindowStyle Minimized -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'RedStVE - Backend (Spring Boot)'; Write-Host '正在启动 Spring Boot 后端...'; mvn spring-boot:run"
 Set-Location -Path ".."
 
 Write-Host ""

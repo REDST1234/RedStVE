@@ -40,8 +40,7 @@ public class VideoOrchestrationService {
             ArkResponsesClient arkResponsesClient,
             ArkProperties arkProperties,
             SfxAudioProperties sfxAudioProperties,
-            ObjectMapper objectMapper
-    ) {
+            ObjectMapper objectMapper) {
         this.arkPayloadFactory = arkPayloadFactory;
         this.arkResponsesClient = arkResponsesClient;
         this.arkProperties = arkProperties;
@@ -49,8 +48,10 @@ public class VideoOrchestrationService {
         this.objectMapper = objectMapper;
     }
 
-    public CompositionScript orchestrateVideo(String projectDescription, String templateBrief, String assetBrief, String selectedBgmBrief, String canvasBrief, String versionStrategy) {
-        return orchestrateVideoResult(projectDescription, templateBrief, assetBrief, selectedBgmBrief, canvasBrief, versionStrategy).getScript();
+    public CompositionScript orchestrateVideo(String projectDescription, String templateBrief, String assetBrief,
+            String selectedBgmBrief, String canvasBrief, String versionStrategy) {
+        return orchestrateVideoResult(projectDescription, templateBrief, assetBrief, selectedBgmBrief, canvasBrief,
+                versionStrategy).getScript();
     }
 
     public CompositionScript sanitizeScript(CompositionScript script) {
@@ -84,8 +85,7 @@ public class VideoOrchestrationService {
             String assetBrief,
             String selectedBgmBrief,
             String canvasBrief,
-            String versionStrategy
-    ) {
+            String versionStrategy) {
         String styleInstruction = "";
         if ("fast_paced".equals(versionStrategy)) {
             styleInstruction = "【多版本生成策略：高频卡点版】要求：大幅缩短各文字层的持续时间(durationInFrames，建议30-60帧)，场景间强制使用 wipe 等快速转场，整体节奏极快，视觉冲击力强！将 bgm.mixLevel 强制写为 DRIVE。\n";
@@ -101,8 +101,7 @@ public class VideoOrchestrationService {
                 templateBrief,
                 assetBrief,
                 selectedBgmBrief,
-                canvasBrief
-        );
+                canvasBrief);
         promptText = styleInstruction + "\n" + promptText;
 
         ArkResponseRequest request = new ArkResponseRequest();
@@ -193,7 +192,8 @@ public class VideoOrchestrationService {
             }
             removeNullField(sceneObject, "role");
             JsonNode layersNode = sceneObject.get("layers");
-            ArrayNode layers = sanitizeLayers(layersNode instanceof ArrayNode arrayNode ? arrayNode : objectMapper.createArrayNode());
+            ArrayNode layers = sanitizeLayers(
+                    layersNode instanceof ArrayNode arrayNode ? arrayNode : objectMapper.createArrayNode());
             sceneObject.set("layers", layers);
             if (!sceneObject.has("durationInFrames") || sceneObject.path("durationInFrames").asInt(0) <= 0) {
                 sceneObject.put("durationInFrames", inferSceneDuration(layers));
@@ -341,13 +341,16 @@ public class VideoOrchestrationService {
             for (int j = 0; j < scene.getLayers().size(); j++) {
                 var layer = scene.getLayers().get(j);
                 if (layer == null) {
-                    throw new BizException(ErrorCode.INVALID_REQUEST, "scene.layers 包含空 layer，scene索引: " + i + ", layer索引: " + j);
+                    throw new BizException(ErrorCode.INVALID_REQUEST,
+                            "scene.layers 包含空 layer，scene索引: " + i + ", layer索引: " + j);
                 }
                 if (layer.getPreset() == null || layer.getPreset().isBlank()) {
-                    throw new BizException(ErrorCode.INVALID_REQUEST, "layer.preset 不能为空，scene索引: " + i + ", layer索引: " + j);
+                    throw new BizException(ErrorCode.INVALID_REQUEST,
+                            "layer.preset 不能为空，scene索引: " + i + ", layer索引: " + j);
                 }
                 if (layer.getParams() == null) {
-                    throw new BizException(ErrorCode.INVALID_REQUEST, "layer.params 必须是对象，scene索引: " + i + ", layer索引: " + j);
+                    throw new BizException(ErrorCode.INVALID_REQUEST,
+                            "layer.params 必须是对象，scene索引: " + i + ", layer索引: " + j);
                 }
                 // 校验 media / motion 类 preset 必须有 src
                 // 例外: media.audio 若有 cueType，src 可由后端 SFX 映射自动填入
@@ -360,7 +363,8 @@ public class VideoOrchestrationService {
                         Object src = layer.getParams().get("src");
                         if (src == null || (src instanceof String s && s.isBlank())) {
                             throw new BizException(ErrorCode.INVALID_REQUEST,
-                                    "layer.preset=" + preset + " 缺少必填字段 params.src，scene索引: " + i + ", layerId: " + layer.getLayerId());
+                                    "layer.preset=" + preset + " 缺少必填字段 params.src，scene索引: " + i + ", layerId: "
+                                            + layer.getLayerId());
                         }
                     }
                 }
@@ -449,7 +453,8 @@ public class VideoOrchestrationService {
         }
         String normalized = BgmMixLevelResolver.normalize(raw);
         if (!normalized.equalsIgnoreCase(raw.trim())) {
-            log.warn("Unknown or non-canonical bgm mixLevel from orchestration result: {}. Normalized to {}.", raw, normalized);
+            log.warn("Unknown or non-canonical bgm mixLevel from orchestration result: {}. Normalized to {}.", raw,
+                    normalized);
         }
         return normalized;
     }

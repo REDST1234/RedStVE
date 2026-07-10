@@ -1,6 +1,19 @@
 $OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Set-Location -Path $PSScriptRoot
 
+$pwshCommand = Get-Command "pwsh.exe" -ErrorAction SilentlyContinue
+if (-Not $pwshCommand) {
+    Write-Host "[异常] 未找到 pwsh.exe！请先安装 PowerShell 7+，再重新执行停止脚本。" -ForegroundColor Red
+    Write-Host "请按 Enter 键退出本控制台..." -ForegroundColor Yellow
+    Read-Host
+    exit 1
+}
+
+if ($PSVersionTable.PSEdition -ne "Core") {
+    & $pwshCommand.Source -NoLogo -NoProfile -File $PSCommandPath @args
+    exit $LASTEXITCODE
+}
+
 Write-Host "========================================================" -ForegroundColor Green
 Write-Host "     RedStVE - 一键停止所有服务脚本" -ForegroundColor Green
 Write-Host "========================================================" -ForegroundColor Green
@@ -13,7 +26,7 @@ Write-Host "[*] 正在关闭应用服务 (Backend, Frontend, Remotion)..." -Fore
 $cmds = Get-CimInstance Win32_Process -Filter "Name = 'cmd.exe' OR Name = 'pwsh.exe' OR Name = 'powershell.exe'"
 $found = $false
 foreach ($cmd in $cmds) {
-    # 兼容 cmd.exe (title RedStVE) 和 pwsh.exe (WindowTitle = 'RedStVE')
+    # 兼容旧版 powershell.exe、cmd.exe，以及当前 pwsh.exe 的运行窗口
     if ($cmd.CommandLine -match "RedStVE" -and $cmd.CommandLine -notmatch "stop.ps1") {
         $found = $true
         Write-Host "  [+] 成功捕捉并清理项目运行窗口及底层进程树 (PID: $($cmd.ProcessId))" -ForegroundColor Yellow

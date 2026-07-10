@@ -645,11 +645,11 @@ RedStVE 是一个面向短视频领域的**结构迁移与自动化创作系统*
 项目根目录提供了经过全面测试的 PowerShell 一键启动脚本：
 
 ```powershell
-# 启动（双击 start.ps1 或在 PowerShell 中执行）
-.\start.ps1
+# 启动（推荐直接在 pwsh / PowerShell 7+ 中执行）
+pwsh -File .\start.ps1
 
 # 停止
-.\stop.ps1
+pwsh -File .\stop.ps1
 ```
 
 **脚本自动执行以下全部流程：**
@@ -660,7 +660,7 @@ RedStVE 是一个面向短视频领域的**结构迁移与自动化创作系统*
 5. ✅ 自动安装依赖（`npm install`，仅首次）
 6. ✅ 分别在最小化的后台窗口中启动 Backend / Frontend / Remotion Service
 
-> **注意**：脚本基于 Windows PowerShell 5.1（系统自带）编写，使用 `powershell.exe` 启动子进程。若环境中安装了 PowerShell Core (`pwsh.exe`) 同样兼容。
+> **注意**：脚本现已统一切换到 PowerShell 7+ (`pwsh.exe`) 运行；如果误从 Windows PowerShell 5.1 打开，脚本会自动重启到 `pwsh`。请先确保本机已安装 `pwsh.exe`。
 
 ### 6.4 方案二：手动分步启动（跨平台兜底方案）
 
