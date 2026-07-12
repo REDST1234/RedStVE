@@ -7,8 +7,10 @@ import com.bytedance.aivideo.common.error.ErrorCode;
 import com.bytedance.aivideo.common.exception.BizException;
 import com.bytedance.aivideo.creation.entity.CreationProjectEntity;
 import com.bytedance.aivideo.creation.entity.CreationProjectBgmBindingEntity;
+import com.bytedance.aivideo.creation.entity.OutboxMessageEntity;
 import com.bytedance.aivideo.creation.entity.SlotMatchResultEntity;
 import com.bytedance.aivideo.creation.mapper.CreationProjectMapper;
+import com.bytedance.aivideo.creation.mapper.OutboxMessageMapper;
 import com.bytedance.aivideo.creation.mapper.SlotMatchResultMapper;
 import com.bytedance.aivideo.creation.service.CreationProjectBgmBindingService;
 import com.bytedance.aivideo.creation.service.CreationProjectService;
@@ -20,6 +22,7 @@ import com.bytedance.aivideo.deconstruct.service.DeconstructTemplateService;
 import com.bytedance.aivideo.engine.remotion.RemotionServiceClient;
 import com.bytedance.aivideo.engine.remotion.VideoOrchestrationService;
 import com.bytedance.aivideo.engine.remotion.dto.RenderResponse;
+import com.bytedance.aivideo.engine.remotion.dto.RenderTaskRequest;
 import com.bytedance.aivideo.engine.remotion.dto.VideoOrchestrationResult;
 import com.bytedance.aivideo.creation.dto.remotion.CompositionScript;
 import com.bytedance.aivideo.creation.dto.remotion.BgmConfig;
@@ -75,6 +78,15 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
     private static final String RENDER_SCRIPT_KEY_PREFIX = "render:script:";
     private static final String RENDER_ORCHESTRATION_KEY_PREFIX = "render:orchestration:";
     private static final String STORAGE_DIR_NAME = "storage";
+    private static final String RENDER_RECORD_STATUS_CREATED = "CREATED";
+    private static final String RENDER_RECORD_STATUS_QUEUED = "QUEUED";
+    private static final String RENDER_RECORD_STATUS_RENDERING = "RENDERING";
+    private static final String RENDER_RECORD_STATUS_DONE = "DONE";
+    private static final String RENDER_RECORD_STATUS_FAILED = "FAILED";
+    private static final String OUTBOX_MESSAGE_TYPE_RENDER_SUBMIT = "RENDER_SUBMIT";
+    private static final String OUTBOX_STATUS_PENDING = "PENDING";
+    private static final String DEFAULT_RENDER_USER_ID = "test_user_001";
+    private static final int DEFAULT_RENDER_COST = 10;
 
     private final DeconstructTemplateService deconstructTemplateService;
     private final CreationTemplateSnapshotService creationTemplateSnapshotService;
@@ -86,6 +98,7 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
     private final SlotMatchResultMapper slotMatchResultMapper;
     private final CreationProjectBgmBindingService creationProjectBgmBindingService;
     private final RenderRecordMapper renderRecordMapper;
+    private final OutboxMessageMapper outboxMessageMapper;
 
     @Value("${remotion.service.url:http://localhost:3001}")
     private String remotionServiceUrl;
@@ -103,7 +116,8 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             CreativeMaterialMapper creativeMaterialMapper,
             SlotMatchResultMapper slotMatchResultMapper,
             CreationProjectBgmBindingService creationProjectBgmBindingService,
-            RenderRecordMapper renderRecordMapper
+            RenderRecordMapper renderRecordMapper,
+            OutboxMessageMapper outboxMessageMapper
     ) {
         this.deconstructTemplateService = deconstructTemplateService;
         this.creationTemplateSnapshotService = creationTemplateSnapshotService;
@@ -115,6 +129,7 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         this.slotMatchResultMapper = slotMatchResultMapper;
         this.creationProjectBgmBindingService = creationProjectBgmBindingService;
         this.renderRecordMapper = renderRecordMapper;
+        this.outboxMessageMapper = outboxMessageMapper;
     }
 
     @Override
@@ -281,24 +296,18 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         }
         normalizeMediaSources(script);
 
-        // 调用 Remotion 微服务
-        RenderResponse response = remotionServiceClient.submitRenderTask(renderId, script);
-        response.setRenderId(renderId);
-
-        if ("FAILED".equals(response.getStatus())) {
-            throw new BizException(ErrorCode.INTERNAL_ERROR, "提交渲染任务失败: " + response.getError());
-        }
-
-        // 保存渲染记录
+        // 保存渲染记录。此时任务已可靠落库，但尚未确认入队。
         RenderRecordEntity record = new RenderRecordEntity();
         record.setRenderId(renderId);
         record.setProjectId(projectId);
-        record.setStatus("QUEUED");
+        record.setStatus(RENDER_RECORD_STATUS_CREATED);
         record.setAspectRatio(normalizedAspectRatio);
         renderRecordMapper.insert(record);
 
+        createRenderSubmitOutboxMessage(renderId, script);
+
         // 更新项目状态
-        project.setStatus("GENERATING");
+        project.setStatus(RENDER_RECORD_STATUS_CREATED);
         project.setLatestRenderId(renderId);
         this.baseMapper.updateById(project);
     }
@@ -399,10 +408,7 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
     @Transactional(rollbackFor = Exception.class)
     public void renderScript(String projectId, CompositionScript script, String aspectRatio) {
         CreationProjectEntity project = requireActiveProject(projectId);
-        String renderId = project.getLatestRenderId();
-        if (renderId == null || renderId.isBlank()) {
-            throw new BizException(ErrorCode.INVALID_REQUEST, "当前没有待渲染的剧本任务");
-        }
+        String renderId = projectId + "_" + System.currentTimeMillis();
         String normalizedAspectRatio = normalizeAspectRatio(
                 aspectRatio != null && !aspectRatio.isBlank() ? aspectRatio : project.getRenderAspectRatio()
         );
@@ -418,22 +424,17 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             // 清理并提交 Remotion
             CompositionScript sanitizedScript = videoOrchestrationService.sanitizeScript(script);
             normalizeMediaSources(sanitizedScript);
-            
-            RenderResponse response = remotionServiceClient.submitRenderTask(renderId, sanitizedScript);
-            response.setRenderId(renderId);
 
-            if ("FAILED".equals(response.getStatus())) {
-                throw new BizException(ErrorCode.INTERNAL_ERROR, "提交渲染任务失败: " + response.getError());
-            }
+            RenderRecordEntity record = new RenderRecordEntity();
+            record.setRenderId(renderId);
+            record.setProjectId(projectId);
+            record.setStatus(RENDER_RECORD_STATUS_CREATED);
+            record.setAspectRatio(normalizedAspectRatio);
+            renderRecordMapper.insert(record);
 
-            RenderRecordEntity record = renderRecordMapper.selectOne(
-                    new LambdaQueryWrapper<RenderRecordEntity>().eq(RenderRecordEntity::getRenderId, renderId)
-            );
-            if (record != null) {
-                record.setStatus("QUEUED");
-                renderRecordMapper.updateById(record);
-            }
-            project.setStatus("GENERATING");
+            createRenderSubmitOutboxMessage(renderId, sanitizedScript);
+            project.setStatus(RENDER_RECORD_STATUS_CREATED);
+            project.setLatestRenderId(renderId);
             this.baseMapper.updateById(project);
 
         } catch (BizException e) {
@@ -1268,15 +1269,7 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
                 try {
                     RenderResponse resp = objectMapper.readValue(json, RenderResponse.class);
                     resp.setRenderId(renderId);
-                    // 状态同步
-                    if ("DONE".equals(resp.getStatus()) || "FAILED".equals(resp.getStatus())) {
-                        if (!resp.getStatus().equals(project.getStatus())) {
-                            project.setStatus(resp.getStatus());
-                            this.baseMapper.updateById(project);
-                        }
-                        // 同步渲染记录
-                        syncRenderRecord(renderId, resp);
-                    }
+                    syncRenderState(project, renderId, resp);
                     return resp;
                 } catch (Exception e) {
                     // 忽略解析错误，降级查数据库
@@ -1289,18 +1282,38 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         response.setTaskId(projectId);
         response.setRenderId(renderId);
 
-        if ("GENERATING".equals(project.getStatus())) {
-            response.setStatus("QUEUED");
-        } else if ("DONE".equals(project.getStatus())) {
+        RenderRecordEntity latestRecord = null;
+        if (renderId != null && !renderId.isBlank()) {
+            latestRecord = renderRecordMapper.selectOne(
+                    new LambdaQueryWrapper<RenderRecordEntity>()
+                            .eq(RenderRecordEntity::getRenderId, renderId)
+                            .last("LIMIT 1")
+            );
+        }
+
+        if (latestRecord != null && latestRecord.getStatus() != null) {
+            response.setStatus(latestRecord.getStatus());
+            if (latestRecord.getOutputPath() != null && !latestRecord.getOutputPath().isBlank()) {
+                response.setOutputPath(latestRecord.getOutputPath());
+            } else if ("DONE".equals(latestRecord.getStatus())) {
+                response.setOutputPath(buildOutputUrl(renderId));
+            }
+        } else if (RENDER_RECORD_STATUS_DONE.equals(project.getStatus())) {
             response.setStatus("DONE");
             if (renderId != null) {
                 response.setOutputPath(buildOutputUrl(renderId));
             }
+        } else if (RENDER_RECORD_STATUS_CREATED.equals(project.getStatus())
+                || RENDER_RECORD_STATUS_QUEUED.equals(project.getStatus())
+                || RENDER_RECORD_STATUS_RENDERING.equals(project.getStatus())) {
+            response.setStatus(project.getStatus());
+        } else if ("GENERATING".equals(project.getStatus())) {
+            response.setStatus(RENDER_RECORD_STATUS_CREATED);
         } else if ("GENERATING_SCRIPT".equals(project.getStatus())) {
             response.setStatus("GENERATING_SCRIPT");
         } else if ("SCRIPT_DONE".equals(project.getStatus())) {
             response.setStatus("SCRIPT_DONE");
-        } else if ("FAILED".equals(project.getStatus())) {
+        } else if (RENDER_RECORD_STATUS_FAILED.equals(project.getStatus())) {
             response.setStatus("FAILED");
         } else {
             response.setStatus("NOT_STARTED");
@@ -1309,8 +1322,8 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
         return response;
     }
 
-    /** 同步 Remotion 返回的渲染状态到 render_record 表 */
-    private void syncRenderRecord(String renderId, RenderResponse resp) {
+    /** 同步 Remotion 返回的渲染状态到 render_record / creation_project。 */
+    private void syncRenderState(CreationProjectEntity project, String renderId, RenderResponse resp) {
         try {
             List<RenderRecordEntity> existing = renderRecordMapper.selectList(
                     new LambdaQueryWrapper<RenderRecordEntity>()
@@ -1318,12 +1331,14 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
             );
             if (existing != null && !existing.isEmpty()) {
                 RenderRecordEntity record = existing.get(0);
-                if (resp.getStatus() != null && !resp.getStatus().equals(record.getStatus())) {
-                    record.setStatus(resp.getStatus());
-                    if (resp.getOutputPath() != null) {
+                String nextStatus = normalizeRenderRuntimeStatus(resp.getStatus());
+                if (nextStatus != null && canAdvanceRenderRecord(record.getStatus(), nextStatus)) {
+                    record.setStatus(nextStatus);
+                    if (resp.getOutputPath() != null && !resp.getOutputPath().isBlank()) {
                         record.setOutputPath(resp.getOutputPath());
                     }
                     renderRecordMapper.updateById(record);
+                    syncProjectStatusWithRecord(project, nextStatus);
                 }
             }
         } catch (Exception e) {
@@ -1333,6 +1348,102 @@ public class CreationProjectServiceImpl extends ServiceImpl<CreationProjectMappe
 
     private String buildOutputUrl(String renderId) {
         return remotionServiceUrl + "/out/" + renderId + ".mp4";
+    }
+
+    private String normalizeRenderRuntimeStatus(String rawStatus) {
+        if (rawStatus == null || rawStatus.isBlank()) {
+            return null;
+        }
+        return switch (rawStatus) {
+            case RENDER_RECORD_STATUS_QUEUED,
+                 RENDER_RECORD_STATUS_RENDERING,
+                 RENDER_RECORD_STATUS_DONE,
+                 RENDER_RECORD_STATUS_FAILED -> rawStatus;
+            default -> null;
+        };
+    }
+
+    private boolean canAdvanceRenderRecord(String currentStatus, String nextStatus) {
+        if (nextStatus == null || nextStatus.isBlank()) {
+            return false;
+        }
+        if (currentStatus == null || currentStatus.isBlank()) {
+            return true;
+        }
+        if (RENDER_RECORD_STATUS_DONE.equals(currentStatus) || RENDER_RECORD_STATUS_FAILED.equals(currentStatus)) {
+            return nextStatus.equals(currentStatus);
+        }
+        if (RENDER_RECORD_STATUS_CREATED.equals(currentStatus)) {
+            return RENDER_RECORD_STATUS_QUEUED.equals(nextStatus)
+                    || RENDER_RECORD_STATUS_RENDERING.equals(nextStatus)
+                    || RENDER_RECORD_STATUS_DONE.equals(nextStatus)
+                    || RENDER_RECORD_STATUS_FAILED.equals(nextStatus);
+        }
+        if (RENDER_RECORD_STATUS_QUEUED.equals(currentStatus)) {
+            return RENDER_RECORD_STATUS_RENDERING.equals(nextStatus)
+                    || RENDER_RECORD_STATUS_DONE.equals(nextStatus)
+                    || RENDER_RECORD_STATUS_FAILED.equals(nextStatus)
+                    || RENDER_RECORD_STATUS_QUEUED.equals(nextStatus);
+        }
+        if (RENDER_RECORD_STATUS_RENDERING.equals(currentStatus)) {
+            return RENDER_RECORD_STATUS_DONE.equals(nextStatus)
+                    || RENDER_RECORD_STATUS_FAILED.equals(nextStatus)
+                    || RENDER_RECORD_STATUS_RENDERING.equals(nextStatus);
+        }
+        return nextStatus.equals(currentStatus);
+    }
+
+    private void syncProjectStatusWithRecord(CreationProjectEntity project, String recordStatus) {
+        if (project == null || recordStatus == null || recordStatus.isBlank()) {
+            return;
+        }
+        if (recordStatus.equals(project.getStatus())) {
+            return;
+        }
+        project.setStatus(recordStatus);
+        this.baseMapper.updateById(project);
+    }
+
+    private void createRenderSubmitOutboxMessage(String renderId, CompositionScript script) {
+        OutboxMessageEntity outboxMessage = outboxMessageMapper.selectOne(
+                new LambdaQueryWrapper<OutboxMessageEntity>()
+                        .eq(OutboxMessageEntity::getMessageType, OUTBOX_MESSAGE_TYPE_RENDER_SUBMIT)
+                        .eq(OutboxMessageEntity::getBizKey, renderId)
+                        .last("LIMIT 1")
+        );
+        if (outboxMessage == null) {
+            outboxMessage = new OutboxMessageEntity();
+            outboxMessage.setMessageId(UUID.randomUUID().toString().replace("-", ""));
+            outboxMessage.setMessageType(OUTBOX_MESSAGE_TYPE_RENDER_SUBMIT);
+            outboxMessage.setBizKey(renderId);
+            outboxMessage.setPayload(serializeRenderTaskRequest(renderId, script));
+            outboxMessage.setStatus(OUTBOX_STATUS_PENDING);
+            outboxMessage.setRetryCount(0);
+            outboxMessage.setNextRetryAt(java.time.LocalDateTime.now());
+            outboxMessage.setLastError(null);
+            outboxMessageMapper.insert(outboxMessage);
+            return;
+        }
+
+        outboxMessage.setPayload(serializeRenderTaskRequest(renderId, script));
+        outboxMessage.setStatus(OUTBOX_STATUS_PENDING);
+        outboxMessage.setRetryCount(0);
+        outboxMessage.setNextRetryAt(java.time.LocalDateTime.now());
+        outboxMessage.setLastError(null);
+        outboxMessageMapper.updateById(outboxMessage);
+    }
+
+    private String serializeRenderTaskRequest(String renderId, CompositionScript script) {
+        RenderTaskRequest request = new RenderTaskRequest();
+        request.setTaskId(renderId);
+        request.setUserId(DEFAULT_RENDER_USER_ID);
+        request.setCost(DEFAULT_RENDER_COST);
+        request.setCompositionScript(script);
+        try {
+            return objectMapper.writeValueAsString(request);
+        } catch (Exception e) {
+            throw new BizException(ErrorCode.INTERNAL_ERROR, "序列化渲染任务消息失败: " + e.getMessage());
+        }
     }
 
     /** 查询项目的渲染历史记录 */

@@ -43,13 +43,6 @@ spring:
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
-    map-underscore-to-camel-case: true
-  global-config:
-    db-config:
-      id-type: auto
-      logic-delete-field: deletedAt
-      logic-delete-value: now(3)
-      logic-not-delete-value: "null"
 
 logging:
   level:

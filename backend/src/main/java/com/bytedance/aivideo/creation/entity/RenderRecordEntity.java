@@ -15,7 +15,7 @@ public class RenderRecordEntity {
 
     private String projectId;
 
-    private String status; // QUEUED / RENDERING / DONE / FAILED
+    private String status; // CREATED / QUEUED / RENDERING / DONE / FAILED / GENERATING_SCRIPT / SCRIPT_DONE
 
     private String outputPath;
 

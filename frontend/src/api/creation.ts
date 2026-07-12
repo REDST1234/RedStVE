@@ -196,7 +196,7 @@ export const creationApi = {
     }),
 
   getRenderStatus: (projectId: string) =>
-    request<ApiResponse<{ taskId: string; status: string; progress: number; outputPath?: string; error?: string }>>(`/v1/creation/projects/${projectId}/render-status`, {
+    request<ApiResponse<{ taskId: string; status: string; progress: number; outputPath?: string; error?: string; renderId?: string }>>(`/v1/creation/projects/${projectId}/render-status`, {
       method: 'GET'
     })
 };

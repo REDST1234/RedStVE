@@ -5,8 +5,36 @@ import { useToast } from '../../contexts/ToastContext';
 import { ProjectCreationTabs } from '../../components/ProjectCreationTabs';
 import { ScenePreviewer } from './ScenePreviewer';
 import React from 'react';
-import { Check, Edit2, Play, Pause, Save, LayoutTemplate, Copy, Trash2, ArrowLeft, Loader2, MonitorPlay, MessageSquare, ListVideo, Layers, Wand2, Plus, GripVertical, Settings2, Scissors, Type, Image as ImageIcon, Music, History, Undo2, MousePointer2, AlertCircle, ChevronRight, Activity, Clock, SlidersHorizontal, Eye, BoxSelect, Maximize2, Link, Info, Palette, Volume2, Clapperboard, CheckCircle2, Film } from 'lucide-react';
+import { ArrowLeft, Loader2, MonitorPlay, Wand2, Settings2, Scissors, Music, AlertCircle, Activity, Clock, Link, Info, Palette, Volume2, Clapperboard, CheckCircle2, Film } from 'lucide-react';
 import { LayerRenderer } from './LayerRenderer';
+
+const RENDER_STATUS_META: Record<string, { label: string; progressFloor: number; loadingText: string }> = {
+  CREATED: {
+    label: '任务已创建，正在提交到渲染队列',
+    progressFloor: 0.03,
+    loadingText: '任务已创建，正在提交到渲染队列...'
+  },
+  QUEUED: {
+    label: '已进入渲染队列，等待执行',
+    progressFloor: 0.12,
+    loadingText: '已进入渲染队列，等待 Remotion 执行...'
+  },
+  RENDERING: {
+    label: 'Remotion 正在渲染视频',
+    progressFloor: 0.2,
+    loadingText: 'Remotion 正在渲染视频...'
+  },
+  DONE: {
+    label: '渲染完成',
+    progressFloor: 1,
+    loadingText: '渲染完成'
+  },
+  FAILED: {
+    label: '渲染失败，可重新发起尝试',
+    progressFloor: 0,
+    loadingText: '渲染失败'
+  }
+};
 
 export default function CreateProjectGeneration() {
   const { id } = useParams();
@@ -32,6 +60,7 @@ export default function CreateProjectGeneration() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [bgmDuration, setBgmDuration] = useState<number>(20.0);
+  const [lastRenderStatus, setLastRenderStatus] = useState<string>('DRAFT');
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const scriptTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -67,6 +96,7 @@ export default function CreateProjectGeneration() {
       setProjectTitle(resp.data?.title || '');
       const status = resp.data?.status || 'DRAFT';
       setProjectStatus(status);
+      setLastRenderStatus(status);
 
       const savedAspectRatio = resp.data?.aspectRatio || resp.data?.renderAspectRatio;
       if (savedAspectRatio) {
@@ -122,9 +152,10 @@ export default function CreateProjectGeneration() {
     setIsRendering(true);
     setRenderProgress(0);
     setErrorMsg(null);
+    setLastRenderStatus('CREATED');
     try {
       await creationApi.renderScript(projectId, { compositionScript: localScript, aspectRatio });
-      showToast('已提交渲染任务！', 'success');
+      showToast(projectStatus === 'FAILED' ? '已重新发起新的渲染尝试！' : '已提交渲染任务！', 'success');
       startPolling();
     } catch (error: any) {
       showToast(error?.message || '提交渲染失败', 'error');
@@ -157,10 +188,25 @@ export default function CreateProjectGeneration() {
       setProjectStatus('SCRIPT_DONE');
       await loadProject();
       if (timerRef.current) clearInterval(timerRef.current);
+      setLastRenderStatus('SCRIPT_DONE');
+    } else if (data.status === 'CREATED') {
+      setIsRendering(true);
+      setIsGeneratingScript(false);
+      setProjectStatus('CREATED');
+      setLastRenderStatus('CREATED');
+      setRenderProgress((current) => Math.max(current, RENDER_STATUS_META.CREATED.progressFloor));
+    } else if (data.status === 'QUEUED') {
+      setIsRendering(true);
+      setIsGeneratingScript(false);
+      setProjectStatus('QUEUED');
+      setLastRenderStatus('QUEUED');
+      setRenderProgress((current) => Math.max(current, RENDER_STATUS_META.QUEUED.progressFloor));
     } else if (data.status === 'RENDERING') {
       setIsRendering(true);
       setIsGeneratingScript(false);
-      setRenderProgress(data.progress || 0.1);
+      setProjectStatus('RENDERING');
+      setLastRenderStatus('RENDERING');
+      setRenderProgress(Math.max(data.progress || 0, RENDER_STATUS_META.RENDERING.progressFloor));
     } else if (data.status === 'DONE') {
       setIsRendering(false);
       setIsGeneratingScript(false);
@@ -169,6 +215,7 @@ export default function CreateProjectGeneration() {
       const rid = data.renderId || projectId;
       setVideoUrl(`http://localhost:3001/out/${rid}.mp4`);
       setProjectStatus('DONE');
+      setLastRenderStatus('DONE');
       showToast('视频渲染完成！', 'success');
     } else if (data.status === 'FAILED') {
       setIsRendering(false);
@@ -177,12 +224,24 @@ export default function CreateProjectGeneration() {
       if (timerRef.current) clearInterval(timerRef.current);
       if (scriptTimerRef.current) clearInterval(scriptTimerRef.current);
       setProjectStatus('FAILED');
+      setLastRenderStatus('FAILED');
       showToast('任务失败', 'error');
-    } else if (data.status === 'QUEUED' || data.status === 'GENERATING') {
+    } else if (data.status === 'GENERATING') {
       setIsRendering(true);
-      if (renderProgress === 0) setRenderProgress(0.05);
+      setProjectStatus('CREATED');
+      setLastRenderStatus('CREATED');
+      setRenderProgress((current) => Math.max(current, RENDER_STATUS_META.CREATED.progressFloor));
     }
   };
+
+  const renderStatusMeta = RENDER_STATUS_META[lastRenderStatus] || null;
+  const renderButtonLabel = isRendering
+    ? (renderStatusMeta?.loadingText || '渲染处理中...')
+    : projectStatus === 'FAILED'
+      ? '基于当前剧本重新发起渲染 (Retry)'
+      : projectStatus === 'DONE'
+        ? '应用最新参数并重新渲染 (Render)'
+        : '确认当前参数并渲染 (Render)';
 
   const updateLocalScript = (key: string, value: string) => {
     if (!localScript) return;
@@ -311,11 +370,11 @@ export default function CreateProjectGeneration() {
               创作工作流 <span className="text-slate-400 font-normal">/</span> 智能生成 <span className="text-slate-400 font-normal">/</span> {projectTitle || '未命名项目'}
             </h2>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="px-3 py-1 bg-slate-100 rounded-full text-xs font-medium text-slate-600 border border-slate-200">
-              状态: {projectStatus}
+            <div className="flex items-center gap-4">
+              <div className="px-3 py-1 bg-slate-100 rounded-full text-xs font-medium text-slate-600 border border-slate-200">
+              状态: {renderStatusMeta?.label || projectStatus}
+              </div>
             </div>
-          </div>
         </div>
         <ProjectCreationTabs projectId={projectId} activeTab="generation" />
       </header>
@@ -515,7 +574,7 @@ export default function CreateProjectGeneration() {
                disabled={isOvertime || isRendering}
              >
                {isRendering ? <Loader2 size={18} className="animate-spin" /> : <MonitorPlay size={18} />}
-               {isRendering ? '引擎极速渲染中...' : (projectStatus === 'DONE' ? '应用最新参数并重新渲染 (Render)' : '确认当前参数并渲染 (Render)')}
+               {renderButtonLabel}
              </button>
            </div>
 
@@ -538,7 +597,9 @@ export default function CreateProjectGeneration() {
                    isRendering ? (
                      <div className="text-center w-full px-4">
                        <Loader2 size={32} className="text-blue-500 animate-spin mx-auto mb-3" />
-                       <div className="text-blue-400 text-xs font-medium mb-2">排队渲染中... {Math.floor(renderProgress * 100)}%</div>
+                       <div className="text-blue-400 text-xs font-medium mb-2">
+                         {(renderStatusMeta?.label || '渲染处理中') + ` ${Math.floor(renderProgress * 100)}%`}
+                       </div>
                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
                          <div className="h-full bg-blue-500" style={{ width: `${Math.max(5, renderProgress * 100)}%` }} />
                        </div>
@@ -547,9 +608,12 @@ export default function CreateProjectGeneration() {
                      <video src={videoUrl!} controls autoPlay className="w-full h-full object-contain" />
                    )
                  ) : (
-                   <div className="text-slate-500 text-xs flex flex-col items-center gap-2">
+                 <div className="text-slate-500 text-xs flex flex-col items-center gap-2">
                       <Film size={28} className="opacity-30"/>
                       <span className="font-medium">等待生成视频</span>
+                      {projectStatus === 'FAILED' && errorMsg && (
+                        <span className="text-red-500 text-[11px] text-center max-w-[220px]">{errorMsg}</span>
+                      )}
                    </div>
                  )}
                </div>

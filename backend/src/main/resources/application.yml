@@ -58,6 +58,16 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deletedAt
+      logic-delete-value: now(3)
+      logic-not-delete-value: "null"
+
 media:
   ffprobe:
     path: ${FFPROBE_PATH:ffprobe}
@@ -116,3 +126,16 @@ sfx-audio:
 timeline:
   min-segment-duration-sec: ${TIMELINE_MIN_SEGMENT_DURATION_SEC:0.60}
   float-epsilon: ${TIMELINE_FLOAT_EPSILON:0.000001}
+
+render:
+  outbox:
+    dispatcher:
+      fixed-delay-ms: ${RENDER_OUTBOX_DISPATCHER_FIXED_DELAY_MS:5000}
+      recover-fixed-delay-ms: ${RENDER_OUTBOX_RECOVER_FIXED_DELAY_MS:30000}
+      batch-size: ${RENDER_OUTBOX_BATCH_SIZE:20}
+      max-retry-count: ${RENDER_OUTBOX_MAX_RETRY_COUNT:4}
+      sending-timeout-seconds: ${RENDER_OUTBOX_SENDING_TIMEOUT_SECONDS:60}
+  runtime:
+    timeout-check-fixed-delay-ms: ${RENDER_RUNTIME_TIMEOUT_CHECK_FIXED_DELAY_MS:30000}
+    queue-timeout-seconds: ${RENDER_RUNTIME_QUEUE_TIMEOUT_SECONDS:120}
+    rendering-timeout-seconds: ${RENDER_RUNTIME_RENDERING_TIMEOUT_SECONDS:1800}
