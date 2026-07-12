@@ -15,6 +15,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import org.mockito.Answers;
+import org.springframework.ai.chroma.vectorstore.ChromaApi;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import lombok.extern.slf4j.Slf4j;
@@ -24,8 +32,21 @@ import lombok.extern.slf4j.Slf4j;
  */
 @SpringBootTest
 @Slf4j
-@ActiveProfiles("dev") // 使用本地配置即可，因为我们全盘 Mock 了核心外部依赖
+@ActiveProfiles("test") // 使用 test 配置，因为我们使用了 Testcontainers 来模拟临时数据库，配合 CI 环境
+@Testcontainers(disabledWithoutDocker = true)
 public class RemotionResilienceTest {
+
+    @Container
+    @ServiceConnection
+    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.4")
+            .withDatabaseName("aivideo")
+            .withPassword("root");
+
+    @MockitoBean(answers = Answers.RETURNS_MOCKS)
+    private ChromaApi chromaApi;
+
+    @MockitoBean
+    private LettuceConnectionFactory redisConnectionFactory;
 
     @Autowired
     private RemotionServiceClient remotionServiceClient;
